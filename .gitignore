@@ -1,0 +1,12 @@
+*_token
+*_jwt
+.coverage
+/.well-known/acme-challenge/
+datastore.dat*
+flask_secret_key
+/l
+/local*
+private_notes
+service_account_creds.json
+threads_app_*
+TAGS

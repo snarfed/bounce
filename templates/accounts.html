@@ -1,0 +1,25 @@
+{% set body_id = 'accounts' %}
+{% extends "base.html" %}
+
+{% block content %}
+
+<p class="row big" style="text-align: center">Accounts</p>
+
+{% for user in users %}
+{% set logo = user.logo %}
+<div class="row">
+  {% include 'user_with_links.html' %}
+</div>
+{% if not loop.last %}<hr>{% endif %}
+{% endfor %}
+
+<br>
+<form action="/" method="get">
+  <input type="submit" class="btn btn-default" value="Add account" />
+</form>
+<form action="/logout" method="post">
+  <input type="submit" class="btn btn-default disable-button"
+         value="Log out of all accounts" />
+</form>
+
+{% endblock content %}

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<title>{% block title %}Bounce{% endblock %}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes"/>
+<link rel="shortcut icon" sizes="128x128" href="/static/logo.png">
+<link rel="apple-touch-icon-precomposed" sizes="128x128" href="/static/logo.png">
+<!-- 32x32 last so that browsers prefer it -->
+<link rel="shortcut icon" sizes="32x32" href="/static/favicon.png">
+<link rel="apple-touch-icon-precomposed" sizes="32x32" href="/static/favicon.png">
+<link rel="stylesheet" href="/oauth_dropins_static/bootstrap.min.css" />
+<link rel="stylesheet" href="/oauth_dropins_static/util.css" type="text/css" />
+<link rel="stylesheet" href="/static/style.css" type="text/css" />
+<!-- Not async because they add DOMContentLoaded event listeners, which may
+  -- happen before an async script loads. -->
+<script src="/oauth_dropins_static/util.js"></script>
+<script src="/static/util.js"></script>
+</head>
+
+<body id="{{ body_id }}">
+{% with messages = get_flashed_messages() %}
+{% if messages %}
+  <div id="messages">
+  {% for message in messages %}
+    <p class="message shadow">{{ message|safe }}</p>
+  {% endfor %}
+  </div>
+{% endif %}
+{% endwith %}
+
+<main class="tp-main lead
+             {% if body_id == 'front' %} container-fluid
+             {% else %} container
+             {% endif %}">
+
+<div id="header" class="row">
+  <p id="logo">
+    <a href="/">
+     <img id="logo-img" src="/static/logo.png" />
+     <span class="big">Bounce</span>
+    </a>
+  </p>
+
+  <div class="header-links">
+    <a href="/docs">Docs</a> &nbsp;
+    <a href="https://www.anew.social/">Blog</a> &nbsp;
+    <a href="https://github.com/snarfed/bounce">Code</a> &nbsp;
+    <a href="https://github.com/snarfed/bounce/issues">Issues</a>
+
+    <span class="divider">|</span>
+
+    {% if logins %}
+      <a id="logins" href="/accounts">
+      {% for login in logins %}  <!-- oauth-dropins auth entities -->
+        <nobr title="{{ login.site_name() }}: {{ login.user_display_name() }}">
+          <img class="profile" src="{{ login.image_url() }}" />
+          <img class="provider" width="24"
+               src="/oauth_dropins_static/{{ login.site_name().lower() }}_icon.png" />
+        </nobr>
+      {% endfor %}
+      </a>
+
+      <span class="divider">|</span>
+
+      <form action="/logout" method="post">
+        <input type="submit" class="btn-link" value="Logout" />
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+{% block content %}
+{% endblock %}
+
+<div id="footer" class="row">
+  <p class="header-links">
+    <a href="/docs">Docs</a> &nbsp;
+    <a href="https://www.anew.social/">News</a> &nbsp;
+    <a href="https://github.com/snarfed/bounce">Code</a> &nbsp;
+    <a href="https://github.com/snarfed/bounce/issues">Issues</a>
+  </p>
+</div>
+
+</main>
+
+</body>
+</html>
