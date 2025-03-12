@@ -44,13 +44,13 @@
   </p>
 
   <div class="header-links">
-    {% if logins %}
+    {% if auths %}
       <a id="logins" href="/accounts">
-      {% for login in logins %}  <!-- oauth-dropins auth entities -->
-        <nobr title="{{ login.site_name() }}: {{ login.user_display_name() }}">
-          <img class="profile" src="{{ login.image_url() }}" />
+      {% for auth in auths %}  {# oauth-dropins auth entities #}
+        <nobr title="{{ auth.site_name() }}: {{ auth.user_display_name() }}">
+          <img class="profile" src="{{ auth.image_url() }}" />
           <img class="provider" width="24"
-               src="/oauth_dropins_static/{{ login.site_name().lower() }}_icon.png" />
+               src="/oauth_dropins_static/{{ auth.site_name().lower() }}_icon.png" />
         </nobr>
       {% endfor %}
       </a>

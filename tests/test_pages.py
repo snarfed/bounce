@@ -71,8 +71,16 @@ class PagesTest(TestCase):
 
         resp = self.client.get('/accounts')
         self.assertEqual(200, resp.status_code)
-
         body = resp.get_data(as_text=True)
+
+        # logins in header
+        self.assert_multiline_in("""\
+<a id="logins" href="/accounts">
+<nobr title="Bluesky: abc.xyz">""", body, ignore_blanks=True)
+        self.assert_multiline_in("""\
+<nobr title="Mastodon: @a@b.c">""", body)
+
+        # accounts
         self.assert_multiline_in("""\
 <img src="http://abc/pic" class="profile">
 <span style="unicode-bidi: isolate">abc.xyz</span>""", body)

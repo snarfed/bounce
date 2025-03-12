@@ -68,7 +68,7 @@ def docs():
 @app.post('/logout')
 def logout():
     """Logs the user out of all current login sessions."""
-    flask_util.logout()
+    oauth_dropins.logout()
     flash("OK, you're now logged out.")
     return redirect('/', code=302)
 
