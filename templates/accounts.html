@@ -5,10 +5,21 @@
 
 <p class="row big" style="text-align: center">Accounts</p>
 
-{% for user in users %}
-{% set logo = user.logo %}
+{% for auth in auths %}
 <div class="row">
-  {% include 'user_with_links.html' %}
+  <span class="big">
+    <nobr>
+    <a href="" title="">
+      <img src="/oauth_dropins_static/{{ auth.site_name().lower() }}_icon.png"
+           class="logo" title="{{ auth.site_name() }}" />
+      <img src="{{ auth.image_url() }}" class="profile">
+      <span style="unicode-bidi: isolate">{{ auth.user_display_name() }}</span>
+      {% if auth.key.id() != auth.user_display_name() %}
+        · <span class="small">{{ auth.key.id() }}</span>
+      {% endif %}
+    </a>
+    </nobr>
+  </span>
 </div>
 {% if not loop.last %}<hr>{% endif %}
 {% endfor %}

@@ -92,6 +92,7 @@
 
 #logo-img {
   height: 3em;
+  margin-right: .5em;
 }
 
 #front #footer {
@@ -126,7 +127,7 @@ pre .value, code .value, code.value {
   margin-right: 0;
 }
 
-#settings .row {
+#accounts .row {
   text-align: left;
 }
 

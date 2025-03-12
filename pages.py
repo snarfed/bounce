@@ -6,6 +6,7 @@ from flask import flash, redirect, render_template, request
 from google.cloud import ndb
 from granary.bluesky import Bluesky
 from granary.mastodon import Mastodon
+import oauth_dropins
 import oauth_dropins.bluesky
 import oauth_dropins.mastodon
 import oauth_dropins.pixelfed
@@ -19,6 +20,26 @@ logger = logging.getLogger(__name__)
 
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
+
+
+def require_login(fn):
+    """Decorator that requires and loads the current request's logged in user.
+
+    Passes the user in the ``user`` kwarg, as a :class:`models.User`.
+
+    HTTP params:
+      key (str): url-safe ndb key for an oauth-dropins auth entity
+    """
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        key = Key(urlsafe=get_required_param('key'))
+        if key not in oauth_dropins.get_logins():
+            logger.warning(f'not logged in for {key}')
+            raise Found(location='/')
+
+        return fn(*args, user=user, **kwargs)
+
+    return wrapper
 
 
 @app.get('/')
@@ -52,63 +73,16 @@ def logout():
     return redirect('/', code=302)
 
 
-def require_login(fn):
-    """Decorator that requires and loads the current request's logged in user.
-
-    Passes the user in the `user` kwarg.
-
-    Raises:
-      :class:`werkzeug.exceptions.HTTPException` on error or redirect
-    """
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        logins = get_logins()
-        if not logins:
-            flash('Please log in first!')
-            return redirect('/login')
-
-        # Just use the first login for simplicity
-        g.auth = logins[0]
-        g.auth_entity_key = g.auth.key
-
-        return fn(*args, **kwargs)
-
-    return wrapped
-
-
 @app.get('/accounts')
 def accounts():
     """User accounts page. Requires logged in session."""
-    auth_entity = request.args.get('auth_entity')
-    logged_in_as = Key(urlsafe=auth_entity) if auth_entity else None
+    if not (logins := oauth_dropins.get_logins()):
+        return redirect('/', code=302)
 
-    def site_logo(login):
-        return f'/oauth_dropins_static/{login.site_name().lower()}_icon.png'
-
-    users = []
-    logins_and_user_keys = []
-    for login in get_logins():
-        if user_key := login_to_user_key(login):
-            if login.key == logged_in_as:
-                cls = Model._lookup_model(user_key.kind())
-                user = cls.get_or_create(id=user_key.id(), allow_opt_out=True)
-                user.logo = site_logo(login)
-                users.append(user)
-            else:
-                logins_and_user_keys.append((login, user_key))
-
-    loaded = get_multi(key for _, key in logins_and_user_keys)
-    for (login, _), user in zip(logins_and_user_keys, loaded):
-        if user:
-            user.logo = site_logo(login)
-            users.append(user)
-
-    if not users:
-        return redirect('/login', code=302)
-
+    auths = ndb.get_multi(logins)
     return render_template(
         'accounts.html',
-        **locals(),
+        auths=auths,
     )
 
 
@@ -203,19 +177,19 @@ app.add_url_rule('/oauth/mastodon/start', view_func=MastodonStart.as_view(
                      '/oauth/mastodon/start', '/oauth/mastodon/finish'),
                  methods=['POST'])
 app.add_url_rule('/oauth/mastodon/finish', view_func=MastodonCallback.as_view(
-                     '/oauth/mastodon/finish', '/accounts'))
+                     '/oauth/mastodon/finish', '/review'))
 
 app.add_url_rule('/oauth/pixelfed/start', view_func=PixelfedStart.as_view(
                      '/oauth/pixelfed/start', '/oauth/pixelfed/finish'),
                  methods=['POST'])
 app.add_url_rule('/oauth/pixelfed/finish', view_func=PixelfedCallback.as_view(
-                     '/oauth/pixelfed/finish', '/accounts'))
+                     '/oauth/pixelfed/finish', '/review'))
 
 app.add_url_rule('/oauth/threads/start', view_func=ThreadsStart.as_view(
                      '/oauth/threads/start', '/oauth/threads/finish'),
                  methods=['POST'])
 app.add_url_rule('/oauth/threads/finish', view_func=ThreadsCallback.as_view(
-                     '/oauth/threads/finish', '/accounts'))
+                     '/oauth/threads/finish', '/review'))
 
 
 #
@@ -225,7 +199,7 @@ def bluesky_oauth_client_metadata():
     return {
         **oauth_dropins.bluesky.CLIENT_METADATA_TEMPLATE,
         'client_id': f'{request.host_url}oauth/bluesky/client-metadata.json',
-        'client_name': 'Bridgy Fed',
+        'client_name': 'Bounce',
         'client_uri': request.host_url,
         'redirect_uris': [f'{request.host_url}oauth/bluesky/finish'],
     }
@@ -251,4 +225,4 @@ def bluesky_oauth_client_metadata_handler():
 app.add_url_rule('/oauth/bluesky/start', view_func=BlueskyOAuthStart.as_view(
     '/oauth/bluesky/start', '/oauth/bluesky/finish'), methods=['POST'])
 app.add_url_rule('/oauth/bluesky/finish', view_func=BlueskyOAuthCallback.as_view(
-    '/oauth/bluesky/finish', '/accounts'))
+    '/oauth/bluesky/finish', '/review'))

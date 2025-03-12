@@ -4,7 +4,7 @@
 
 <div id="docs">
 
-<p>Bounce is a decentralized social network bridge. It connects the <a href="https://en.wikipedia.org/wiki/Fediverse">fediverse</a>, the <a href="https://indieweb.org/">web</a>, and <a href="https://bsky.social/">Bluesky</a>. If you're on one of these networks, you can use Bounce to follow people on other networks, see their posts, and reply and like and repost them. Likewise, they'll be able to see you and your posts too.</p>
+<p>Bounce is...</p>
 
 <p><a href="/docs#get-started">Click here to get started</a>, or read on for more information and setup details.</p>
 
@@ -15,16 +15,6 @@
 <p><em>About</em></p>
 <li><a href="#which-networks">Which networks are supported?</a></li>
 <li><a href="#visibility">Who can see me and my stuff?</a></li>
-<li><a href="#other-bridges">What about other bridges?</a></li>
-<li><a href="#bridgy-classic">What's the difference between this and Bridgy classic, ie non-Fed?</a></li>
-<li><a href="#behavior-mismatches">How does this handle behavior differences between networks?</a></li>
-<li><a href="#format-mismatches">How does this handle formatting differences between networks?</a></li>
-<li><a href="#moderation">What about moderation? How do blocks, mutes, etc work?</a></li>
-<li><a href="#opt-out">How do I opt out and remove my site or account?</a></li>
-<li><a href="#dms">Why is Bounce chatting or DMing with me?</a></li>
-<li><a href="#migration">Is account migration supported?</a></li>
-<li><a href="#use-like-normal">Can I log into my bridged account and use it like a normal account?</a></li>
-<li><a href="#cross-post">Can I use this to bridge two existing accounts that I already have?</a></li>
 
 </ul>
 
@@ -36,127 +26,12 @@
 
 <li id="which-networks" class="question">Which networks are supported?</li>
 <li class="answer">
-<p>Bounce currently supports <a href="https://indieweb.org/">the web</a>, <a href="https://en.wikipedia.org/wiki/Fediverse">fediverse</a>, and <a href="https://bsky.social/">Bluesky</a>. We're considering adding more networks, including <a href="https://www.farcaster.xyz/">Farcaster</a> and <a href="https://nostr.com/">Nostr</a>.</p>
-<p>All bridging is fully bidirectional. If you're on a supported network, you can use Bounce to follow and interact with bridged users on any other supported network.</p>
+<p>Bounce currently supports <a href="https://indieweb.org/">the web</a>, <a href="https://en.wikipedia.org/wiki/Fediverse">fediverse</a>, and <a href="https://bsky.social/">Bluesky</a>.</p>
 </li>
 
 <li id="visibility" class="question">Who can see me and my stuff?</li>
 <li class="answer">
-<p>If you haven't enabled the bridge for your account, no one. Once you enable it, Bounce only bridges fully public profiles and posts and interactions, not unlisted, quiet public, followers-only, or otherwise private posts or DMs. In other words, bridging your account doesn't expose your profile or posts to anyone new who couldn't already see them before.</p>
-</li>
-
-<li id="other-bridges" class="question">What about other bridges?</li>
-<li class="answer">
-<p>Bounce is just one of many different bridges: <a href="https://fietkau.software/pinhole">pinhole</a>, <a href="https://rss-parrot.net/">RSS Parrot</a>, <a href="https://mostr.pub/">mostr.pub</a>, and <a href="https://github.com/videah/SkyBridge">SkyBridge</a>, among others. They're great! They rarely reach the level of fully bidirectional federation that Bounce aims at, but they contribute to a diversity of approaches that we think is still valuable.</p>
-<p>These bridges don't interoperate right now, but we hope they will eventually. For example, where multiple bridges overlap, networks can end up with duplicate bridged accounts, which is obviously not ideal. <a href="https://github.com/snarfed/bridgy-fed/issues/543">FEP-fffd</a> is one promising approach to this that we're following closely. <a href="https://github.com/snarfed/bridgy-fed/issues/12">We're open to other ideas!</a></p>
-</li>
-
-{# NOTE: this question and the HTML diagrams are duplicated in
-   bridgy/templates/about.html. If you update them here, update them there too! #}
-<li id="bridgy-classic" class="question">What's the difference between this and Bridgy classic, ie non-Fed?</li>
-<li class="answer">
-<p><a href="https://fed.brid.gy/">Bounce</a> and <a href="https://brid.gy/">Bridgy classic</a> are separate services. They both connect web sites and social networks and translate posts and interactions back and forth, but they each do it very differently.</p>
-<a href="https://fed.brid.gy/">Bounce</a> - this service - bridges accounts on decentralized social networks like the <a href="https://en.wikipedia.org/wiki/Fediverse">fediverse</a>, <a href="https://bsky.social/">Bluesky</a>/<a href="https://atproto.com/">AT Protocol</a>, and the <a href="https://indieweb.org/">IndieWeb</a> <em>directly</em> across those networks.</p>
-<p><a href="https://brid.gy/">Bridgy classic</a>, on the other hand, connects IndieWeb web sites to <em>existing</em> accounts on social networks, both centralized and decentralized, and provides <a href="https://indieweb.org/backfeed">backfeed</a> and <a href="https://indieweb.org/POSSE">POSSE</a> (aka cross-posting) as a service.</p>
-<p>As an example, here's a visualization of how they each connect web sites to the fediverse:</p>
-
-<br>
-
-<div class="row which-bridgy">
-
-<div class="col-lg-6 col-lg-offset-0 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12">
-<a class="btn btn-default" href="https://brid.gy/mastodon/start">
-<p class="bigger">
-  Bridgy cross-posts to a Mastodon account: @you@mastodon.server
-</p>
-<pre class="bigger">      <img title="Pleroma" style="height: 1.5em; margin-bottom: -.2em" src="/static/pleroma_logo.svg">
-    /
-<span class="highlight" style="background-color: khaki" title="Your web site">🌐</span> — <span class="highlight"><img title="Mastodon" src="/oauth_dropins_static/mastodon_2x.png"></span> — <img title="Friendica" src="/static/friendica_logo.svg">
-    \
-      <img title="Mastodon" src="/oauth_dropins_static/mastodon_2x.png">
-</pre>
-<p class="big">You already have a Mastodon account. You want to copy posts from your web site to Mastodon and send responses back to your site.</p>
-</a>
-</div>
-
-<div class="col-lg-6 col-lg-offset-0 col-md-8 col-md-offset-2 col-sm-10 col-sm-offset-1 col-xs-12">
-<a class="btn btn-default" href="https://fed.brid.gy/">
-<p class="bigger">
-  Bounce connects directly to the fediverse: @yoursite.com
-</p>
-<pre class="bigger"><img title="Fediverse" src="/static/fediverse_logo.svg">   <img title="PeerTube" src="/static/peertube_logo.svg">
-\ /
-<img title="Misskey" src="/static/misskey_logo.png"> — <span class="highlight" title="Your web site">🌐</span> — <img title="Mastodon" src="/oauth_dropins_static/mastodon_2x.png">
-/ \
-<img title="GNU Social" src="/static/gnu_social_logo.svg">   <img title="Pixelfed" src="/oauth_dropins_static/pixelfed_2x.png">
-</pre>
-<p class="big">Your web site will be its own fediverse account. Its posts will show up in the fediverse automatically. People there can follow it directly.</p>
-</a>
-</div>
-</div>
-
-<p>Apologies for the confusingly similar names!</p>
-</li>
-
-
-<li id="behavior-mismatches" class="question">How does this handle behavior differences between networks?</li>
-<li class="answer">
-<p>When networks work differently, we try to preserve each network's behavior as much as possible. For example, following on the web is permissionless: you can follow any web site in a feed reader. However, in the fediverse, following may require approval, ie users can choose to approve or reject each follower individually.</p>
-<p>Bounce cooperates with this. When a web user follows a fediverse user, Bounce only adds them and starts delivering posts once the fediverse user approves the follow.</p>
-</li>
-
-<li id="format-mismatches" class="question">How does this handle formatting differences between networks?</li>
-<li class="answer">
-<p>We work hard to preserve profile and post formatting as much as possible. For networks with rich formatting like the web, we convert that formatting to text-based formatting as much as possible when delivering to text-based networks.</p>
-<p>Unfortunately, this kind of conversion is never perfect. Some types of posts, eg events and polls, are difficult to represent in networks that don't support them. As a fallback, Bounce includes a link to the original post on its own network that users elsewhere can follow to see it as it was originally intended.</p>
-</li>
-
-<li id="moderation" class="question">What about moderation? How do blocks, mutes, etc work?</li>
-<li class="answer">
-<p>In general, native moderation tools within each network work with bridged users just like with native users. <a href="https://docs.bsky.app/docs/advanced-guides/moderation#global-label-values">Bluesky labels</a> are translated to/from the fediverse's <a href="https://swicg.github.io/miscellany/#sensitive"><code>sensitive</code> flag</a> and <a href="https://docs.joinmastodon.org/user/posting/#cw">content warnings</a>. Blocking and muting is translated too, and works just like normal. Similarly, if you or an admin block an entire bridged network, that works just like blocking a native instance.</p>
-<p>Bounce also incorporates and obeys lower level mitigation techniques such as the fediverse’s <a href="https://fedi.tips/authorized-fetch/">authorized fetch</a> aka secure mode. It always includes valid HTTP Signatures when fetching actors and other objects.</p>
-<p>For more background, see our <a href="#moderation-policy">content moderation policy</a> and <a href="https://snarfed.org/2024-01-19_moderate-people-not-code">this blog post</a>.</p>
-</li>
-
-<li id="opt-out" class="question">How do I opt out and remove my site or account?</li>
-<li class="answer">
-<p>If you're on the fediverse or Bluesky, and you've opted in but now want to opt out, block the Bounce bot user for the network you want to opt out of. For example, on the fediverse, block <code>@bsky.brid.gy@bsky.brid.gy</code>. On Bluesky, block <a href="https://bsky.app/profile/ap.brid.gy">@ap.brid.gy</a>.</p>
-<p>(However, if you're on a <a href="https://pixelfed.org/">Pixelfed</a> instance, DM the word <code>stop</code> to <code>@bsky.brid.gy@bsky.brid.gy</code> instead. <a href="https://github.com/pixelfed/pixelfed/issues/5678">Pixelfed doesn't yet send the ActivityPub Block activity</a>, so blocking won't work. Hopefully they'll fix that soon!)
-<p>If you're on the web, <a href="mailto:feedback@brid.gy">email us</a> from an address at your web site's domain to show that you own it, or you can put the text <code>#nobridge</code> in the <a href="#web-profile">profile on your home page</a> and then <a href="#update-profile">update your profile</a> on <a href="#user-page">your user page</a>.</p>
-<p>Once you've done this, Bounce will deactivate your bridged profile in that network, and it will no longer bridge any of your posts or interactions there.</p>
-<p>You can undo this later and reactivate bridging for your account, but depending on the network, not everything will be perfectly restored. For example, when you disable bridging into the fediverse, the bridged fediverse account is deleted and all followers are disconnected. If you later re-enable it, fediverse users will have to search for your account by address manually to find and follow it again.</p>
-</li>
-
-<li id="dms" class="question">Why is Bounce chatting or DMing with me?</li>
-<li class="answer">
-<p>Bounce sends a few different types of chat messages (aka DMs, or direct messages):</p>
-<ul>
-<li>When you first enable it for your account.
-<li>When you first reply to a bridged account, but you haven't enabled the bridge yourself, so they won't see your reply.
-<li>If you haven't enabled the bridge, and someone on a different network <a href="#dm-request">requests that you enable it so they can follow you</a>. (Bounce includes a link to their profile in this message.)
-<li>A confirmation or other reply when you <a href="#dm-request">message it to request that someone else enables the bridge</a>.
-</ul>
-<p>Bounce tries hard to avoid spamming. Apart from replying to your own messages, it will only send you at most one of each of these messages, ever.</p>
-<p>Also, chats with Bounce bot accounts are not monitored by a human. Feel free to <a href="#bug">file an issue in GitHub if you have a bug report or feature request!</a>
-</li>
-
-<li id="migration" class="question">Is account migration supported?</li>
-<li class="answer">
-<p>Somewhat. Currently, if you have a Bluesky account or web site that's bridged into the fediverse, you can <a href="https://docs.joinmastodon.org/user/moving/#migration">migrate</a> that bridged fediverse account out to a native fediverse account with the <a href="#dm-commands"><code>migrate-to</code> DM command</a>.
-<p>Otherwise, not yet. If you bridge your fediverse account and then <a href="https://docs.joinmastodon.org/user/moving/#migration">migrate to a new instance</a>, or bridge your Bluesky account and then <a href="https://bsky.social/about/blog/4-28-2023-domain-handle-tutorial">change your handle</a>, or bridge your web site and then move it to a new domain, Bounce doesn't officially support that right now. Some parts of bridging may continue to work, but probably not all.
-<p>Details in <a href="https://github.com/snarfed/bridgy-fed/issues/330">these</a> <a href="https://github.com/snarfed/bridgy-fed/issues/1074">issues</a>. Hopefully this will be more fully supported in the future.
-<p><a href="https://github.com/snarfed/bridgy-fed/issues/1137">Bounce also doesn't support migrating an existing account into it to become a bridged account, or migrating a bridged account out to be a normal account.</a> Those are unlikely to be supported, even in the future.
-</li>
-
-<li id="use-like-normal" class="question">Can I log into my bridged account and use it like a normal account?</a></li>
-<li class="answer">
-<p>Sorry, no, Bounce doesn't support this. It would be difficult to manage and resolve the conflicts that would inevitably arise between bridging and interactive use. This would also take a huge amount of effort; we'd have to build a full-fledged, interactive fediverse instance, Bluesky PDS, web server CMS, etc, on top of the current bridge functionality.
-<p>
-</li>
-
-<li id="cross-post" class="question">Can I use this to bridge two existing accounts that I already have?</a></li>
-<li class="answer">
-<p>Sorry, no, Bounce doesn't support this. When it bridges one of your accounts into a new network, Bounce fully owns the bridged account in the new network. Fortunately, there are <a href="https://www.google.com/search?q=cross-post+bluesky+fediverse">many other cross-posting and clients tools that can copy posts between existing accounts</a>!
+<p>...</p>
 </li>
 
 </ul>
