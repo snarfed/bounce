@@ -13,31 +13,31 @@ import oauth_dropins.threads
 from oauth_dropins.webutil import flask_util
 from oauth_dropins.webutil.flask_util import FlashErrors
 
-from app import app
+from flask_app import app
 
 logger = logging.getLogger(__name__)
 
 # Cache-Control header for static files
-CACHE_CONTROL = 'public, max-age=300'  # 5 min
+CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
 
 
-@app.route('/')
+@app.get('/')
 @flask_util.headers(CACHE_CONTROL)
 def front_page():
     """View for the front page."""
     return render_template('index.html',
-        bluesky_button=BlueskyOAuthStart.button_html(
+        bluesky_button=oauth_dropins.bluesky.Start.button_html(
             '/oauth/bluesky/start', image_prefix='/oauth_dropins_static/'),
-        mastodon_button=mastodon.Start.button_html(
+        mastodon_button=oauth_dropins.mastodon.Start.button_html(
             '/oauth/mastodon/start', image_prefix='/oauth_dropins_static/'),
-        pixelfed_button=pixelfed.Start.button_html(
+        pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
             '/oauth/pixelfed/start', image_prefix='/oauth_dropins_static/'),
-        threads_button=threads.Start.button_html(
+        threads_button=oauth_dropins.threads.Start.button_html(
             '/oauth/threads/start', image_prefix='/oauth_dropins_static/'),
     )
 
 
-@app.route('/docs')
+@app.get('/docs')
 @flask_util.headers(CACHE_CONTROL)
 def docs():
     """View for the docs page."""
@@ -76,8 +76,7 @@ def require_login(fn):
     return wrapped
 
 
-@app.route('/accounts')
-@canonicalize_request_domain(common.PROTOCOL_DOMAINS, common.PRIMARY_DOMAIN)
+@app.get('/accounts')
 def accounts():
     """User accounts page. Requires logged in session."""
     auth_entity = request.args.get('auth_entity')
@@ -113,7 +112,7 @@ def accounts():
     )
 
 
-@app.route('/review')
+@app.get('/review')
 @require_login
 def review():
     """Review an account's followers and follows."""
@@ -159,7 +158,7 @@ def review():
     )
 
 
-@app.route('/migrate')
+@app.get('/migrate')
 @require_login
 def migrate():
     """View for the migration preparation page."""

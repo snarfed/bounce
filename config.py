@@ -12,8 +12,6 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 CACHE_THRESHOLD = 3000
 
-config_logger = logging.getLogger(__name__)
-
 if appengine_info.DEBUG:
     ENV = 'development'
     CACHE_TYPE = 'NullCache'
