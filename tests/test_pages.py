@@ -1,9 +1,12 @@
 """Unit tests for pages.py."""
 import json
+from unittest.mock import ANY, call, patch
 
 from flask import get_flashed_messages, session
+from google.cloud import ndb
+from granary.source import html_to_text
 from oauth_dropins.bluesky import BlueskyAuth
-from oauth_dropins.mastodon import MastodonAuth
+from oauth_dropins.mastodon import MastodonApp, MastodonAuth
 from oauth_dropins.views import LOGINS_SESSION_KEY
 from oauth_dropins.webutil import flask_util, testutil, util
 from oauth_dropins.webutil.appengine_config import ndb_client
@@ -25,11 +28,7 @@ class PagesTest(TestCase):
         self.ndb_context = ndb_client.context()
         self.ndb_context.__enter__()
 
-        # self.app_context = app.app_context()
-        # self.app_context.push()
-
     def tearDown(self):
-        # self.app_context.pop()
         self.ndb_context.__exit__(None, None, None)
         self.client.__exit__(None, None, None)
         super().tearDown()
@@ -87,3 +86,69 @@ class PagesTest(TestCase):
         self.assert_multiline_in("""\
 <img src="http://b.c/pic" class="profile">
 <span style="unicode-bidi: isolate">@a@b.c</span>""", body)
+
+    def test_review_no_auth_entity_param(self):
+        resp = self.client.get('/review')
+        self.assertEqual(400, resp.status_code)
+
+    def test_review_not_logged_in(self):
+        resp = self.client.get('/review?auth_entity=ahBicmlkZ3ktZmVkZXJhdGVkchcLEgxNYXN0b2RvbkF1dGgiBWFAYi5jDA')
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual('/', resp.headers['Location'])
+
+    @patch('requests.get')
+    def test_review_mastodon(self, mock_get):
+        alice = {
+            'id': '234',
+            'username': 'alice',
+            'display_name': 'Ms Alice',
+            'acct': 'alice@in.st',
+            'url': 'http://in.st/@alice',
+            'avatar': 'http://in.st/users/alice',
+        }
+        bob = {
+            'username': 'bo.b',
+            'acct': 'bo.b@bsky.brid.gy',
+            'url': 'http://bsky.brid.gy/r/https://bsky.app/profile/bo.b',
+            'avatar': 'http://bsky.app/bo.b/pic',
+        }
+        eve = {
+            'username': 'ev.e',
+            'acct': 'ev.e@web.brid.gy',
+            'url': 'http://ev.e/',
+            'avatar': 'http://web.brid.gy/ev.e',
+        }
+        mock_get.side_effect = [
+            # followers
+            requests_response([alice, bob], content_type='application/json'),
+            # follows
+            requests_response([alice, bob, eve], content_type='application/json'),
+        ]
+
+        app = MastodonApp(instance='https://in.st/', data='{}').put()
+        auth = MastodonAuth(id='@alice@in.st', access_token_str='towkin', app=app,
+                            user_json=json.dumps(alice)).put()
+
+        with self.client.session_transaction() as sess:
+            sess[LOGINS_SESSION_KEY] = [('MastodonAuth', '@alice@in.st')]
+
+        resp = self.client.get(f'/review?auth_entity={auth.urlsafe().decode()}')
+        self.assertEqual(200, resp.status_code)
+
+        self.assertEqual(2, mock_get.call_count)
+        self.assertEqual(('https://in.st/api/v1/accounts/234/followers?limit=80',),
+                         mock_get.call_args_list[0].args)
+        self.assertEqual(('https://in.st/api/v1/accounts/234/following?limit=80',),
+                         mock_get.call_args_list[1].args)
+
+        text = html_to_text(resp.get_data(as_text=True))
+        self.assert_multiline_in("""
+# Review
+@alice@in.st
+## Followers
+* @alice@in.st · Ms Alice
+* @bo.b@bsky.brid.gy
+## Follows
+* @alice@in.st · Ms Alice
+* @bo.b@bsky.brid.gy
+* @ev.e@ev.e · ev.e@web.brid.gy""", text, ignore_blanks=True)

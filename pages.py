@@ -9,10 +9,11 @@ from granary.bluesky import Bluesky
 from granary.mastodon import Mastodon
 import oauth_dropins
 import oauth_dropins.bluesky
+import oauth_dropins.indieauth
 import oauth_dropins.mastodon
 import oauth_dropins.pixelfed
 import oauth_dropins.threads
-from oauth_dropins.webutil import flask_util
+from oauth_dropins.webutil import flask_util, util
 from oauth_dropins.webutil.flask_util import FlashErrors, get_required_param
 
 from flask_app import app
@@ -22,11 +23,25 @@ logger = logging.getLogger(__name__)
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
 
+AUTH_TO_NETWORK = {
+    oauth_dropins.bluesky.BlueskyAuth: 'atproto',
+    oauth_dropins.indieauth.IndieAuth: 'web',
+    oauth_dropins.mastodon.MastodonAuth: 'activitypub',
+    oauth_dropins.pixelfed.PixelfedAuth: 'activitypub',
+    oauth_dropins.threads.ThreadsAuth: 'activitypub',
+}
+BRIDGE_DOMAIN_TO_NETWORK = {
+    'atproto.brid.gy': 'atproto',
+    'bsky.brid.gy': 'atproto',
+    'ap.brid.gy': 'activitypub',
+    'web.brid.gy': 'web',
+}
+
 
 def render(template, **vars):
     """Wrapper for Flask.render_template that populates common template vars."""
     if 'auths' not in vars:
-        vars['auths'] = ndb.get_multi(oauth_dropins.get_logins())
+        vars['auths'] = [a for a in ndb.get_multi(oauth_dropins.get_logins()) if a]
     return render_template(template, **vars)
 
 
@@ -41,11 +56,12 @@ def require_login(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         key = ndb.Key(urlsafe=get_required_param('auth_entity'))
-        if key not in oauth_dropins.get_logins():
-            logger.warning(f'not logged in for {key}')
-            raise Found(location='/')
+        if key in oauth_dropins.get_logins():
+            if auth := key.get():
+                return fn(*args, auth=auth, **kwargs)
 
-        return fn(*args, auth=key.get(), **kwargs)
+        logger.warning(f'not logged in for {key}')
+        return redirect('/', code=302)
 
     return wrapper
 
@@ -114,16 +130,29 @@ def review(auth):
     logger.info(f'Reviewing {auth.key.id()} {auth.user_display_name()}')
 
     source = granary_source(auth)
+    from_network = AUTH_TO_NETWORK[auth.__class__]
+    # TODO
+    to_network = 'atproto'
+
+    def count_types(actors):
+        native = bridged = 0
+
 
     logger.info('Fetching followers')
     followers = source.get_followers()
+    followers_native = followers_bridged = 0
+    for follower in followers:
+        if id := follower.get('id'):
+            domain, _ = util.parse_tag_uri(id)
+            if BRIDGE_DOMAIN_TO_NETWORK.get(domain) == to_network:
+                followers_native += 1
+            else:
+                followers_bridged += 1
 
     logger.info('Fetching follows')
     follows = source.get_follows()
 
-    if isinstance(auth, (oauth_dropins.mastodon.MastodonAuth,
-                         oauth_dropins.pixelfed.PixelfedAuth,
-                         oauth_dropins.threads.ThreadsAuth)):
+    if AUTH_TO_NETWORK[auth.__class__] == 'activitypub':
         for f in followers + follows:
             f['username'] = as2.address(as2.from_as1(f))
 
@@ -132,6 +161,10 @@ def review(auth):
         auth=auth,
         followers=followers,
         follows=follows,
+        follower_counts=[['type', 'count'],
+                       ['native', followers_native],
+                       ['bridged', followers_bridged]],
+        follow_counts=[['type', 'count'], ['native', 7], ['bridged', 13]],
     )
 
 

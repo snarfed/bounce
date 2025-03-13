@@ -1,7 +1,23 @@
-{% set body_id = 'review' %}
+ {% set body_id = 'review' %}
 {% extends "base.html" %}
 
 {% block content %}
+<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+
+<script type="text/javascript">
+  google.charts.load("current", {packages:["corechart"]});
+  google.charts.setOnLoadCallback(drawCharts);
+
+  function drawCharts() {
+    var chart = new google.visualization.PieChart(
+      document.getElementById('followers-chart'));
+    chart.draw(google.visualization.arrayToDataTable({{ follower_counts|safe }}));
+
+    chart = new google.visualization.PieChart(
+      document.getElementById('follows-chart'));
+    chart.draw(google.visualization.arrayToDataTable({{ follow_counts|safe }}));
+  }
+</script>
 
 <div class="row big">
 <h1>Review</h1>
@@ -11,6 +27,7 @@
 <div class="row">
   <div class="actors col-md-6 col-sm-12">
     <h2>Followers</h2>
+    <div id="followers-chart" style="width: 400px; height: 400px;"></div>
     <ul>
       {% for actor in followers %}
         <li> {% include 'actor_label.html' %}
@@ -20,6 +37,7 @@
 
   <div class="actors col-md-6 col-sm-12">
     <h2>Follows</h2>
+    <div id="follows-chart" style="width: 400px; height: 400px;"></div>
     <ul>
       {% for actor in follows %}
         <li> {% include 'actor_label.html' %}
