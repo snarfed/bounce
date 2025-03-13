@@ -15,6 +15,7 @@ from oauth_dropins.webutil.testutil import requests_response
 import requests
 
 from app import app
+import pages
 
 
 class PagesTest(TestCase):
@@ -125,6 +126,11 @@ class PagesTest(TestCase):
             requests_response([alice, bob, eve], content_type='application/json'),
         ]
 
+        # # eve is native Bluesky, bridged into ActivityPub
+        # with ndb.context.Context(pages.bridgy_fed_ndb).use():
+        #     pages.ATProto(id='did:plc:eve', enabled_protocols=['activitypub']).put()
+        #     pages.ATProto(id='did:plc:bob', enabled_protocols=['unknown']).put()
+
         app = MastodonApp(instance='https://in.st/', data='{}').put()
         auth = MastodonAuth(id='@alice@in.st', access_token_str='towkin', app=app,
                             user_json=json.dumps(alice)).put()
@@ -163,7 +169,6 @@ chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activi
 * @bo.b@bsky.brid.gy
 * @ev.e@ev.e · ev.e@web.brid.gy""", text, ignore_blanks=True)
 
-
     @patch('requests.get')
     def test_review_bluesky(self, mock_get):
         alice = {
@@ -196,8 +201,12 @@ chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activi
             }),
         ]
 
-        auth = BlueskyAuth(id='did:plc:alice', user_json=json.dumps(alice)).put()
+        # eve is native Bluesky, bridged into ActivityPub
+        with ndb.context.Context(pages.bridgy_fed_ndb).use():
+            pages.ATProto(id='did:plc:eve', enabled_protocols=['activitypub']).put()
+            pages.ATProto(id='did:plc:bob', enabled_protocols=['unknown']).put()
 
+        auth = BlueskyAuth(id='did:plc:alice', user_json=json.dumps(alice)).put()
         with self.client.session_transaction() as sess:
             sess[LOGINS_SESSION_KEY] = [('BlueskyAuth', 'did:plc:alice')]
 
@@ -215,13 +224,15 @@ chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activi
 
         # check rendered template
         body = resp.get_data(as_text=True)
-        # TODO
 #         self.assert_multiline_in("""
 # document.getElementById('followers-chart'));
-# chart.draw(google.visualization.arrayToDataTable([['type', 'count'], ['native', 1], ['bridged', 1]])""", body)
+# chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activitypub', 1], ['atproto', 1]])""", body)
 #         self.assert_multiline_in("""
 # document.getElementById('follows-chart'));
-# chart.draw(google.visualization.arrayToDataTable([['type', 'count'], ['native', 1], ['bridged', 1]])""", body)
+# chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activitypub', 1], ['atproto', 1], ['web', 1]])""", body)
+        self.assert_multiline_in("""
+document.getElementById('follows-bridged-chart'));
+chart.draw(google.visualization.arrayToDataTable([['type', 'count'], ['bridged', 1], ['not', 2]])""", body)
 
         text = html_to_text(body)
         self.assert_multiline_in("""

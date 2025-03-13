@@ -16,6 +16,10 @@
     chart = new google.visualization.PieChart(
       document.getElementById('follows-chart'));
     chart.draw(google.visualization.arrayToDataTable({{ follow_networks|safe }}));
+
+    chart = new google.visualization.PieChart(
+      document.getElementById('follows-bridged-chart'));
+    chart.draw(google.visualization.arrayToDataTable({{ follows_by_bridged|safe }}));
   }
 </script>
 
@@ -38,6 +42,7 @@
   <div class="actors col-md-6 col-sm-12">
     <h2>Follows</h2>
     <div id="follows-chart" style="width: 400px; height: 400px;"></div>
+    <div id="follows-bridged-chart" style="width: 400px; height: 400px;"></div>
     <ul>
       {% for actor in follows %}
         <li> {% include 'actor_label.html' %}

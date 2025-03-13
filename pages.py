@@ -21,6 +21,9 @@ from flask_app import app
 
 logger = logging.getLogger(__name__)
 
+BRIDGY_FED_PROJECT_ID = 'bridgy-federated'
+bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
+
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
 
@@ -36,6 +39,21 @@ BRIDGE_DOMAIN_TO_NETWORK = {
     'bsky.brid.gy': 'atproto',
     'ap.brid.gy': 'activitypub',
     'web.brid.gy': 'web',
+}
+
+
+class User(ndb.Model):
+    """Stub for Bridgy Fed's model class."""
+    enabled_protocols = ndb.StringProperty(repeated=True)
+
+class ActivityPub(User): pass
+class ATProto(User): pass
+class Web(User): pass
+
+NETWORK_TO_MODEL = {
+    'atproto': ATProto,
+    'web': Web,
+    'activitypub': ActivityPub,
 }
 
 
@@ -133,7 +151,7 @@ def review(auth):
     source = granary_source(auth)
     from_network = AUTH_TO_NETWORK[auth.__class__]
     # TODO
-    to_network = 'atproto'
+    to_network = 'activitypub'
 
     def count_networks(actors):
         by_protocol = defaultdict(int)
@@ -158,6 +176,14 @@ def review(auth):
     follows = source.get_follows()
     follow_networks = count_networks(follows)
 
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        model = NETWORK_TO_MODEL[from_network]
+        keys = [model(id=f['id']).key for f in follows if f.get('id')]
+        bridged = model.query(model.key.IN(keys),
+                              model.enabled_protocols == to_network
+                              ).fetch()
+
+    # preprocess actors
     if AUTH_TO_NETWORK[auth.__class__] == 'activitypub':
         for f in followers + follows:
             f['username'] = as2.address(as2.from_as1(f))
@@ -169,6 +195,9 @@ def review(auth):
         follows=follows,
         follower_networks=[['network', 'count']] + follower_networks,
         follow_networks=[['network', 'count']] + follow_networks,
+        follows_by_bridged=[['type', 'count'],
+                            ['bridged', len(bridged)],
+                            ['not', len(follows) - len(bridged)]],
     )
 
 
