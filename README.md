@@ -1,9 +1,9 @@
-<img src="..." width="120" /> [Bounce](https://bounce.anew.social/) [![Circle CI](https://circleci.com/gh/snarfed/bounce.svg?style=svg)](https://circleci.com/gh/snarfed/bounce)
+<img src="https://raw.github.com/snarfed/bridgy-fed/main/static/logomark-light-mode.svg" width="120" /> [Bounce](https://bounce.anew.social/) [![Circle CI](https://circleci.com/gh/snarfed/bounce.svg?style=svg)](https://circleci.com/gh/snarfed/bounce)
 ===
 
 _Switch platforms, keep your people_
 
-Bounce lets you migrate from one social network to another and keep all of your followers. It currently supports [Mastodon](https://joinmastodon.org), [Pixelfed](https://pixelfed.org/), [Bluesky](https://bsky.social/), and [micro.blog](https://micro.blog/)
+Bounce lets you migrate from one social network to another and keep all of your followers. It currently supports [Mastodon](https://joinmastodon.org) and [Bluesky](https://bsky.social/). We hope to add support for [Pixelfed](https://pixelfed.org/), [Threads](https://www.threads.net/), [micro.blog](https://micro.blog/), and more soon.
 
 https://bounce.anew.social/
 

@@ -16,7 +16,6 @@
 <!-- Not async because they add DOMContentLoaded event listeners, which may
   -- happen before an async script loads. -->
 <script src="/oauth_dropins_static/util.js"></script>
-<script src="/static/util.js"></script>
 </head>
 
 <body id="{{ body_id }}">
@@ -30,10 +29,7 @@
 {% endif %}
 {% endwith %}
 
-<main class="tp-main lead
-             {% if body_id == 'front' %} container-fluid
-             {% else %} container
-             {% endif %}">
+<main class="tp-main lead {% if body_id == 'front' %} container-fluid {% else %} container {% endif %}">
 
 <div id="header" class="row">
   <p id="logo">

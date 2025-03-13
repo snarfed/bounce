@@ -4,6 +4,7 @@ from functools import wraps
 
 from flask import flash, redirect, render_template, request
 from google.cloud import ndb
+from granary import as2
 from granary.bluesky import Bluesky
 from granary.mastodon import Mastodon
 import oauth_dropins
@@ -12,7 +13,7 @@ import oauth_dropins.mastodon
 import oauth_dropins.pixelfed
 import oauth_dropins.threads
 from oauth_dropins.webutil import flask_util
-from oauth_dropins.webutil.flask_util import FlashErrors
+from oauth_dropins.webutil.flask_util import FlashErrors, get_required_param
 
 from flask_app import app
 
@@ -20,6 +21,13 @@ logger = logging.getLogger(__name__)
 
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
+
+
+def render(template, **vars):
+    """Wrapper for Flask.render_template that populates common template vars."""
+    if 'auths' not in vars:
+        vars['auths'] = ndb.get_multi(oauth_dropins.get_logins())
+    return render_template(template, **vars)
 
 
 def require_login(fn):
@@ -32,21 +40,38 @@ def require_login(fn):
     """
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        key = Key(urlsafe=get_required_param('key'))
+        key = ndb.Key(urlsafe=get_required_param('auth_entity'))
         if key not in oauth_dropins.get_logins():
             logger.warning(f'not logged in for {key}')
             raise Found(location='/')
 
-        return fn(*args, user=user, **kwargs)
+        return fn(*args, auth=key.get(), **kwargs)
 
     return wrapper
+
+
+def granary_source(auth):
+    """Returns a granary source instance for a given auth entity.
+
+    Args:
+      auth (oauth_dropins.models.BaseAuth)
+
+    Returns:
+      granary.source.Source:
+    """
+    if isinstance(auth, oauth_dropins.mastodon.MastodonAuth):
+        return Mastodon(instance=auth.instance(), access_token=auth.access_token_str,
+                        user_id=auth.user_id())
+    elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
+        return Bluesky(handle=auth.user_display_name(), did=auth.key.id(),
+                       access_token=auth.dpop_token)
 
 
 @app.get('/')
 @flask_util.headers(CACHE_CONTROL)
 def front_page():
     """View for the front page."""
-    return render_template('index.html',
+    return render('index.html',
         bluesky_button=oauth_dropins.bluesky.Start.button_html(
             '/oauth/bluesky/start', image_prefix='/oauth_dropins_static/'),
         mastodon_button=oauth_dropins.mastodon.Start.button_html(
@@ -62,7 +87,7 @@ def front_page():
 @flask_util.headers(CACHE_CONTROL)
 def docs():
     """View for the docs page."""
-    return render_template('docs.html')
+    return render('docs.html')
 
 
 @app.post('/logout')
@@ -79,54 +104,32 @@ def accounts():
     if not (logins := oauth_dropins.get_logins()):
         return redirect('/', code=302)
 
-    auths = ndb.get_multi(logins)
-    return render_template(
-        'accounts.html',
-        auths=auths,
-    )
+    return render('accounts.html')
 
 
 @app.get('/review')
 @require_login
-def review():
+def review(auth):
     """Review an account's followers and follows."""
-    # Determine which service the user is logged in with
-    auth = g.auth
+    logger.info(f'Reviewing {auth.key.id()} {auth.user_display_name()}')
 
-    # Get followers and follows based on the service
-    followers = []
-    follows = []
-    if auth.__class__ == bluesky.Auth:
-        # Get Bluesky followers and follows
-        api = Bluesky(auth_entity=auth)
-        followers = api.get_followers()
-        follows = api.get_follows()
-    elif auth.__class__ in (mastodon.Auth, pixelfed.Auth):
-        # Get Mastodon/Pixelfed followers and follows
-        api = Mastodon(auth_entity=auth)
-        followers = api.get_followers()
-        follows = api.get_follows()
-    elif auth.__class__ == threads.Auth:
-        # For Threads, we'd use a similar approach
-        # But we can't yet since Threads API is limited
-        pass
+    source = granary_source(auth)
 
-    # Get user info
-    user_id = None
-    handle = None
-    if hasattr(auth, 'user_json') and auth.user_json:
-        if auth.__class__ == bluesky.Auth:
-            user_id = auth.user_json.get('did')
-            handle = auth.user_json.get('handle')
-        elif auth.__class__ in (mastodon.Auth, pixelfed.Auth, threads.Auth):
-            user_id = str(auth.user_json.get('id'))
-            handle = auth.user_json.get('username')
+    logger.info('Fetching followers')
+    followers = source.get_followers()
 
-    return render_template(
+    logger.info('Fetching follows')
+    follows = source.get_follows()
+
+    if isinstance(auth, (oauth_dropins.mastodon.MastodonAuth,
+                         oauth_dropins.pixelfed.PixelfedAuth,
+                         oauth_dropins.threads.ThreadsAuth)):
+        for f in followers + follows:
+            f['username'] = as2.address(as2.from_as1(f))
+
+    return render(
         'review.html',
         auth=auth,
-        user_id=user_id,
-        handle=handle,
         followers=followers,
         follows=follows,
     )
@@ -136,13 +139,12 @@ def review():
 @require_login
 def migrate():
     """View for the migration preparation page."""
-    # Get user info
     auth = g.auth
     user_id = None
     handle = None
     platform = "account"
 
-    return render_template(
+    return render(
         'migrate.html',
         auth=auth,
         user_id=user_id,
