@@ -136,23 +136,26 @@ def review(auth):
 
     def count_types(actors):
         native = bridged = 0
+        for actor in actors:
+            if id := actor.get('id'):
+                if id.startswith('tag:'):
+                    domain, _ = util.parse_tag_uri(id)
+                    if BRIDGE_DOMAIN_TO_NETWORK.get(domain) == to_network:
+                        native += 1
+                        continue
+            bridged += 1
+
+        return native, bridged
 
 
     logger.info('Fetching followers')
     # TODO: Bluesky: support federated PDSes
     followers = source.get_followers()
-    followers_native = followers_bridged = 0
-    for follower in followers:
-        if id := follower.get('id'):
-            if id.startswith('tag:'):
-                domain, _ = util.parse_tag_uri(id)
-                if BRIDGE_DOMAIN_TO_NETWORK.get(domain) == to_network:
-                    followers_native += 1
-                    continue
-        followers_bridged += 1
+    followers_native, followers_bridged = count_types(followers)
 
     logger.info('Fetching follows')
     follows = source.get_follows()
+    follows_native, follows_bridged = count_types(follows)
 
     if AUTH_TO_NETWORK[auth.__class__] == 'activitypub':
         for f in followers + follows:
@@ -163,10 +166,16 @@ def review(auth):
         auth=auth,
         followers=followers,
         follows=follows,
-        follower_counts=[['type', 'count'],
-                       ['native', followers_native],
-                       ['bridged', followers_bridged]],
-        follow_counts=[['type', 'count'], ['native', 7], ['bridged', 13]],
+        follower_counts=[
+            ['type', 'count'],
+            ['native', followers_native],
+            ['bridged', followers_bridged],
+        ],
+        follow_counts=[
+            ['type', 'count'],
+            ['native', follows_native],
+            ['bridged', follows_bridged],
+        ],
     )
 
 

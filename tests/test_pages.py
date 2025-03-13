@@ -135,13 +135,23 @@ class PagesTest(TestCase):
         resp = self.client.get(f'/review?auth_entity={auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
 
+        # check Mastodon API calls
         self.assertEqual(2, mock_get.call_count)
         self.assertEqual(('https://in.st/api/v1/accounts/234/followers?limit=80',),
                          mock_get.call_args_list[0].args)
         self.assertEqual(('https://in.st/api/v1/accounts/234/following?limit=80',),
                          mock_get.call_args_list[1].args)
 
-        text = html_to_text(resp.get_data(as_text=True))
+        # check rendered template
+        body = resp.get_data(as_text=True)
+        self.assert_multiline_in("""
+document.getElementById('followers-chart'));
+chart.draw(google.visualization.arrayToDataTable([['type', 'count'], ['native', 1], ['bridged', 1]])""", body)
+        self.assert_multiline_in("""
+document.getElementById('follows-chart'));
+chart.draw(google.visualization.arrayToDataTable([['type', 'count'], ['native', 1], ['bridged', 2]])""", body)
+
+        text = html_to_text(body)
         self.assert_multiline_in("""
 # Review
 @alice@in.st
@@ -152,6 +162,7 @@ class PagesTest(TestCase):
 * @alice@in.st · Ms Alice
 * @bo.b@bsky.brid.gy
 * @ev.e@ev.e · ev.e@web.brid.gy""", text, ignore_blanks=True)
+
 
     @patch('requests.get')
     def test_review_bluesky(self, mock_get):
@@ -194,6 +205,7 @@ class PagesTest(TestCase):
         resp = self.client.get(f'/review?auth_entity={auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
 
+        # check Bluesky API calls
         self.assertEqual(2, mock_get.call_count)
         self.assertEqual(
             ('https://bsky.social/xrpc/app.bsky.graph.getFollowers?actor=did%3Aplc%3Aalice&limit=100',),
@@ -202,7 +214,17 @@ class PagesTest(TestCase):
             ('https://bsky.social/xrpc/app.bsky.graph.getFollows?actor=did%3Aplc%3Aalice&limit=100',),
             mock_get.call_args_list[1].args)
 
-        text = html_to_text(resp.get_data(as_text=True))
+        # check rendered template
+        body = resp.get_data(as_text=True)
+        # TODO
+#         self.assert_multiline_in("""
+# document.getElementById('followers-chart'));
+# chart.draw(google.visualization.arrayToDataTable([['type', 'count'], ['native', 1], ['bridged', 1]])""", body)
+#         self.assert_multiline_in("""
+# document.getElementById('follows-chart'));
+# chart.draw(google.visualization.arrayToDataTable([['type', 'count'], ['native', 1], ['bridged', 1]])""", body)
+
+        text = html_to_text(body)
         self.assert_multiline_in("""
 # Review
 al.ice · did:plc:alice
