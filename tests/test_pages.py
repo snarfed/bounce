@@ -146,10 +146,10 @@ class PagesTest(TestCase):
         body = resp.get_data(as_text=True)
         self.assert_multiline_in("""
 document.getElementById('followers-chart'));
-chart.draw(google.visualization.arrayToDataTable([['type', 'count'], ['native', 1], ['bridged', 1]])""", body)
+chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activitypub', 1], ['atproto', 1]])""", body)
         self.assert_multiline_in("""
 document.getElementById('follows-chart'));
-chart.draw(google.visualization.arrayToDataTable([['type', 'count'], ['native', 1], ['bridged', 2]])""", body)
+chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activitypub', 1], ['atproto', 1], ['web', 1]])""", body)
 
         text = html_to_text(body)
         self.assert_multiline_in("""
@@ -190,7 +190,6 @@ chart.draw(google.visualization.arrayToDataTable([['type', 'count'], ['native', 
                 'subject': {'did': 'did:plc:alice', 'handle': 'al.ice'},
                 'followers': [alice, bob],
             }),
-            # }, content_type='application/json'),
             requests_response({
                 'subject': {'did': 'did:plc:alice', 'handle': 'al.ice'},
                 'follows': [alice, bob, eve],

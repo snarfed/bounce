@@ -11,11 +11,11 @@
   function drawCharts() {
     var chart = new google.visualization.PieChart(
       document.getElementById('followers-chart'));
-    chart.draw(google.visualization.arrayToDataTable({{ follower_counts|safe }}));
+    chart.draw(google.visualization.arrayToDataTable({{ follower_networks|safe }}));
 
     chart = new google.visualization.PieChart(
       document.getElementById('follows-chart'));
-    chart.draw(google.visualization.arrayToDataTable({{ follow_counts|safe }}));
+    chart.draw(google.visualization.arrayToDataTable({{ follow_networks|safe }}));
   }
 </script>
 

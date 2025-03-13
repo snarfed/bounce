@@ -1,4 +1,5 @@
 """UI pages."""
+from collections import defaultdict
 import logging
 from functools import wraps
 
@@ -134,28 +135,28 @@ def review(auth):
     # TODO
     to_network = 'atproto'
 
-    def count_types(actors):
-        native = bridged = 0
+    def count_networks(actors):
+        by_protocol = defaultdict(int)
         for actor in actors:
             if id := actor.get('id'):
                 if id.startswith('tag:'):
                     domain, _ = util.parse_tag_uri(id)
-                    if BRIDGE_DOMAIN_TO_NETWORK.get(domain) == to_network:
-                        native += 1
+                    if network := BRIDGE_DOMAIN_TO_NETWORK.get(domain):
+                        by_protocol[network] += 1
                         continue
-            bridged += 1
+            by_protocol[from_network] += 1
 
-        return native, bridged
-
+        # return inner items as lists, not tuples
+        return [[network, count] for network, count in by_protocol.items()]
 
     logger.info('Fetching followers')
     # TODO: Bluesky: support federated PDSes
     followers = source.get_followers()
-    followers_native, followers_bridged = count_types(followers)
+    follower_networks = count_networks(followers)
 
     logger.info('Fetching follows')
     follows = source.get_follows()
-    follows_native, follows_bridged = count_types(follows)
+    follow_networks = count_networks(follows)
 
     if AUTH_TO_NETWORK[auth.__class__] == 'activitypub':
         for f in followers + follows:
@@ -166,16 +167,8 @@ def review(auth):
         auth=auth,
         followers=followers,
         follows=follows,
-        follower_counts=[
-            ['type', 'count'],
-            ['native', followers_native],
-            ['bridged', followers_bridged],
-        ],
-        follow_counts=[
-            ['type', 'count'],
-            ['native', follows_native],
-            ['bridged', follows_bridged],
-        ],
+        follower_networks=[['network', 'count']] + follower_networks,
+        follow_networks=[['network', 'count']] + follow_networks,
     )
 
 
