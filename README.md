@@ -1,4 +1,4 @@
-<img src="https://raw.github.com/snarfed/bridgy-fed/main/static/logomark-light-mode.svg" width="120" /> [Bounce](https://bounce.anew.social/) [![Circle CI](https://circleci.com/gh/snarfed/bounce.svg?style=svg)](https://circleci.com/gh/snarfed/bounce)
+<img src="https://raw.github.com/snarfed/bounce/main/static/logomark-light-mode.svg" width="120" /> [Bounce](https://bounce.anew.social/) [![Circle CI](https://circleci.com/gh/snarfed/bounce.svg?style=svg)](https://circleci.com/gh/snarfed/bounce)
 ===
 
 _Switch platforms, keep your people_
