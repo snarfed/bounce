@@ -139,15 +139,17 @@ def review(auth):
 
 
     logger.info('Fetching followers')
+    # TODO: Bluesky: support federated PDSes
     followers = source.get_followers()
     followers_native = followers_bridged = 0
     for follower in followers:
         if id := follower.get('id'):
-            domain, _ = util.parse_tag_uri(id)
-            if BRIDGE_DOMAIN_TO_NETWORK.get(domain) == to_network:
-                followers_native += 1
-            else:
-                followers_bridged += 1
+            if id.startswith('tag:'):
+                domain, _ = util.parse_tag_uri(id)
+                if BRIDGE_DOMAIN_TO_NETWORK.get(domain) == to_network:
+                    followers_native += 1
+                    continue
+        followers_bridged += 1
 
     logger.info('Fetching follows')
     follows = source.get_follows()

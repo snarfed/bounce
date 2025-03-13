@@ -1,10 +1,13 @@
 <!-- {{ actor }} -->
+{% with username = actor.get('username', '').strip('@'),
+        name = actor.get('displayName', '').strip('@') %}
 <a href="{{ actor.url }}">
   <nobr>
     <img src="{{ actor.image.url }}" class="profile">
     <span>{{ actor.username }}</span>
   </nobr>
-  {% if actor.username.strip('@') != actor.displayName.strip('@') %}
-    · <span style="unicode-bidi: isolate">{{ actor.displayName }}</span>
+  {% if name and name != username  %}
+    · <span style="unicode-bidi: isolate">{{ name }}</span>
   {% endif %}
 </a>
+{% endwith %}

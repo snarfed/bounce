@@ -152,3 +152,64 @@ class PagesTest(TestCase):
 * @alice@in.st · Ms Alice
 * @bo.b@bsky.brid.gy
 * @ev.e@ev.e · ev.e@web.brid.gy""", text, ignore_blanks=True)
+
+    @patch('requests.get')
+    def test_review_bluesky(self, mock_get):
+        alice = {
+            '$type': 'app.bsky.actor.defs#profileView',
+            'did': 'did:plc:alice',
+            'handle': 'al.ice',
+            'displayName': 'Ms Alice',
+            'avatar': 'http://alice/pic',
+        }
+        bob = {
+            '$type': 'app.bsky.actor.defs#profileView',
+            'did': 'did:plc:bob',
+            'handle': 'bo.b',
+            'avatar': 'http://bob/pic',
+        }
+        eve = {
+            '$type': 'app.bsky.actor.defs#profileView',
+            'did': 'did:plc:eve',
+            'handle': 'ev.e',
+            'avatar': 'http://eve/pic',
+        }
+        mock_get.side_effect = [
+            requests_response({
+                'subject': {'did': 'did:plc:alice', 'handle': 'al.ice'},
+                'followers': [alice, bob],
+            }),
+            # }, content_type='application/json'),
+            requests_response({
+                'subject': {'did': 'did:plc:alice', 'handle': 'al.ice'},
+                'follows': [alice, bob, eve],
+            }),
+        ]
+
+        auth = BlueskyAuth(id='did:plc:alice', user_json=json.dumps(alice)).put()
+
+        with self.client.session_transaction() as sess:
+            sess[LOGINS_SESSION_KEY] = [('BlueskyAuth', 'did:plc:alice')]
+
+        resp = self.client.get(f'/review?auth_entity={auth.urlsafe().decode()}')
+        self.assertEqual(200, resp.status_code)
+
+        self.assertEqual(2, mock_get.call_count)
+        self.assertEqual(
+            ('https://bsky.social/xrpc/app.bsky.graph.getFollowers?actor=did%3Aplc%3Aalice&limit=100',),
+            mock_get.call_args_list[0].args)
+        self.assertEqual(
+            ('https://bsky.social/xrpc/app.bsky.graph.getFollows?actor=did%3Aplc%3Aalice&limit=100',),
+            mock_get.call_args_list[1].args)
+
+        text = html_to_text(resp.get_data(as_text=True))
+        self.assert_multiline_in("""
+# Review
+al.ice · did:plc:alice
+## Followers
+* al.ice · Ms Alice
+* bo.b
+## Follows
+* al.ice · Ms Alice
+* bo.b
+* ev.e""", text, ignore_blanks=True)
