@@ -1,5 +1,6 @@
 """Unit tests for pages.py."""
 import json
+from unittest import TestCase
 from unittest.mock import ANY, call, patch
 
 from flask import get_flashed_messages, session
@@ -10,17 +11,19 @@ from oauth_dropins.mastodon import MastodonApp, MastodonAuth
 from oauth_dropins.views import LOGINS_SESSION_KEY
 from oauth_dropins.webutil import flask_util, testutil, util
 from oauth_dropins.webutil.appengine_config import ndb_client
-from oauth_dropins.webutil.testutil import TestCase
-from oauth_dropins.webutil.testutil import requests_response
+from oauth_dropins.webutil.testutil import Asserts, requests_response, suppress_warnings
 import requests
 
 from app import app
 import pages
 
 
-class PagesTest(TestCase):
+class PagesTest(TestCase, Asserts):
 
     def setUp(self):
+        super().setUp()
+        suppress_warnings()
+
         self.client = app.test_client()
         self.client.__enter__()
 
@@ -101,23 +104,26 @@ class PagesTest(TestCase):
     def test_review_mastodon(self, mock_get):
         alice = {
             'id': '234',
+            'uri': 'http://in.st/users/alice',
             'username': 'alice',
             'display_name': 'Ms Alice',
             'acct': 'alice@in.st',
             'url': 'http://in.st/@alice',
-            'avatar': 'http://in.st/users/alice',
+            'avatar': 'http://in.st/alice/pic',
         }
         bob = {
+            'uri': 'http://bsky.brid.gy/ap/did:plc:bob',
             'username': 'bo.b',
             'acct': 'bo.b@bsky.brid.gy',
             'url': 'http://bsky.brid.gy/r/https://bsky.app/profile/bo.b',
             'avatar': 'http://bsky.app/bo.b/pic',
         }
         eve = {
+            'uri': 'http://web.brid.gy/ev.e',
             'username': 'ev.e',
             'acct': 'ev.e@web.brid.gy',
             'url': 'http://ev.e/',
-            'avatar': 'http://web.brid.gy/ev.e',
+            'avatar': 'http://ev.e/pic',
         }
         mock_get.side_effect = [
             # followers
@@ -167,7 +173,7 @@ chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activi
 ## Follows
 * @alice@in.st · Ms Alice
 * @bo.b@bsky.brid.gy
-* @ev.e@ev.e · ev.e@web.brid.gy""", text, ignore_blanks=True)
+* @ev.e@web.brid.gy""", text, ignore_blanks=True)
 
     @patch('requests.get')
     def test_review_bluesky(self, mock_get):

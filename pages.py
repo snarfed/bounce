@@ -151,17 +151,15 @@ def review(auth):
     source = granary_source(auth)
     from_network = AUTH_TO_NETWORK[auth.__class__]
     # TODO
-    to_network = 'activitypub'
+    to_network = 'atproto' if from_network == 'activitypub' else 'activitypub'
 
     def count_networks(actors):
         by_protocol = defaultdict(int)
         for actor in actors:
             if id := actor.get('id'):
-                if id.startswith('tag:'):
-                    domain, _ = util.parse_tag_uri(id)
-                    if network := BRIDGE_DOMAIN_TO_NETWORK.get(domain):
-                        by_protocol[network] += 1
-                        continue
+                if network := BRIDGE_DOMAIN_TO_NETWORK.get(util.domain_from_link(id)):
+                    by_protocol[network] += 1
+                    continue
             by_protocol[from_network] += 1
 
         # return inner items as lists, not tuples
