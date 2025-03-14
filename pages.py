@@ -16,7 +16,7 @@ import oauth_dropins.pixelfed
 import oauth_dropins.threads
 from oauth_dropins.webutil import flask_util, util
 from oauth_dropins.webutil.flask_util import FlashErrors, get_required_param
-from requests_oauth2client import OAuth2AccessTokenAuth
+from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
 
 from flask_app import app
 
@@ -33,7 +33,7 @@ AUTH_TO_NETWORK = {
     oauth_dropins.indieauth.IndieAuth: 'web',
     oauth_dropins.mastodon.MastodonAuth: 'activitypub',
     oauth_dropins.pixelfed.PixelfedAuth: 'activitypub',
-    oauth_dropins.threads.ThreadsAuth: 'activitypub',
+    # oauth_dropins.threads.ThreadsAuth: 'activitypub',
 }
 BRIDGE_DOMAIN_TO_NETWORK = {
     'atproto.brid.gy': 'atproto',
@@ -102,7 +102,8 @@ def granary_source(auth):
     elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
         oauth_client = oauth_dropins.bluesky.oauth_client_for_pds(
             bluesky_oauth_client_metadata(), auth.pds_url)
-        dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=auth.dpop_token)
+        token = DPoPTokenSerializer.default_loader(auth.dpop_token)
+        dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
         return Bluesky(pds_url=auth.pds_url, handle=auth.user_display_name(),
                        did=auth.key.id(), auth=dpop_auth)
 
@@ -118,8 +119,8 @@ def front_page():
             '/oauth/mastodon/start', image_prefix='/oauth_dropins_static/'),
         pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
             '/oauth/pixelfed/start', image_prefix='/oauth_dropins_static/'),
-        threads_button=oauth_dropins.threads.Start.button_html(
-            '/oauth/threads/start', image_prefix='/oauth_dropins_static/'),
+        # threads_button=oauth_dropins.threads.Start.button_html(
+        #     '/oauth/threads/start', image_prefix='/oauth_dropins_static/'),
     )
 
 
@@ -237,11 +238,11 @@ class PixelfedStart(FlashErrors, oauth_dropins.pixelfed.Start):
 class PixelfedCallback(FlashErrors, oauth_dropins.pixelfed.Callback):
     pass
 
-class ThreadsStart(FlashErrors, oauth_dropins.threads.Start):
-    pass
+# class ThreadsStart(FlashErrors, oauth_dropins.threads.Start):
+#     pass
 
-class ThreadsCallback(FlashErrors, oauth_dropins.threads.Callback):
-    pass
+# class ThreadsCallback(FlashErrors, oauth_dropins.threads.Callback):
+#     pass
 
 
 app.add_url_rule('/oauth/mastodon/start', view_func=MastodonStart.as_view(
@@ -256,11 +257,11 @@ app.add_url_rule('/oauth/pixelfed/start', view_func=PixelfedStart.as_view(
 app.add_url_rule('/oauth/pixelfed/finish', view_func=PixelfedCallback.as_view(
                      '/oauth/pixelfed/finish', '/review'))
 
-app.add_url_rule('/oauth/threads/start', view_func=ThreadsStart.as_view(
-                     '/oauth/threads/start', '/oauth/threads/finish'),
-                 methods=['POST'])
-app.add_url_rule('/oauth/threads/finish', view_func=ThreadsCallback.as_view(
-                     '/oauth/threads/finish', '/review'))
+# app.add_url_rule('/oauth/threads/start', view_func=ThreadsStart.as_view(
+#                      '/oauth/threads/start', '/oauth/threads/finish'),
+#                  methods=['POST'])
+# app.add_url_rule('/oauth/threads/finish', view_func=ThreadsCallback.as_view(
+#                      '/oauth/threads/finish', '/review'))
 
 
 #
