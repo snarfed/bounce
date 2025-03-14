@@ -168,8 +168,7 @@ def review(auth):
                     continue
             by_protocol[from_network] += 1
 
-        # return inner items as lists, not tuples
-        return [[network, count] for network, count in by_protocol.items()]
+        return list(by_protocol.items())
 
     logger.info('Fetching followers')
     # TODO: Bluesky: support federated PDSes

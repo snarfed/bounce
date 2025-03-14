@@ -3,7 +3,6 @@
 
 {% block content %}
 <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-
 <script type="text/javascript">
   google.charts.load("current", {packages:["corechart"]});
   google.charts.setOnLoadCallback(drawCharts);
@@ -11,15 +10,15 @@
   function drawCharts() {
     var chart = new google.visualization.PieChart(
       document.getElementById('followers-chart'));
-    chart.draw(google.visualization.arrayToDataTable({{ follower_networks|safe }}));
+    chart.draw(google.visualization.arrayToDataTable({{ follower_networks|tojson }}));
 
     chart = new google.visualization.PieChart(
       document.getElementById('follows-chart'));
-    chart.draw(google.visualization.arrayToDataTable({{ follow_networks|safe }}));
+    chart.draw(google.visualization.arrayToDataTable({{ follow_networks|tojson }}));
 
     chart = new google.visualization.PieChart(
       document.getElementById('follows-bridged-chart'));
-    chart.draw(google.visualization.arrayToDataTable({{ follows_by_bridged|safe }}));
+    chart.draw(google.visualization.arrayToDataTable({{ follows_by_bridged|tojson }}));
   }
 </script>
 

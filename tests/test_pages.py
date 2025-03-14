@@ -17,10 +17,19 @@ from oauth_dropins.webutil.testutil import (
     suppress_warnings,
 )
 import requests
-from requests_oauth2client import OAuth2Client
+from requests_oauth2client import (
+  DPoPKey,
+  DPoPToken,
+  DPoPTokenSerializer,
+  OAuth2AccessTokenAuth,
+  OAuth2Client,
+)
 
 from app import app
 import pages
+
+DPOP_TOKEN = DPoPToken(access_token='towkin', _dpop_key=DPoPKey.generate())
+DPOP_TOKEN_STR = DPoPTokenSerializer.default_dumper(DPOP_TOKEN)
 
 
 class PagesTest(TestCase, Asserts):
@@ -163,10 +172,10 @@ class PagesTest(TestCase, Asserts):
         body = resp.get_data(as_text=True)
         self.assert_multiline_in("""
 document.getElementById('followers-chart'));
-chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activitypub', 1], ['atproto', 1]])""", body)
+chart.draw(google.visualization.arrayToDataTable([["network", "count"], ["activitypub", 1], ["atproto", 1]])""", body)
         self.assert_multiline_in("""
 document.getElementById('follows-chart'));
-chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activitypub', 1], ['atproto', 1], ['web', 1]])""", body)
+chart.draw(google.visualization.arrayToDataTable([["network", "count"], ["activitypub", 1], ["atproto", 1], ["web", 1]])""", body)
 
         text = html_to_text(body)
         self.assert_multiline_in("""
@@ -221,7 +230,8 @@ chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activi
             pages.ATProto(id='did:plc:bob', enabled_protocols=['unknown']).put()
 
         auth = BlueskyAuth(id='did:plc:alice', pds_url='http://some.pds/',
-                           user_json=json.dumps(alice), dpop_token='towkin').put()
+                           user_json=json.dumps(alice), dpop_token=DPOP_TOKEN_STR
+                           ).put()
         with self.client.session_transaction() as sess:
             sess[LOGINS_SESSION_KEY] = [('BlueskyAuth', 'did:plc:alice')]
 
@@ -241,13 +251,13 @@ chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activi
         body = resp.get_data(as_text=True)
 #         self.assert_multiline_in("""
 # document.getElementById('followers-chart'));
-# chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activitypub', 1], ['atproto', 1]])""", body)
+# chart.draw(google.visualization.arrayToDataTable([["network", "count"], ["activitypub", 1], ["atproto", 1]])""", body)
 #         self.assert_multiline_in("""
 # document.getElementById('follows-chart'));
-# chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activitypub', 1], ['atproto', 1], ['web', 1]])""", body)
+# chart.draw(google.visualization.arrayToDataTable([["network", "count"], ["activitypub", 1], ["atproto", 1], ["web", 1]])""", body)
         self.assert_multiline_in("""
 document.getElementById('follows-bridged-chart'));
-chart.draw(google.visualization.arrayToDataTable([['type', 'count'], ['bridged', 1], ['not', 2]])""", body)
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["bridged", 1], ["not", 2]])""", body)
 
         text = html_to_text(body)
         self.assert_multiline_in("""
