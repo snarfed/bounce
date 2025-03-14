@@ -11,8 +11,13 @@ from oauth_dropins.mastodon import MastodonApp, MastodonAuth
 from oauth_dropins.views import LOGINS_SESSION_KEY
 from oauth_dropins.webutil import flask_util, testutil, util
 from oauth_dropins.webutil.appengine_config import ndb_client
-from oauth_dropins.webutil.testutil import Asserts, requests_response, suppress_warnings
+from oauth_dropins.webutil.testutil import (
+    Asserts,
+    requests_response,
+    suppress_warnings,
+)
 import requests
+from requests_oauth2client import OAuth2Client
 
 from app import app
 import pages
@@ -175,8 +180,11 @@ chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activi
 * @bo.b@bsky.brid.gy
 * @ev.e@web.brid.gy""", text, ignore_blanks=True)
 
+    @patch('oauth_dropins.bluesky.oauth_client_for_pds',
+           return_value=OAuth2Client(token_endpoint='https://un/used',
+                                     client_id='unused', client_secret='unused'))
     @patch('requests.get')
-    def test_review_bluesky(self, mock_get):
+    def test_review_bluesky(self, mock_get, mock_oauth2client):
         alice = {
             '$type': 'app.bsky.actor.defs#profileView',
             'did': 'did:plc:alice',
@@ -212,7 +220,8 @@ chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activi
             pages.ATProto(id='did:plc:eve', enabled_protocols=['activitypub']).put()
             pages.ATProto(id='did:plc:bob', enabled_protocols=['unknown']).put()
 
-        auth = BlueskyAuth(id='did:plc:alice', user_json=json.dumps(alice)).put()
+        auth = BlueskyAuth(id='did:plc:alice', pds_url='http://some.pds/',
+                           user_json=json.dumps(alice), dpop_token='towkin').put()
         with self.client.session_transaction() as sess:
             sess[LOGINS_SESSION_KEY] = [('BlueskyAuth', 'did:plc:alice')]
 
@@ -222,10 +231,10 @@ chart.draw(google.visualization.arrayToDataTable([['network', 'count'], ['activi
         # check Bluesky API calls
         self.assertEqual(2, mock_get.call_count)
         self.assertEqual(
-            ('https://bsky.social/xrpc/app.bsky.graph.getFollowers?actor=did%3Aplc%3Aalice&limit=100',),
+            ('http://some.pds/xrpc/app.bsky.graph.getFollowers?actor=did%3Aplc%3Aalice&limit=100',),
             mock_get.call_args_list[0].args)
         self.assertEqual(
-            ('https://bsky.social/xrpc/app.bsky.graph.getFollows?actor=did%3Aplc%3Aalice&limit=100',),
+            ('http://some.pds/xrpc/app.bsky.graph.getFollows?actor=did%3Aplc%3Aalice&limit=100',),
             mock_get.call_args_list[1].args)
 
         # check rendered template

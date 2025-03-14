@@ -16,6 +16,7 @@ import oauth_dropins.pixelfed
 import oauth_dropins.threads
 from oauth_dropins.webutil import flask_util, util
 from oauth_dropins.webutil.flask_util import FlashErrors, get_required_param
+from requests_oauth2client import OAuth2AccessTokenAuth
 
 from flask_app import app
 
@@ -97,9 +98,13 @@ def granary_source(auth):
     if isinstance(auth, oauth_dropins.mastodon.MastodonAuth):
         return Mastodon(instance=auth.instance(), access_token=auth.access_token_str,
                         user_id=auth.user_id())
+
     elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
-        return Bluesky(handle=auth.user_display_name(), did=auth.key.id(),
-                       access_token=auth.dpop_token)
+        oauth_client = oauth_dropins.bluesky.oauth_client_for_pds(
+            bluesky_oauth_client_metadata(), auth.pds_url)
+        dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=auth.dpop_token)
+        return Bluesky(pds_url=auth.pds_url, handle=auth.user_display_name(),
+                       did=auth.key.id(), auth=dpop_auth)
 
 
 @app.get('/')
