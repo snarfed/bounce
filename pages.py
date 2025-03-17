@@ -19,7 +19,12 @@ from oauth_dropins.webutil import flask_util, util
 from oauth_dropins.webutil.flask_util import FlashErrors, get_required_param
 from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
 
-from flask_app import app
+# from Bridgy Fed
+from activitypub import ActivityPub
+from atproto import ATProto
+from web import Web
+
+from bounce_flask_app import app
 
 logger = logging.getLogger(__name__)
 
@@ -28,29 +33,6 @@ bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
 
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
-
-
-class User(ndb.Model):
-    """Stub for Bridgy Fed's model class."""
-    LABEL = None
-    PHRASE = None
-    enabled_protocols = ndb.StringProperty(repeated=True)
-
-    @classmethod
-    def protocol(cls):
-        return cls.__name__.lower()
-
-class ActivityPub(User):
-    LABEL = 'Fediverse'
-    PHRASE = 'the fediverse'
-
-class ATProto(User):
-    LABEL = 'Bluesky'
-    PHRASE = LABEL
-
-class Web(User):
-    LABEL = 'Web'
-    PHRASE = 'the web'
 
 AUTH_TO_MODEL = {
     oauth_dropins.bluesky.BlueskyAuth: ATProto,
@@ -170,17 +152,20 @@ def review(auth):
 
     source = granary_source(auth)
     from_model = AUTH_TO_MODEL[auth.__class__]
+    assert from_model in (ActivityPub, ATProto)
+
     # TODO: use chooses account they're migrating to first!
     to_model = ATProto if from_model == ActivityPub else ActivityPub
+    assert to_model in (ActivityPub, ATProto)
 
     def count_networks(actors):
         by_protocol = defaultdict(int)
         for actor in actors:
             if id := actor.get('id'):
                 if model := BRIDGE_DOMAIN_TO_MODEL.get(util.domain_from_link(id)):
-                    by_protocol[model.protocol()] += 1
+                    by_protocol[model.LABEL] += 1
                     continue
-            by_protocol[from_model.protocol()] += 1
+            by_protocol[from_model.LABEL] += 1
 
         return list(by_protocol.items())
 
@@ -195,8 +180,8 @@ def review(auth):
     with ndb.context.Context(bridgy_fed_ndb).use():
         keys = [from_model(id=f['id']).key for f in follows if f.get('id')]
         bridged = from_model.query(from_model.key.IN(keys),
-                              from_model.enabled_protocols == to_model.protocol(),
-                              ).fetch()
+                                   from_model.enabled_protocols == to_model.LABEL,
+                                   ).fetch()
 
     # preprocess actors
     if from_model == ActivityPub:

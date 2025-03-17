@@ -2,6 +2,7 @@
 *_jwt
 .coverage
 /.well-known/acme-challenge/
+/bridgy_fed
 datastore.dat*
 flask_secret_key
 /l

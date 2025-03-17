@@ -3,6 +3,6 @@
 Import all modules that define views in the app so that their URL routes get
 registered.
 """
-from flask_app import app
+from bounce_flask_app import app
 
 import pages

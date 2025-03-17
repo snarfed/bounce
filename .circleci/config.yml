@@ -47,7 +47,7 @@ jobs:
           command: |
             CLOUDSDK_CORE_PROJECT=brid-gy gcloud emulators firestore start --host-port=:8089 --database-mode=datastore-mode < /dev/null >& /tmp/firestore-emulator.log &
             sleep 5s
-            python -m coverage run --source=. --omit=appengine_config.py,tests/\* -m unittest discover -v
+            env PYTHONPATH=bridgy_fed python -m coverage run --source=. --omit=appengine_config.py,bridgy_fed/\*,tests/\* -m unittest discover -v tests/
             python -m coverage html -d /tmp/coverage_html
             if [ "$COVERALLS_REPO_TOKEN" != "" ]; then coveralls || true; fi
 
@@ -57,9 +57,10 @@ jobs:
             flake8 --select=F811 tests/test_*.py
 
       - run:
-          name: oauth-dropins, for static assets
+          name: oauth-dropins, for static assets, and Bridgy Fed
           command: |
             git clone --depth=1 https://github.com/snarfed/oauth-dropins.git ../oauth-dropins
+            git clone --depth=1 https://github.com/snarfed/bridgy-fed.git bridgy_fed
 
       # - run:
       #     name: Deploy

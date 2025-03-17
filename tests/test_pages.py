@@ -25,6 +25,11 @@ from requests_oauth2client import (
   OAuth2Client,
 )
 
+# from Bridgy Fed
+from activitypub import ActivityPub
+from atproto import ATProto
+from web import Web
+
 from app import app
 import pages
 
@@ -146,11 +151,6 @@ class PagesTest(TestCase, Asserts):
             requests_response([alice, bob, eve], content_type='application/json'),
         ]
 
-        # # eve is native Bluesky, bridged into ActivityPub
-        # with ndb.context.Context(pages.bridgy_fed_ndb).use():
-        #     pages.ATProto(id='did:plc:eve', enabled_protocols=['activitypub']).put()
-        #     pages.ATProto(id='did:plc:bob', enabled_protocols=['unknown']).put()
-
         app = MastodonApp(instance='https://in.st/', data='{}').put()
         auth = MastodonAuth(id='@alice@in.st', access_token_str='towkin', app=app,
                             user_json=json.dumps(alice)).put()
@@ -214,6 +214,8 @@ migrating to Bluesky...
             'avatar': 'http://eve/pic',
         }
         mock_get.side_effect = [
+            requests_response({}),  # did:plc:eve
+            requests_response({}),  # did:plc:bob
             requests_response({
                 'subject': {'did': 'did:plc:alice', 'handle': 'al.ice'},
                 'followers': [alice, bob],
@@ -226,8 +228,8 @@ migrating to Bluesky...
 
         # eve is native Bluesky, bridged into ActivityPub
         with ndb.context.Context(pages.bridgy_fed_ndb).use():
-            pages.ATProto(id='did:plc:eve', enabled_protocols=['activitypub']).put()
-            pages.ATProto(id='did:plc:bob', enabled_protocols=['unknown']).put()
+            ATProto(id='did:plc:eve', enabled_protocols=['activitypub']).put()
+            ATProto(id='did:plc:bob', enabled_protocols=['web']).put()
 
         auth = BlueskyAuth(id='did:plc:alice', pds_url='http://some.pds/',
                            user_json=json.dumps(alice), dpop_token=DPOP_TOKEN_STR
@@ -239,13 +241,13 @@ migrating to Bluesky...
         self.assertEqual(200, resp.status_code)
 
         # check Bluesky API calls
-        self.assertEqual(2, mock_get.call_count)
+        self.assertEqual(4, mock_get.call_count)
         self.assertEqual(
             ('http://some.pds/xrpc/app.bsky.graph.getFollowers?actor=did%3Aplc%3Aalice&limit=100',),
-            mock_get.call_args_list[0].args)
+            mock_get.call_args_list[2].args)
         self.assertEqual(
             ('http://some.pds/xrpc/app.bsky.graph.getFollows?actor=did%3Aplc%3Aalice&limit=100',),
-            mock_get.call_args_list[1].args)
+            mock_get.call_args_list[3].args)
 
         # check rendered template
         body = resp.get_data(as_text=True)

@@ -8,6 +8,8 @@ git+https://github.com/snarfed/mox3.git#egg=mox3
 git+https://github.com/snarfed/oauth-dropins.git#egg=oauth_dropins
 git+https://github.com/snarfed/requests_oauth2client.git@all#egg=requests_oauth2client
 
+-r bridgy_fed/requirements.txt
+
 attrs==25.1.0
 bases==0.3.0
 beautifulsoup4==4.13.3

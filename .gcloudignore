@@ -18,6 +18,13 @@
 __pycache__/
 .coverage/
 .git*/
+bridgy_fed/oauth_dropins_fonts/
+bridgy_fed/oauth_dropins_static/
+bridgy_fed/scripts/
+bridgy_fed/service_account_creds.json
+bridgy_fed/static/
+bridgy_fed/templates/
+bridgy_fed/tests/
 coverage/
 debian/
 doc/
