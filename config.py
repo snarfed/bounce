@@ -1,4 +1,5 @@
 """Flask config."""
+import logging
 import os
 import re
 import traceback
@@ -23,7 +24,7 @@ else:
     SECRET_KEY = util.read('flask_secret_key')
 
     logging.getLogger().setLevel(logging.INFO)
-    if logging_client := getattr(appengine_config, 'logging_client'):
+    if logging_client := getattr(appengine_config, 'logging_client', None):
         logging_client.setup_logging(log_level=logging.INFO)
 
     logging.getLogger('lexrpc').setLevel(logging.DEBUG)

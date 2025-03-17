@@ -179,12 +179,12 @@ chart.draw(google.visualization.arrayToDataTable([["network", "count"], ["activi
 
         text = html_to_text(body)
         self.assert_multiline_in("""
-# Review
 @alice@in.st
-## Followers
+migrating to Bluesky...
+### You'll keep _all_ of your followers.
 * @alice@in.st · Ms Alice
 * @bo.b@bsky.brid.gy
-## Follows
+### You'll keep _0%_ of your follows.
 * @alice@in.st · Ms Alice
 * @bo.b@bsky.brid.gy
 * @ev.e@web.brid.gy""", text, ignore_blanks=True)
@@ -257,16 +257,16 @@ chart.draw(google.visualization.arrayToDataTable([["network", "count"], ["activi
 # chart.draw(google.visualization.arrayToDataTable([["network", "count"], ["activitypub", 1], ["atproto", 1], ["web", 1]])""", body)
         self.assert_multiline_in("""
 document.getElementById('follows-bridged-chart'));
-chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["bridged", 1], ["not", 2]])""", body)
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["bridged", 1], ["not bridged", 2]])""", body)
 
         text = html_to_text(body)
         self.assert_multiline_in("""
-# Review
 al.ice · did:plc:alice
-## Followers
+migrating to the fediverse...
+### You'll keep _all_ of your followers.
 * al.ice · Ms Alice
 * bo.b
-## Follows
+### You'll keep _33%_ of your follows.
 * al.ice · Ms Alice
 * bo.b
 * ev.e""", text, ignore_blanks=True)

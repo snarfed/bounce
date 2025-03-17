@@ -8,6 +8,7 @@ from google.cloud import ndb
 from granary import as2
 from granary.bluesky import Bluesky
 from granary.mastodon import Mastodon
+from granary.pixelfed import Pixelfed
 import oauth_dropins
 import oauth_dropins.bluesky
 import oauth_dropins.indieauth
@@ -28,33 +29,42 @@ bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
 
-AUTH_TO_NETWORK = {
-    oauth_dropins.bluesky.BlueskyAuth: 'atproto',
-    oauth_dropins.indieauth.IndieAuth: 'web',
-    oauth_dropins.mastodon.MastodonAuth: 'activitypub',
-    oauth_dropins.pixelfed.PixelfedAuth: 'activitypub',
-    # oauth_dropins.threads.ThreadsAuth: 'activitypub',
-}
-BRIDGE_DOMAIN_TO_NETWORK = {
-    'atproto.brid.gy': 'atproto',
-    'bsky.brid.gy': 'atproto',
-    'ap.brid.gy': 'activitypub',
-    'web.brid.gy': 'web',
-}
-
 
 class User(ndb.Model):
     """Stub for Bridgy Fed's model class."""
+    LABEL = None
+    PHRASE = None
     enabled_protocols = ndb.StringProperty(repeated=True)
 
-class ActivityPub(User): pass
-class ATProto(User): pass
-class Web(User): pass
+    @classmethod
+    def protocol(cls):
+        return cls.__name__.lower()
 
-NETWORK_TO_MODEL = {
-    'atproto': ATProto,
-    'web': Web,
-    'activitypub': ActivityPub,
+class ActivityPub(User):
+    LABEL = 'Fediverse'
+    PHRASE = 'the fediverse'
+
+class ATProto(User):
+    LABEL = 'Bluesky'
+    PHRASE = LABEL
+
+class Web(User):
+    LABEL = 'Web'
+    PHRASE = 'the web'
+
+AUTH_TO_MODEL = {
+    oauth_dropins.bluesky.BlueskyAuth: ATProto,
+    oauth_dropins.indieauth.IndieAuth: Web,
+    oauth_dropins.mastodon.MastodonAuth: ActivityPub,
+    oauth_dropins.pixelfed.PixelfedAuth: ActivityPub,
+    oauth_dropins.threads.ThreadsAuth: ActivityPub,
+}
+BRIDGE_DOMAIN_TO_MODEL = {
+    'atproto.brid.gy': ATProto,
+    'bsky.brid.gy': ATProto,
+    'ap.brid.gy': ActivityPub,
+    'fed.brid.gy': Web,
+    'web.brid.gy': Web,
 }
 
 
@@ -97,6 +107,10 @@ def granary_source(auth):
     """
     if isinstance(auth, oauth_dropins.mastodon.MastodonAuth):
         return Mastodon(instance=auth.instance(), access_token=auth.access_token_str,
+                        user_id=auth.user_id())
+
+    if isinstance(auth, oauth_dropins.pixelfed.PixelfedAuth):
+        return Pixelfed(instance=auth.instance(), access_token=auth.access_token_str,
                         user_id=auth.user_id())
 
     elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
@@ -155,23 +169,22 @@ def review(auth):
     logger.info(f'Reviewing {auth.key.id()} {auth.user_display_name()}')
 
     source = granary_source(auth)
-    from_network = AUTH_TO_NETWORK[auth.__class__]
-    # TODO
-    to_network = 'atproto' if from_network == 'activitypub' else 'activitypub'
+    from_model = AUTH_TO_MODEL[auth.__class__]
+    # TODO: use chooses account they're migrating to first!
+    to_model = ATProto if from_model == ActivityPub else ActivityPub
 
     def count_networks(actors):
         by_protocol = defaultdict(int)
         for actor in actors:
             if id := actor.get('id'):
-                if network := BRIDGE_DOMAIN_TO_NETWORK.get(util.domain_from_link(id)):
-                    by_protocol[network] += 1
+                if model := BRIDGE_DOMAIN_TO_MODEL.get(util.domain_from_link(id)):
+                    by_protocol[model.protocol()] += 1
                     continue
-            by_protocol[from_network] += 1
+            by_protocol[from_model.protocol()] += 1
 
         return list(by_protocol.items())
 
     logger.info('Fetching followers')
-    # TODO: Bluesky: support federated PDSes
     followers = source.get_followers()
     follower_networks = count_networks(followers)
 
@@ -180,27 +193,28 @@ def review(auth):
     follow_networks = count_networks(follows)
 
     with ndb.context.Context(bridgy_fed_ndb).use():
-        model = NETWORK_TO_MODEL[from_network]
-        keys = [model(id=f['id']).key for f in follows if f.get('id')]
-        bridged = model.query(model.key.IN(keys),
-                              model.enabled_protocols == to_network
+        keys = [from_model(id=f['id']).key for f in follows if f.get('id')]
+        bridged = from_model.query(from_model.key.IN(keys),
+                              from_model.enabled_protocols == to_model.protocol(),
                               ).fetch()
 
     # preprocess actors
-    if AUTH_TO_NETWORK[auth.__class__] == 'activitypub':
+    if from_model == ActivityPub:
         for f in followers + follows:
             f['username'] = as2.address(as2.from_as1(f))
 
     return render(
         'review.html',
         auth=auth,
+        to_model=to_model,
         followers=followers,
         follows=follows,
         follower_networks=[['network', 'count']] + follower_networks,
         follow_networks=[['network', 'count']] + follow_networks,
         follows_by_bridged=[['type', 'count'],
                             ['bridged', len(bridged)],
-                            ['not', len(follows) - len(bridged)]],
+                            ['not bridged', len(follows) - len(bridged)]],
+        keep_follows_pct=round(len(bridged) / len(follows) * 100),
     )
 
 

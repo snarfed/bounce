@@ -8,6 +8,10 @@
   google.charts.setOnLoadCallback(drawCharts);
 
   function drawCharts() {
+    // for donut chart. would be nice instead of pie chart! but it cuts off inner
+    // percentage labels when chart is small.
+    // opts = {pieHole: 0.4};
+
     var chart = new google.visualization.PieChart(
       document.getElementById('followers-chart'));
     chart.draw(google.visualization.arrayToDataTable({{ follower_networks|tojson }}));
@@ -23,13 +27,13 @@
 </script>
 
 <div class="row big">
-<h1>Review</h1>
 <p>{% include 'account_label.html' %}</p>
+<p>migrating to {{ to_model.PHRASE }}...</p>
 </div>
 
 <div class="row">
   <div class="actors col-md-6 col-sm-12">
-    <h2>Followers</h2>
+    <h3>You'll keep <em>all</em> of your followers.</h3>
     <div id="followers-chart" style="width: 400px; height: 400px;"></div>
     <ul>
       {% for actor in followers %}
@@ -39,7 +43,7 @@
   </div>
 
   <div class="actors col-md-6 col-sm-12">
-    <h2>Follows</h2>
+    <h3>You'll keep <em>{{ keep_follows_pct }}%</em> of your follows.</h3>
     <div id="follows-chart" style="width: 400px; height: 400px;"></div>
     <div id="follows-bridged-chart" style="width: 400px; height: 400px;"></div>
     <ul>
