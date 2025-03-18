@@ -15,7 +15,7 @@ jobs:
       - checkout
 
       - restore_cache:
-          key: venv-1-{{ .Branch }}-{{ checksum "requirements.txt" }}
+          key: venv-1-{{ .Branch }}
 
       - run:
           name: Base dependencies
@@ -37,10 +37,10 @@ jobs:
             pip install -U pip flake8
             pip -V
             # make sure we install these at head, below
-            pip uninstall -y arroba granary lexrpc oauth-dropins
+            pip uninstall -y arroba carbox granary lexrpc oauth-dropins requests_oauth2client
 
             git clone --depth=1 https://github.com/snarfed/bridgy-fed.git bridgy_fed
-            pip install -U -r requirements.txt
+            pip install -U -r bridgy_fed/requirements.txt
 
             pip install coverage coveralls
             ln -sf `pyenv prefix`/lib/python3.12/site-packages/oauth_dropins/static oauth_dropins_static
@@ -80,7 +80,7 @@ jobs:
       #       fi
 
       - save_cache:
-          key: venv-1-{{ .Branch }}-{{ checksum "requirements.txt" }}
+          key: venv-1-{{ .Branch }}
           paths:
             - /home/circleci/.pyenv
             # Ideally we'd cache these, but they need root, and the cimg/python
