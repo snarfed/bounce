@@ -246,11 +246,8 @@ pre .value, code .value, code.value {
   margin-bottom: 0;
 }
 
-.actors {
+ul.actors {
   text-align: left;
-}
-
-.actors ul {
   list-style: none;
 }
 

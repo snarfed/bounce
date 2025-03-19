@@ -28,6 +28,7 @@ from requests_oauth2client import (
 # from Bridgy Fed
 from activitypub import ActivityPub
 from atproto import ATProto
+from models import Target
 from web import Web
 
 from app import app
@@ -138,11 +139,11 @@ class PagesTest(TestCase, Asserts):
             'avatar': 'http://bsky.app/bo.b/pic',
         }
         eve = {
-            'uri': 'http://web.brid.gy/ev.e',
-            'username': 'ev.e',
-            'acct': 'ev.e@web.brid.gy',
-            'url': 'http://ev.e/',
-            'avatar': 'http://ev.e/pic',
+            'uri': 'http://web.brid.gy/e.ve',
+            'username': 'e.ve',
+            'acct': 'e.ve@web.brid.gy',
+            'url': 'http://e.ve/',
+            'avatar': 'http://e.ve/pic',
         }
         mock_get.side_effect = [
             # followers
@@ -150,6 +151,10 @@ class PagesTest(TestCase, Asserts):
             # follows
             requests_response([alice, bob, eve], content_type='application/json'),
         ]
+
+        # bob is native Bluesky, eve is bridged there, alice isn't
+        with ndb.context.Context(pages.bridgy_fed_ndb).use():
+            Web(id='e.ve', enabled_protocols=['atproto']).put()
 
         app = MastodonApp(instance='https://in.st/', data='{}').put()
         auth = MastodonAuth(id='@alice@in.st', access_token_str='towkin', app=app,
@@ -172,22 +177,21 @@ class PagesTest(TestCase, Asserts):
         body = resp.get_data(as_text=True)
         self.assert_multiline_in("""
 document.getElementById('followers-chart'));
-chart.draw(google.visualization.arrayToDataTable([["network", "count"], ["activitypub", 1], ["atproto", 1]])""", body)
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1]])""", body)
         self.assert_multiline_in("""
 document.getElementById('follows-chart'));
-chart.draw(google.visualization.arrayToDataTable([["network", "count"], ["activitypub", 1], ["atproto", 1], ["web", 1]])""", body)
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 0], ["Web", 1], ["not bridged", 1]])""", body)
 
         text = html_to_text(body)
         self.assert_multiline_in("""
-@alice@in.st
-migrating to Bluesky...
+When you migrate  @alice@in.st to Bluesky...
 ### You'll keep _all_ of your followers.
 * @alice@in.st · Ms Alice
 * @bo.b@bsky.brid.gy
-### You'll keep _0%_ of your follows.
+### You'll keep _67%_ of your follows.
 * @alice@in.st · Ms Alice
 * @bo.b@bsky.brid.gy
-* @ev.e@web.brid.gy""", text, ignore_blanks=True)
+* @e.ve@web.brid.gy""", text, ignore_blanks=True)
 
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
@@ -210,12 +214,11 @@ migrating to Bluesky...
         eve = {
             '$type': 'app.bsky.actor.defs#profileView',
             'did': 'did:plc:eve',
-            'handle': 'ev.e',
+            'handle': 'e.ve',
             'avatar': 'http://eve/pic',
         }
         mock_get.side_effect = [
-            requests_response({}),  # did:plc:eve
-            requests_response({}),  # did:plc:bob
+            requests_response({}),  # did:plc:alice
             requests_response({
                 'subject': {'did': 'did:plc:alice', 'handle': 'al.ice'},
                 'followers': [alice, bob],
@@ -226,10 +229,12 @@ migrating to Bluesky...
             }),
         ]
 
-        # eve is native Bluesky, bridged into ActivityPub
         with ndb.context.Context(pages.bridgy_fed_ndb).use():
-            ATProto(id='did:plc:eve', enabled_protocols=['activitypub']).put()
-            ATProto(id='did:plc:bob', enabled_protocols=['web']).put()
+            ATProto(id='did:plc:alice', enabled_protocols=['activitypub']).put()
+            ActivityPub(id='http://inst/bob',
+                        copies=[Target(protocol='atproto', uri='did:plc:bob')]).put()
+            Web(id='e.ve', enabled_protocols=['atproto'],  # not activitypub
+                copies=[Target(protocol='atproto', uri='did:plc:eve')]).put()
 
         auth = BlueskyAuth(id='did:plc:alice', pds_url='http://some.pds/',
                            user_json=json.dumps(alice), dpop_token=DPOP_TOKEN_STR
@@ -241,34 +246,30 @@ migrating to Bluesky...
         self.assertEqual(200, resp.status_code)
 
         # check Bluesky API calls
-        self.assertEqual(4, mock_get.call_count)
+        self.assertEqual(3, mock_get.call_count)
         self.assertEqual(
             ('http://some.pds/xrpc/app.bsky.graph.getFollowers?actor=did%3Aplc%3Aalice&limit=100',),
-            mock_get.call_args_list[2].args)
+            mock_get.call_args_list[1].args)
         self.assertEqual(
             ('http://some.pds/xrpc/app.bsky.graph.getFollows?actor=did%3Aplc%3Aalice&limit=100',),
-            mock_get.call_args_list[3].args)
+            mock_get.call_args_list[2].args)
 
         # check rendered template
         body = resp.get_data(as_text=True)
-#         self.assert_multiline_in("""
-# document.getElementById('followers-chart'));
-# chart.draw(google.visualization.arrayToDataTable([["network", "count"], ["activitypub", 1], ["atproto", 1]])""", body)
-#         self.assert_multiline_in("""
-# document.getElementById('follows-chart'));
-# chart.draw(google.visualization.arrayToDataTable([["network", "count"], ["activitypub", 1], ["atproto", 1], ["web", 1]])""", body)
         self.assert_multiline_in("""
-document.getElementById('follows-bridged-chart'));
-chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["bridged", 1], ["not bridged", 2]])""", body)
+document.getElementById('followers-chart'));
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Web", 0]])""", body)
+        self.assert_multiline_in("""
+document.getElementById('follows-chart'));
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Web", 0], ["not bridged", 1]])""", body)
 
         text = html_to_text(body)
         self.assert_multiline_in("""
-al.ice · did:plc:alice
-migrating to the fediverse...
+When you migrate  al.ice · did:plc:alice to the fediverse...
 ### You'll keep _all_ of your followers.
 * al.ice · Ms Alice
 * bo.b
-### You'll keep _33%_ of your follows.
+### You'll keep _67%_ of your follows.
 * al.ice · Ms Alice
 * bo.b
-* ev.e""", text, ignore_blanks=True)
+* e.ve""", text, ignore_blanks=True)

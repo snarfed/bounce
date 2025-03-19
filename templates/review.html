@@ -8,45 +8,55 @@
   google.charts.setOnLoadCallback(drawCharts);
 
   function drawCharts() {
-    // for donut chart. would be nice instead of pie chart! but it cuts off inner
-    // percentage labels when chart is small.
-    // opts = {pieHole: 0.4};
+    var opts = {
+      chartArea: {
+        // top: '12%',
+        // width: '75%',
+        // height: '75%',
+      },
+      legend: {
+        position: 'top',
+        alignment: 'center',
+        maxLines: 2,
+      },
+      // pieHole: 0.5,
+    };
 
     var chart = new google.visualization.PieChart(
       document.getElementById('followers-chart'));
-    chart.draw(google.visualization.arrayToDataTable({{ follower_networks|tojson }}));
+    chart.draw(google.visualization.arrayToDataTable({{ follower_counts|tojson }}), opts);
 
+    const unbridgedSlice = {{ follow_counts|length }} - 2;
+    opts.slices = {}
+    opts.slices[unbridgedSlice] = {
+      offset: 0.2,
+      color: 'gray',
+    };
     chart = new google.visualization.PieChart(
       document.getElementById('follows-chart'));
-    chart.draw(google.visualization.arrayToDataTable({{ follow_networks|tojson }}));
-
-    chart = new google.visualization.PieChart(
-      document.getElementById('follows-bridged-chart'));
-    chart.draw(google.visualization.arrayToDataTable({{ follows_by_bridged|tojson }}));
+    chart.draw(google.visualization.arrayToDataTable({{ follow_counts|tojson }}), opts);
   }
 </script>
 
 <div class="row big">
-<p>{% include 'account_label.html' %}</p>
-<p>migrating to {{ to_model.PHRASE }}...</p>
+<p>When you migrate {% include 'account_label.html' %} to {{ to_proto.PHRASE }}...</p>
 </div>
 
 <div class="row">
-  <div class="actors col-md-6 col-sm-12">
+  <div class="col-md-6 col-sm-12">
     <h3>You'll keep <em>all</em> of your followers.</h3>
-    <div id="followers-chart" style="width: 400px; height: 400px;"></div>
-    <ul>
+    <div id="followers-chart"></div>
+    <ul class="actors">
       {% for actor in followers %}
         <li> {% include 'actor_label.html' %}
       {% endfor %}
     </ul>
   </div>
 
-  <div class="actors col-md-6 col-sm-12">
+  <div class="col-md-6 col-sm-12">
     <h3>You'll keep <em>{{ keep_follows_pct }}%</em> of your follows.</h3>
-    <div id="follows-chart" style="width: 400px; height: 400px;"></div>
-    <div id="follows-bridged-chart" style="width: 400px; height: 400px;"></div>
-    <ul>
+    <div id="follows-chart"></div>
+    <ul class="actors">
       {% for actor in follows %}
         <li> {% include 'actor_label.html' %}
       {% endfor %}

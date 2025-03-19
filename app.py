@@ -6,3 +6,6 @@ registered.
 from bounce_flask_app import app
 
 import pages
+
+import models
+models.reset_protocol_properties()

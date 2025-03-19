@@ -1,5 +1,6 @@
 """UI pages."""
 from collections import defaultdict
+from itertools import chain
 import logging
 from functools import wraps
 
@@ -22,11 +23,16 @@ from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
 # from Bridgy Fed
 from activitypub import ActivityPub
 from atproto import ATProto
+import common
+import models
+from protocol import Protocol
 from web import Web
 
 from bounce_flask_app import app
 
 logger = logging.getLogger(__name__)
+
+PROTOCOLS = set(p for p in models.PROTOCOLS.values() if p and p.LABEL != 'ui')
 
 BRIDGY_FED_PROJECT_ID = 'bridgy-federated'
 bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
@@ -34,14 +40,14 @@ bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
 
-AUTH_TO_MODEL = {
+AUTH_TO_PROTOCOL = {
     oauth_dropins.bluesky.BlueskyAuth: ATProto,
     oauth_dropins.indieauth.IndieAuth: Web,
     oauth_dropins.mastodon.MastodonAuth: ActivityPub,
     oauth_dropins.pixelfed.PixelfedAuth: ActivityPub,
     oauth_dropins.threads.ThreadsAuth: ActivityPub,
 }
-BRIDGE_DOMAIN_TO_MODEL = {
+BRIDGE_DOMAIN_TO_PROTOCOL = {
     'atproto.brid.gy': ATProto,
     'bsky.brid.gy': ATProto,
     'ap.brid.gy': ActivityPub,
@@ -151,55 +157,96 @@ def review(auth):
     logger.info(f'Reviewing {auth.key.id()} {auth.user_display_name()}')
 
     source = granary_source(auth)
-    from_model = AUTH_TO_MODEL[auth.__class__]
-    assert from_model in (ActivityPub, ATProto)
+    from_proto = AUTH_TO_PROTOCOL[auth.__class__]
+    assert from_proto in (ActivityPub, ATProto)
 
-    # TODO: use chooses account they're migrating to first!
-    to_model = ATProto if from_model == ActivityPub else ActivityPub
-    assert to_model in (ActivityPub, ATProto)
+    # TODO: user chooses account they're migrating to first!
+    to_proto = ATProto if from_proto == ActivityPub else ActivityPub
+    assert to_proto in (ActivityPub, ATProto)
 
-    def count_networks(actors):
-        by_protocol = defaultdict(int)
-        for actor in actors:
-            if id := actor.get('id'):
-                if model := BRIDGE_DOMAIN_TO_MODEL.get(util.domain_from_link(id)):
-                    by_protocol[model.LABEL] += 1
-                    continue
-            by_protocol[from_model.LABEL] += 1
-
-        return list(by_protocol.items())
-
+    #
+    # followers
+    #
     logger.info('Fetching followers')
     followers = source.get_followers()
-    follower_networks = count_networks(followers)
+    ids = [f['id'] for f in followers if f.get('id')]
 
+    if from_proto.HAS_COPIES:
+        follower_counts = []
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            for proto in PROTOCOLS:
+                if proto != from_proto:
+                    count = proto.query(proto.copies.uri.IN(ids)).count()
+                    follower_counts.append([proto.__name__, count])
+        rest = sum(count for _, count in follower_counts)
+        follower_counts.append([from_proto.__name__, len(followers) - rest])
+
+    else:
+        by_protocol = defaultdict(list)
+        for id in ids:
+            domain = util.domain_from_link(id)
+            by_protocol[BRIDGE_DOMAIN_TO_PROTOCOL.get(domain, ActivityPub)].append(id)
+        follower_counts = list((model.__name__, len(ids)) for model, ids in by_protocol.items())
+
+    logger.info(f'  {len(followers)} total, {follower_counts}')
+
+    #
+    # follows
+    #
     logger.info('Fetching follows')
     follows = source.get_follows()
-    follow_networks = count_networks(follows)
 
+    ids_by_proto = defaultdict(list)
+    for followee in follows:
+        # STATE TODO: if wrapped, extract from protocol
+        id = common.unwrap(followee.get('id'))
+        proto = Protocol.for_id(id, remote=False) or from_proto
+        ids_by_proto[proto].append(id)
+
+    follow_counts = []
     with ndb.context.Context(bridgy_fed_ndb).use():
-        keys = [from_model(id=f['id']).key for f in follows if f.get('id')]
-        bridged = from_model.query(from_model.key.IN(keys),
-                                   from_model.enabled_protocols == to_model.LABEL,
-                                   ).fetch()
+        if from_proto.HAS_COPIES:
+            ids = list(chain(*ids_by_proto.values()))
+            for proto in PROTOCOLS:
+                if proto == from_proto:
+                    query = proto.query(proto.key.IN([proto(id=id).key for id in ids]))
+                else:
+                    query = proto.query(proto.copies.uri.IN(ids))
+                if proto != to_proto:
+                    query = query.filter(proto.enabled_protocols == to_proto.LABEL)
+                follow_counts.append([f'{proto.__name__}', query.count()])
+
+        else:
+            for proto, ids in ids_by_proto.items():
+                if proto == to_proto:
+                    bridged = len(ids)
+                else:
+                    bridged = proto.query(
+                        proto.key.IN([proto(id=id).key for id in ids]),
+                        proto.enabled_protocols == to_proto.LABEL,
+                    ).count()
+
+                follow_counts.append([f'{proto.__name__}', bridged])
+
+    total_bridged = sum(count for _, count in follow_counts)
+    follow_counts.append(['not bridged', len(follows) - total_bridged])
+
+    logger.info(f'  {len(follows)} total, {follow_counts}')
 
     # preprocess actors
-    if from_model == ActivityPub:
+    if from_proto == ActivityPub:
         for f in followers + follows:
             f['username'] = as2.address(as2.from_as1(f))
 
     return render(
         'review.html',
         auth=auth,
-        to_model=to_model,
+        to_proto=to_proto,
         followers=followers,
         follows=follows,
-        follower_networks=[['network', 'count']] + follower_networks,
-        follow_networks=[['network', 'count']] + follow_networks,
-        follows_by_bridged=[['type', 'count'],
-                            ['bridged', len(bridged)],
-                            ['not bridged', len(follows) - len(bridged)]],
-        keep_follows_pct=round(len(bridged) / len(follows) * 100),
+        follower_counts=[['type', 'count']] + sorted(follower_counts),
+        follow_counts=[['type', 'count']] + sorted(follow_counts),
+        keep_follows_pct=round(total_bridged / len(follows) * 100),
     )
 
 
