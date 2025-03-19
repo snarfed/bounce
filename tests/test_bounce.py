@@ -1,4 +1,4 @@
-"""Unit tests for pages.py."""
+"""Unit tests for bounce.py."""
 import json
 from unittest import TestCase
 from unittest.mock import ANY, call, patch
@@ -31,14 +31,13 @@ from atproto import ATProto
 from models import Target
 from web import Web
 
-from app import app
-import pages
+from bounce import app, bridgy_fed_ndb
 
 DPOP_TOKEN = DPoPToken(access_token='towkin', _dpop_key=DPoPKey.generate())
 DPOP_TOKEN_STR = DPoPTokenSerializer.default_dumper(DPOP_TOKEN)
 
 
-class PagesTest(TestCase, Asserts):
+class BounceTest(TestCase, Asserts):
 
     def setUp(self):
         super().setUp()
@@ -153,7 +152,7 @@ class PagesTest(TestCase, Asserts):
         ]
 
         # bob is native Bluesky, eve is bridged there, alice isn't
-        with ndb.context.Context(pages.bridgy_fed_ndb).use():
+        with ndb.context.Context(bridgy_fed_ndb).use():
             Web(id='e.ve', enabled_protocols=['atproto']).put()
 
         app = MastodonApp(instance='https://in.st/', data='{}').put()
@@ -229,7 +228,7 @@ When you migrate  @alice@in.st to Bluesky...
             }),
         ]
 
-        with ndb.context.Context(pages.bridgy_fed_ndb).use():
+        with ndb.context.Context(bridgy_fed_ndb).use():
             ATProto(id='did:plc:alice', enabled_protocols=['activitypub']).put()
             ActivityPub(id='http://inst/bob',
                         copies=[Target(protocol='atproto', uri='did:plc:bob')]).put()

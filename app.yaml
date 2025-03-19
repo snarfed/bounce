@@ -8,7 +8,7 @@ runtime: python312
 
 # https://cloud.google.com/appengine/docs/standard/python3/runtime#entrypoint_best_practices
 # https://docs.gunicorn.org/en/latest/settings.html#timeout
-entrypoint: gunicorn --workers 1 --threads 30 --timeout 60 -b :$PORT app:app
+entrypoint: gunicorn --pythonpath bridgy_fed --workers 1 --threads 30 --timeout 60 -b :$PORT bounce:app
 
 # background: https://github.com/snarfed/bridgy/issues/578
 # https://github.com/snarfed/bridgy/issues/1051

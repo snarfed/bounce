@@ -1,10 +1,13 @@
 """UI pages."""
 from collections import defaultdict
+from functools import wraps
 from itertools import chain
 import logging
-from functools import wraps
+from pathlib import Path
+import sys
 
-from flask import flash, redirect, render_template, request
+from flask import flash, Flask, redirect, render_template, request
+import flask_gae_static
 from google.cloud import ndb
 from granary import as2
 from granary.bluesky import Bluesky
@@ -16,7 +19,12 @@ import oauth_dropins.indieauth
 import oauth_dropins.mastodon
 import oauth_dropins.pixelfed
 import oauth_dropins.threads
-from oauth_dropins.webutil import flask_util, util
+from oauth_dropins.webutil import (
+    appengine_info,
+    appengine_config,
+    flask_util,
+    util,
+)
 from oauth_dropins.webutil.flask_util import FlashErrors, get_required_param
 from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
 
@@ -27,8 +35,6 @@ import common
 import models
 from protocol import Protocol
 from web import Web
-
-from bounce_flask_app import app
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +60,32 @@ BRIDGE_DOMAIN_TO_PROTOCOL = {
     'fed.brid.gy': Web,
     'web.brid.gy': Web,
 }
-FOLLOWERS_PREVIEW_LENGTH = 20
 
 
+#
+# Flask app
+#
+app = Flask(__name__, static_folder=None)
+app.template_folder = './templates'
+app.json.compact = False
+app.config.from_pyfile(Path(__file__).parent / 'config.py')
+app.url_map.converters['regex'] = flask_util.RegexConverter
+app.after_request(flask_util.default_modern_headers)
+app.register_error_handler(Exception, flask_util.handle_exception)
+
+if (appengine_info.LOCAL_SERVER
+    # ugly hack to infer if we're running unit tests
+    and 'unittest' not in sys.modules):
+    flask_gae_static.init_app(app)
+
+app.wsgi_app = flask_util.ndb_context_middleware(
+    app.wsgi_app, client=appengine_config.ndb_client)
+
+models.reset_protocol_properties()
+
+#
+# views
+#
 def render(template, **vars):
     """Wrapper for Flask.render_template that populates common template vars."""
     if 'auths' not in vars:
@@ -125,7 +154,6 @@ def front_page():
         # threads_button=oauth_dropins.threads.Start.button_html(
         #     '/oauth/threads/start', image_prefix='/oauth_dropins_static/'),
     )
-
 
 @app.get('/docs')
 @flask_util.headers(CACHE_CONTROL)
