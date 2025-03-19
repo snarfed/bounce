@@ -54,6 +54,7 @@ BRIDGE_DOMAIN_TO_PROTOCOL = {
     'fed.brid.gy': Web,
     'web.brid.gy': Web,
 }
+FOLLOWERS_PREVIEW_LENGTH = 20
 
 
 def render(template, **vars):
@@ -170,6 +171,8 @@ def review(auth):
     logger.info('Fetching followers')
     followers = source.get_followers()
     ids = [f['id'] for f in followers if f.get('id')]
+    for follower in followers:
+        follower['image'] = util.get_first(follower, 'image')
 
     if from_proto.HAS_COPIES:
         follower_counts = []
@@ -198,6 +201,7 @@ def review(auth):
 
     ids_by_proto = defaultdict(list)
     for followee in follows:
+        followee['image'] = util.get_first(followee, 'image')
         # STATE TODO: if wrapped, extract from protocol
         id = common.unwrap(followee.get('id'))
         proto = Protocol.for_id(id, remote=False) or from_proto

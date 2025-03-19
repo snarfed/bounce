@@ -47,9 +47,12 @@
     <h3>You'll keep <em>all</em> of your followers.</h3>
     <div id="followers-chart"></div>
     <ul class="actors">
-      {% for actor in followers %}
+      {% for actor in followers[:20] %}
         <li> {% include 'actor_label.html' %}
       {% endfor %}
+      {% if followers|length > 20 %}
+        <li>...
+      {% endif %}
     </ul>
   </div>
 
@@ -57,9 +60,12 @@
     <h3>You'll keep <em>{{ keep_follows_pct }}%</em> of your follows.</h3>
     <div id="follows-chart"></div>
     <ul class="actors">
-      {% for actor in follows %}
+      {% for actor in follows[:20] %}
         <li> {% include 'actor_label.html' %}
       {% endfor %}
+      {% if follows|length > 20 %}
+        <li>...
+      {% endif %}
     </ul>
   </div>
 </div>

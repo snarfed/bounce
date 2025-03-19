@@ -18,7 +18,7 @@
  */
 }
 
-#logins img {
+#logins img, .actor img {
   border-radius: 50%; /* makes perfect circle */
   object-fit: cover;  /* keeps aspect ratio */
 }
@@ -249,6 +249,11 @@ pre .value, code .value, code.value {
 ul.actors {
   text-align: left;
   list-style: none;
+}
+
+ul.actors li {
+  margin-top: .5em;
+  margin-bottom: .5em;
 }
 
 form {

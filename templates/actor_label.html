@@ -1,8 +1,10 @@
 {% with username = actor.get('username', '').strip('@'),
         name = actor.get('displayName', '').strip('@') %}
-<a href="{{ actor.url }}">
+<a class="actor" href="{{ actor.url }}">
   <nobr>
-    <img src="{{ actor.image.url }}" class="profile">
+    {% if 'image' in actor %}
+      <img src="{{ actor.image.url }}" class="profile">
+    {% endif %}
     <span>{{ actor.username }}</span>
   </nobr>
   {% if name and name != username  %}
