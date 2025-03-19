@@ -265,7 +265,7 @@ chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto",
 
         text = html_to_text(body)
         self.assert_multiline_in("""
-When you migrate  al.ice · did:plc:alice to the fediverse...
+When you migrate  al.ice to the fediverse...
 ### You'll keep _all_ of your followers.
 * al.ice · Ms Alice
 * bo.b
