@@ -104,6 +104,9 @@ class BounceTest(TestCase, Asserts):
 
         # accounts
         self.assert_multiline_in("""\
+<a class="actor" href="/review?auth_entity=agNhcHByHAsSC0JsdWVza3lBdXRoIgtkaWQ6cGxjOmFiYww">
+<img src="/oauth_dropins_static/bluesky_icon.png"
+class="logo" title="Bluesky" />
 <img src="http://abc/pic" class="profile">
 <span style="unicode-bidi: isolate">abc.xyz</span>""", body)
         self.assert_multiline_in("""\
@@ -191,6 +194,12 @@ When you migrate  @alice@in.st to Bluesky...
 * @alice@in.st · Ms Alice
 * @bo.b@bsky.brid.gy
 * @e.ve@web.brid.gy""", text, ignore_blanks=True)
+
+        # request again, we should serve from cache
+        mock_get.reset_mock()
+        resp = self.client.get(f'/review?auth_entity={auth.urlsafe().decode()}')
+        self.assertEqual(200, resp.status_code)
+        self.assertEqual(0, mock_get.call_count)
 
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
