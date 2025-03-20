@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from itertools import chain
+import json
 import logging
 from pathlib import Path
 import sys
@@ -207,10 +208,17 @@ def logout():
 @app.get('/accounts')
 def accounts():
     """User accounts page. Requires logged in session."""
-    if not (logins := oauth_dropins.get_logins()):
+    logins = oauth_dropins.get_logins()
+    if not logins:
         return redirect('/', code=302)
 
-    return render('accounts.html')
+    auths = []
+    for auth in ndb.get_multi(logins):
+        if auth:
+            auth.url = f'/review?auth_entity={auth.key.urlsafe().decode()}'
+            auths.append(auth)
+
+    return render('accounts.html', auths=auths)
 
 
 @app.get('/review')
@@ -226,6 +234,7 @@ def review(auth):
     logger.info(f'Reviewing {auth.key.id()} {auth.user_display_name()}')
 
     source = granary_source(auth)
+    auth.url = source.to_as1_actor(json.loads(auth.user_json)).get('url')
     from_proto = AUTH_TO_PROTOCOL[auth.__class__]
     assert from_proto in (ActivityPub, ATProto)
 
