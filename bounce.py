@@ -1,5 +1,6 @@
 """UI pages."""
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from itertools import chain
 import logging
@@ -73,15 +74,48 @@ app.url_map.converters['regex'] = flask_util.RegexConverter
 app.after_request(flask_util.default_modern_headers)
 app.register_error_handler(Exception, flask_util.handle_exception)
 
-if (appengine_info.LOCAL_SERVER
-    # ugly hack to infer if we're running unit tests
-    and 'unittest' not in sys.modules):
+if appengine_info.LOCAL_SERVER:
     flask_gae_static.init_app(app)
 
 app.wsgi_app = flask_util.ndb_context_middleware(
     app.wsgi_app, client=appengine_config.ndb_client)
 
 models.reset_protocol_properties()
+
+
+#
+# models
+#
+class Cache(ndb.Model):
+    """Simple, dumb, datastore-backed key/value cache."""
+    value = ndb.BlobProperty()
+    expire = ndb.DateTimeProperty(tzinfo=timezone.utc)
+
+    @classmethod
+    def get(cls, key):
+        """
+        Args:
+          key (str)
+
+        Returns:
+          str or None: value
+        """
+        if got := cls.get_by_id(key):
+            if not got.expire or datetime.now(timezone.utc) < got.expire:
+                return got.value.decode()
+
+    @classmethod
+    def put(cls, key, value, expire=None):
+        """
+        Args:
+          key (str)
+          value (str)
+          expire (datetime.timedelta)
+        """
+        cached = cls(id=key, value=value.encode(),
+                     expire=datetime.now(timezone.utc) + expire)
+        super(cls, cached).put()
+
 
 #
 # views
@@ -183,6 +217,12 @@ def accounts():
 @require_login
 def review(auth):
     """Review an account's followers and follows."""
+    cache_key = f'review-html-{auth.key.id()}'
+    if not request.args.get('force'):
+        if cached := Cache.get(cache_key):
+            logger.info(f'Returning cached review for {auth.key.id()}')
+            return cached
+
     logger.info(f'Reviewing {auth.key.id()} {auth.user_display_name()}')
 
     source = granary_source(auth)
@@ -270,7 +310,7 @@ def review(auth):
         for f in followers + follows:
             f['username'] = as2.address(as2.from_as1(f))
 
-    return render(
+    html = render(
         'review.html',
         auth=auth,
         to_proto=to_proto,
@@ -280,6 +320,8 @@ def review(auth):
         follow_counts=[['type', 'count']] + sorted(follow_counts),
         keep_follows_pct=round(total_bridged / len(follows) * 100),
     )
+    Cache.put(cache_key, html, expire=timedelta(hours=1))
+    return html
 
 
 @app.get('/migrate')
