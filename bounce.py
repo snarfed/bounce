@@ -226,7 +226,7 @@ def accounts():
 def review(auth):
     """Review an account's followers and follows."""
     cache_key = f'review-html-{auth.key.id()}'
-    if not request.args.get('force'):
+    if 'force' not in request.args:
         if cached := Cache.get(cache_key):
             logger.info(f'Returning cached review for {auth.key.id()}')
             return cached
@@ -329,7 +329,7 @@ def review(auth):
         follow_counts=[['type', 'count']] + sorted(follow_counts),
         keep_follows_pct=round(total_bridged / len(follows) * 100),
     )
-    Cache.put(cache_key, html, expire=timedelta(hours=1))
+    Cache.put(cache_key, html, expire=timedelta(days=30))
     return html
 
 
