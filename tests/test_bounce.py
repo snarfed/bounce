@@ -104,7 +104,7 @@ class BounceTest(TestCase, Asserts):
 
         # accounts
         self.assert_multiline_in("""\
-<a class="actor" href="/review?auth_entity=agNhcHByHAsSC0JsdWVza3lBdXRoIgtkaWQ6cGxjOmFiYww">
+<a class="actor" href="/review?key=agNhcHByHAsSC0JsdWVza3lBdXRoIgtkaWQ6cGxjOmFiYww">
 <img src="/oauth_dropins_static/bluesky_icon.png"
 class="logo" title="Bluesky" />
 <img src="http://abc/pic" class="profile">
@@ -113,12 +113,12 @@ class="logo" title="Bluesky" />
 <img src="http://b.c/pic" class="profile">
 <span style="unicode-bidi: isolate">@a@b.c</span>""", body)
 
-    def test_review_no_auth_entity_param(self):
+    def test_review_no_key_param(self):
         resp = self.client.get('/review')
         self.assertEqual(400, resp.status_code)
 
     def test_review_not_logged_in(self):
-        resp = self.client.get('/review?auth_entity=ahBicmlkZ3ktZmVkZXJhdGVkchcLEgxNYXN0b2RvbkF1dGgiBWFAYi5jDA')
+        resp = self.client.get('/review?key=ahBicmlkZ3ktZmVkZXJhdGVkchcLEgxNYXN0b2RvbkF1dGgiBWFAYi5jDA')
         self.assertEqual(302, resp.status_code)
         self.assertEqual('/', resp.headers['Location'])
 
@@ -165,7 +165,7 @@ class="logo" title="Bluesky" />
         with self.client.session_transaction() as sess:
             sess[LOGINS_SESSION_KEY] = [('MastodonAuth', '@alice@in.st')]
 
-        resp = self.client.get(f'/review?auth_entity={auth.urlsafe().decode()}')
+        resp = self.client.get(f'/review?key={auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
 
         # check Mastodon API calls
@@ -197,7 +197,7 @@ When you migrate  @alice@in.st to Bluesky...
 
         # request again, we should serve from cache
         mock_get.reset_mock()
-        resp = self.client.get(f'/review?auth_entity={auth.urlsafe().decode()}')
+        resp = self.client.get(f'/review?key={auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
         self.assertEqual(0, mock_get.call_count)
 
@@ -250,7 +250,7 @@ When you migrate  @alice@in.st to Bluesky...
         with self.client.session_transaction() as sess:
             sess[LOGINS_SESSION_KEY] = [('BlueskyAuth', 'did:plc:alice')]
 
-        resp = self.client.get(f'/review?auth_entity={auth.urlsafe().decode()}')
+        resp = self.client.get(f'/review?key={auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
 
         # check Bluesky API calls

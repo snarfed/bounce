@@ -128,25 +128,30 @@ def render(template, **vars):
     return render_template(template, **vars)
 
 
-def require_login(fn):
-    """Decorator that requires and loads the current request's logged in user.
+def require_login(param):
+    """Decorator that requires and loads a logged in user.
 
-    Passes the user in the ``user`` kwarg, as a :class:`models.User`.
+    Passes the user into a positional arg to the function, as an oauth-dropins auth
+    entity.
 
-    HTTP params:
-      key (str): url-safe ndb key for an oauth-dropins auth entity
+    Args:
+      param (str): HTTP query param with the url-safe ndb key for the oauth-dropins
+        auth entity
     """
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        key = ndb.Key(urlsafe=get_required_param('auth_entity'))
-        if key in oauth_dropins.get_logins():
-            if auth := key.get():
-                return fn(*args, auth=auth, **kwargs)
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            key = ndb.Key(urlsafe=get_required_param(param))
+            if key in oauth_dropins.get_logins():
+                if auth := key.get():
+                    return fn(*args, auth, **kwargs)
 
-        logger.warning(f'not logged in for {key}')
-        return redirect('/', code=302)
+            logger.warning(f'not logged in for {key}')
+            return redirect('/', code=302)
 
-    return wrapper
+        return wrapper
+
+    return decorator
 
 
 def granary_source(auth):
@@ -215,14 +220,14 @@ def accounts():
     auths = []
     for auth in ndb.get_multi(logins):
         if auth:
-            auth.url = f'/review?auth_entity={auth.key.urlsafe().decode()}'
+            auth.url = f'/review?key={auth.key.urlsafe().decode()}'
             auths.append(auth)
 
     return render('accounts.html', auths=auths)
 
 
 @app.get('/review')
-@require_login
+@require_login('key')
 def review(auth):
     """Review an account's followers and follows."""
     cache_key = f'review-html-{auth.key.id()}'
@@ -334,8 +339,9 @@ def review(auth):
 
 
 @app.get('/migrate')
-@require_login
-def migrate():
+@require_login('to_key')
+@require_login('from_key')
+def migrate(from_auth, to_auth):
     """View for the migration preparation page."""
     auth = g.auth
     user_id = None
