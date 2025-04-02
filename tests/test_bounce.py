@@ -56,6 +56,35 @@ class BounceTest(TestCase, Asserts):
         self.client.__exit__(None, None, None)
         super().tearDown()
 
+    def make_mastodon(self, sess):
+        app = MastodonApp(instance='https://in.st/', data='{}').put()
+        user_json = json.dumps({
+            'id': '234',
+            'uri':'http://in.st/@alice',
+            'avatar_static': 'http://in.st/@alice/pic',
+        })
+        auth = MastodonAuth(id='@alice@in.st', access_token_str='towkin', app=app,
+                            user_json=user_json).put()
+
+        sess.setdefault(LOGINS_SESSION_KEY, []).append(
+            ('MastodonAuth', '@alice@in.st'))
+
+        return auth
+
+    def make_bluesky(self, sess):
+        user_json = json.dumps({
+            '$type': 'app.bsky.actor.defs#profileView',
+            'handle': 'al.ice',
+            'avatar': 'http://alice/pic',
+        })
+        auth = BlueskyAuth(id='did:plc:alice', pds_url='http://some.pds/',
+                           user_json=user_json, dpop_token=DPOP_TOKEN_STR).put()
+
+        sess.setdefault(LOGINS_SESSION_KEY, []).append(
+            ('BlueskyAuth', 'did:plc:alice'))
+
+        return auth
+
     def test_front_page(self):
         # just check that we serve ok
         got = self.client.get('/')
@@ -76,20 +105,9 @@ class BounceTest(TestCase, Asserts):
         self.assertEqual('/', resp.headers['Location'])
 
     def test_accounts(self):
-        BlueskyAuth(id='did:plc:abc', user_json=json.dumps({
-            'handle': 'abc.xyz',
-            'avatar': 'http://abc/pic',
-        })).put()
-        MastodonAuth(id='@a@b.c', access_token_str='', user_json=json.dumps({
-            'uri':'http://b.c/a',
-            'avatar_static': 'http://b.c/pic',
-        })).put()
-
         with self.client.session_transaction() as sess:
-            sess[LOGINS_SESSION_KEY] = [
-                ('BlueskyAuth', 'did:plc:abc'),
-                ('MastodonAuth', '@a@b.c'),
-            ]
+            self.make_bluesky(sess)
+            self.make_mastodon(sess)
 
         resp = self.client.get('/accounts')
         self.assertEqual(200, resp.status_code)
@@ -98,20 +116,20 @@ class BounceTest(TestCase, Asserts):
         # logins in header
         self.assert_multiline_in("""\
 <a id="logins" href="/accounts">
-<nobr title="Bluesky: abc.xyz">""", body, ignore_blanks=True)
+<nobr title="Bluesky: al.ice">""", body, ignore_blanks=True)
         self.assert_multiline_in("""\
-<nobr title="Mastodon: @a@b.c">""", body)
+<nobr title="Mastodon: @alice@in.st">""", body)
 
         # accounts
         self.assert_multiline_in("""\
-<a class="actor" href="/review?key=agNhcHByHAsSC0JsdWVza3lBdXRoIgtkaWQ6cGxjOmFiYww">
+<a class="actor" href="/review?key=agNhcHByHgsSC0JsdWVza3lBdXRoIg1kaWQ6cGxjOmFsaWNlDA">
 <img src="/oauth_dropins_static/bluesky_icon.png"
 class="logo" title="Bluesky" />
-<img src="http://abc/pic" class="profile">
-<span style="unicode-bidi: isolate">abc.xyz</span>""", body)
+<img src="http://alice/pic" class="profile">
+<span style="unicode-bidi: isolate">al.ice</span>""", body)
         self.assert_multiline_in("""\
-<img src="http://b.c/pic" class="profile">
-<span style="unicode-bidi: isolate">@a@b.c</span>""", body)
+<img src="http://in.st/@alice/pic" class="profile">
+<span style="unicode-bidi: isolate">@alice@in.st</span>""", body)
 
     def test_review_no_key_param(self):
         resp = self.client.get('/review')
@@ -158,12 +176,8 @@ class="logo" title="Bluesky" />
         with ndb.context.Context(bridgy_fed_ndb).use():
             Web(id='e.ve', enabled_protocols=['atproto']).put()
 
-        app = MastodonApp(instance='https://in.st/', data='{}').put()
-        auth = MastodonAuth(id='@alice@in.st', access_token_str='towkin', app=app,
-                            user_json=json.dumps(alice)).put()
-
         with self.client.session_transaction() as sess:
-            sess[LOGINS_SESSION_KEY] = [('MastodonAuth', '@alice@in.st')]
+            auth = self.make_mastodon(sess)
 
         resp = self.client.get(f'/review?key={auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
@@ -244,11 +258,8 @@ When you migrate  @alice@in.st to Bluesky...
             Web(id='e.ve', enabled_protocols=['atproto'],  # not activitypub
                 copies=[Target(protocol='atproto', uri='did:plc:eve')]).put()
 
-        auth = BlueskyAuth(id='did:plc:alice', pds_url='http://some.pds/',
-                           user_json=json.dumps(alice), dpop_token=DPOP_TOKEN_STR
-                           ).put()
         with self.client.session_transaction() as sess:
-            sess[LOGINS_SESSION_KEY] = [('BlueskyAuth', 'did:plc:alice')]
+            auth = self.make_bluesky(sess)
 
         resp = self.client.get(f'/review?key={auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
