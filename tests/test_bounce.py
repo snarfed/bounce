@@ -292,3 +292,28 @@ When you migrate  al.ice to the fediverse...
 * al.ice · Ms Alice
 * bo.b
 * e.ve""", text, ignore_blanks=True)
+
+    def test_migrate_no_from_key(self):
+        with self.client.session_transaction() as sess:
+            auth = self.make_mastodon(sess)
+
+        for fn in (self.client.get, self.client.post):
+            resp = self.client.post(f'/migrate?to_key={auth.urlsafe().decode()}')
+            self.assertEqual(400, resp.status_code)
+
+    def test_migrate_no_to_key(self):
+        with self.client.session_transaction() as sess:
+            auth = self.make_mastodon(sess)
+
+        for fn in (self.client.get, self.client.post):
+            resp = self.client.post(f'/migrate?from_key={auth.urlsafe().decode()}')
+            self.assertEqual(400, resp.status_code)
+
+    def test_migrate_not_logged_in(self):
+        from_key = MastodonAuth(id='@alice@in.st').key.urlsafe().decode()
+        to_key = BlueskyAuth(id='did:foo').key.urlsafe().decode()
+
+        for fn in (self.client.get, self.client.post):
+            resp = self.client.post(f'/migrate?from_key={from_key}&to_key={to_key}')
+            self.assertEqual(302, resp.status_code)
+            self.assertEqual('/', resp.headers['Location'])

@@ -341,8 +341,8 @@ def review(auth):
 @app.get('/migrate')
 @require_login('to_key')
 @require_login('from_key')
-def migrate(from_auth, to_auth):
-    """View for the migration preparation page."""
+def migrate_confirm(from_auth, to_auth):
+    """View for the migration confirmation page."""
     auth = g.auth
     user_id = None
     handle = None
@@ -356,6 +356,17 @@ def migrate(from_auth, to_auth):
         platform=platform,
     )
 
+@app.post('/migrate')
+@require_login('to_key')
+@require_login('from_key')
+def migrate(from_auth, to_auth):
+    """Migration handler."""
+    auth = g.auth
+    user_id = None
+    handle = None
+    platform = "account"
+
+    return ''
 
 #
 # OAuth
