@@ -1,0 +1,32 @@
+{% set body_id = 'migrate-confirm' %}
+{% extends "base.html" %}
+
+{% block content %}
+
+{% set from_label %}
+  {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
+{% endset %}
+
+{% set to_label %}
+  {% with auth = to_auth %}{% include 'account_label.html' %}{% endwith %}
+{% endset %}
+
+<div class="row big">
+<p>Migrate {{ from_label }} to {{ to_label }}?</p>
+</div>
+
+<div class="row" style="text-align: left">
+<ul>
+<li>{{ to_label }} will be <a href="https://fed.brid.gy/docs">bridged</a> back into {{ from_auth.site_name() }} as {{ from_label }}.
+<li>Your followers on {{ from_auth.site_name() }} will all continue to follow {{ from_label }} and see your posts.
+<li>{{ to_label }} will follow the accounts {{ from_label }} follows that are bridged.
+<ul>
+</div>
+
+<div class="row big">
+<form action="/migrate" method="post">
+  <input type="submit" class="btn btn-success" value="Migrate" />
+</form>
+</div>
+
+{% endblock content %}

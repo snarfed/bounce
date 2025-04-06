@@ -389,20 +389,25 @@ def choose_to_account(from_auth):
 
     auths = []
     for auth in ndb.get_multi(logins):
-        if auth:
+        if auth and (AUTH_TO_PROTOCOL[from_auth.__class__]
+                     != AUTH_TO_PROTOCOL[auth.__class__]):
             auth.url = f'/migrate-confirm?from_auth={from_auth.key.urlsafe().decode()}&to_auth={auth.key.urlsafe().decode()}'
             auths.append(auth)
 
+    # TODO: only show protocols that aren't from
     return render('choose_to_account.html', login_forms=True, auths=auths)
 
-@app.get('/migrate')
+
+@app.get('/migrate-confirm')
 @require_login('from_auth')
 @require_login('to_auth')
 def migrate_confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
-    return render(
-        'migrate.html',
-    )
+    if AUTH_TO_PROTOCOL[from_auth.__class__] == AUTH_TO_PROTOCOL[to_auth.__class__]:
+        error(f"Can't migrate {from_auth.__class__.__name__} to {to_auth.__class__.__name__}")
+
+    return render('migrate-confirm.html', from_auth=from_auth, to_auth=to_auth)
+
 
 @app.post('/migrate')
 @require_login('from_auth')
