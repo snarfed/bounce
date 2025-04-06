@@ -3,6 +3,7 @@ import json
 from unittest import TestCase
 from unittest.mock import ANY, call, patch
 
+from arroba import did
 from Crypto.PublicKey import RSA
 from flask import get_flashed_messages, session
 from google.cloud import ndb
@@ -33,7 +34,9 @@ import activitypub
 from activitypub import ActivityPub
 from atproto import ATProto
 from common import long_to_base64
+import ids
 from models import Target
+import protocol
 from web import Web
 
 from bounce import app, bridgy_fed_ndb, Migration
@@ -71,6 +74,13 @@ class BounceTest(TestCase, Asserts):
         requests.post(f'http://{ndb_client.host}/reset')
         self.ndb_context = ndb_client.context()
         self.ndb_context.__enter__()
+
+        did.resolve_handle.cache.clear()
+        did.resolve_plc.cache.clear()
+        did.resolve_web.cache.clear()
+        ids.web_ap_base_domain.cache.clear()
+        protocol.Protocol.for_id.cache.clear()
+        protocol.Protocol.for_handle.cache.clear()
 
         util.now = lambda **kwargs: NOW
 
