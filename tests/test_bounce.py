@@ -3,6 +3,7 @@ import json
 from unittest import TestCase
 from unittest.mock import ANY, call, patch
 
+from Crypto.PublicKey import RSA
 from flask import get_flashed_messages, session
 from google.cloud import ndb
 from granary.source import html_to_text
@@ -28,8 +29,10 @@ from requests_oauth2client import (
 )
 
 # from Bridgy Fed
+import activitypub
 from activitypub import ActivityPub
 from atproto import ATProto
+from common import long_to_base64
 from models import Target
 from web import Web
 
@@ -37,6 +40,22 @@ from bounce import app, bridgy_fed_ndb, Migration
 
 DPOP_TOKEN = DPoPToken(access_token='towkin', _dpop_key=DPoPKey.generate())
 DPOP_TOKEN_STR = DPoPTokenSerializer.default_dumper(DPOP_TOKEN)
+
+DID_DOC = {
+    'id': 'did:plc:alice',
+    'alsoKnownAs': ['at://al.ice'],
+    'verificationMethod': [{
+        'id': 'did:plc:alice#atproto',
+        'type': 'Multikey',
+        'controller': 'did:plc:alice',
+        'publicKeyMultibase': 'did:key:xyz',
+    }],
+    'service': [{
+        'id': '#atproto_pds',
+        'type': 'AtprotoPersonalDataServer',
+        'serviceEndpoint': 'https://some.pds',
+    }],
+}
 
 
 class BounceTest(TestCase, Asserts):
@@ -339,6 +358,10 @@ When you migrate  al.ice to the fediverse...
             from_auth = self.make_mastodon(sess)
             to_auth = self.make_bluesky(sess)
 
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/@alice').put()
+            ATProto(id='did:plc:alice').put()
+
         migration = Migration(id=from_auth.id(), to=to_auth,
                               to_follow=['did:bob', 'did:eve'],
                               ).put()
@@ -381,10 +404,24 @@ When you migrate  al.ice to the fediverse...
         requests_response({'id': '456', 'following': True}),
     ])
     @patch('requests.get', side_effect=[
+        requests_response(DID_DOC),
+        # Bluesky profile
+        requests_response({
+            'uri': 'at://did:plc:alice/app.bsky.actor.profile/self',
+            'cid': 'abcdefgh',
+            'record': {'displayName': 'Alice'},
+        }),
+        requests_response({'id': 'http://other/bob'}),
         requests_response({'accounts': [{'id': '123', 'uri': 'http://other/bob'}]}),
         requests_response({'accounts': [{'id': '456', 'uri': 'http://other/eve'}]}),
     ])
     def test_migrate_partial_success(self, mock_get, mock_post, mock_oauth2client):
+        key = RSA.generate(1024)
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            Web(id='fed.brid.gy', mod=long_to_base64(key.n),
+                public_exponent=long_to_base64(key.e),
+                private_exponent=long_to_base64(key.d)).put()
+
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)

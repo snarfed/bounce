@@ -125,6 +125,8 @@ class Migration(ndb.Model):
     Key id is the from account's auth entity's key id.
     """
     to = ndb.KeyProperty()  # auth entity
+    state = ndb.StringProperty(choices=('follows', 'out', 'in', 'done'),
+                               default='follows')
 
     # user ids to follow
     to_follow = ndb.StringProperty(repeated=True)
@@ -180,12 +182,9 @@ def granary_source(auth):
     Returns:
       granary.source.Source:
     """
-    if isinstance(auth, oauth_dropins.mastodon.MastodonAuth):
+    if isinstance(auth, (oauth_dropins.mastodon.MastodonAuth,
+                         oauth_dropins.pixelfed.PixelfedAuth)):
         return Mastodon(instance=auth.instance(), access_token=auth.access_token_str,
-                        user_id=auth.user_id())
-
-    if isinstance(auth, oauth_dropins.pixelfed.PixelfedAuth):
-        return Pixelfed(instance=auth.instance(), access_token=auth.access_token_str,
                         user_id=auth.user_id())
 
     elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
@@ -195,6 +194,23 @@ def granary_source(auth):
         dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
         return Bluesky(pds_url=auth.pds_url, handle=auth.user_display_name(),
                        did=auth.key.id(), auth=dpop_auth)
+
+
+def get_user(auth):
+    """Loads and returns the Bridgy Fed user for a given auth entity.
+
+    Args:
+      auth (oauth_dropins.models.BaseAuth)
+
+    Returns:
+      models.User:
+    """
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        if isinstance(auth, (oauth_dropins.mastodon.MastodonAuth,
+                             oauth_dropins.pixelfed.PixelfedAuth)):
+            return ActivityPub.get_or_create(json.loads(auth.user_json)['uri'])
+        elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
+            return ATProto.get_or_create(auth.key.id())
 
 
 @app.get('/')
@@ -376,10 +392,42 @@ def migrate(from_auth, to_auth):
 
     migration.last_attempt = util.now()
     migration.put()
-    source = granary_source(to_auth)
 
+    from_user = get_user(from_auth)
+    to_user = get_user(to_auth)
+    assert from_user.__class__ != to_user.__class__
+
+    if migration.state == 'follows':
+        migrate_follows(migration, to_auth)
+        migration.state = 'out'
+        migration.put()
+
+    if migration.state == 'out':
+        migrate_out(migration, from_user, to_user)
+        migration.state = 'in'
+        migration.put()
+
+    if migration.state == 'in':
+        migrate_in(migration, from_user, to_user)
+        migration.state = 'done'
+        migration.put()
+
+    # TODO: final report
+    return 'ok'
+
+
+def migrate_follows(migration, to_auth):
+    """Creates follows in the destination account.
+
+    Args:
+      migration (Migration)
+      to_auth (oauth_dropins.models.BaseAuth)
+    """
+    logging.info(f'Creating follows for {to_auth.key_id()}')
     to_follow = migration.to_follow
     migration.to_follow = []
+    source = granary_source(to_auth)
+
     for user_id in to_follow:
         logger.info(f'Folowing {user_id}')
         try:
@@ -404,8 +452,31 @@ def migrate(from_auth, to_auth):
                 migration.put()
                 raise
 
-    migration.put()
-    return 'ok'
+
+def migrate_out(migration, from_user, to_user):
+    """Migrates a Bridgy Fed bridged account out to a native account.
+
+    Args:
+      migration (Migration)
+      from_user (models.User)
+      to_user (models.User)
+    """
+    logging.info(f'Migrating bridged account {from_user.key.id()} out to {to_user.key.id()}')
+    # to_user.migrate_out(from_user, to_user.key.id())
+
+
+def migrate_in(migration, from_user, to_user):
+    """Migrates a source native account into Bridgy Fed to be a bridged account.
+
+    Args:
+      migration (Migration)
+      from_user (models.User)
+      to_user (models.User)
+    """
+    logging.info(f'Migrating {from_user.key.id()} in to bridged account TODO')
+    # from_user.migrate_out(to_user, from_user.key.id(),
+    #                       # TODO
+    #                       plc_code, dpop_token)
 
 
 #
