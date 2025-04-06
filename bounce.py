@@ -27,7 +27,8 @@ from oauth_dropins.webutil import (
     flask_util,
     util,
 )
-from oauth_dropins.webutil.flask_util import FlashErrors, get_required_param
+from oauth_dropins.webutil.flask_util import error, FlashErrors, get_required_param
+from requests import RequestException
 from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
 
 # from Bridgy Fed
@@ -116,6 +117,22 @@ class Cache(ndb.Model):
         cached = cls(id=key, value=value.encode(),
                      expire=datetime.now(timezone.utc) + expire)
         super(cls, cached).put()
+
+
+class Migration(ndb.Model):
+    """Stores state for a migration.
+
+    Key id is the from account's auth entity's key id.
+    """
+    to = ndb.KeyProperty()  # auth entity
+
+    # user ids to follow
+    to_follow = ndb.StringProperty(repeated=True)
+    followed = ndb.StringProperty(repeated=True)
+
+    last_attempt = ndb.DateTimeProperty(tzinfo=timezone.utc)
+    created = ndb.DateTimeProperty(auto_now_add=True, tzinfo=timezone.utc)
+    updated = ndb.DateTimeProperty(auto_now=True, tzinfo=timezone.utc)
 
 
 #
@@ -339,34 +356,57 @@ def review(auth):
 
 
 @app.get('/migrate')
-@require_login('to_key')
 @require_login('from_key')
+@require_login('to_key')
 def migrate_confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
-    auth = g.auth
-    user_id = None
-    handle = None
-    platform = "account"
-
     return render(
         'migrate.html',
-        auth=auth,
-        user_id=user_id,
-        handle=handle,
-        platform=platform,
     )
 
 @app.post('/migrate')
-@require_login('to_key')
 @require_login('from_key')
+@require_login('to_key')
 def migrate(from_auth, to_auth):
     """Migration handler."""
-    auth = g.auth
-    user_id = None
-    handle = None
-    platform = "account"
+    logger.info(f'Migrating {from_auth.key.id()}')
 
-    return ''
+    if not (migration := Migration.get_by_id(from_auth.key.id())):
+        error('migration not found', status=404)
+
+    migration.last_attempt = util.now()
+    migration.put()
+    source = granary_source(to_auth)
+
+    to_follow = migration.to_follow
+    migration.to_follow = []
+    for user_id in to_follow:
+        logger.info(f'Folowing {user_id}')
+        try:
+            # Use the granary source to create the follow
+            result = source.create({
+                'objectType': 'activity',
+                'verb': 'follow',
+                'object': user_id,
+            })
+            if result.error_plain:
+                logger.warning(f'Failed: {result.error_plain}')
+                migration.to_follow.append(user_id)
+                continue
+
+            migration.followed.append(user_id)
+
+        except BaseException as e:
+            logger.warning(f'Failed: {e}')
+            migration.to_follow.append(user_id)
+            code, _ = util.interpret_http_exception(e)
+            if not code:
+                migration.put()
+                raise
+
+    migration.put()
+    return 'ok'
+
 
 #
 # OAuth
