@@ -140,10 +140,28 @@ class Migration(ndb.Model):
 #
 # views
 #
-def render(template, **vars):
-    """Wrapper for Flask.render_template that populates common template vars."""
+def render(template, login_forms=False, **vars):
+    """Wrapper for Flask.render_template that populates common template vars.
+
+    Args:
+      login_forms (bool): whether to render and include the ``*_button`` variables
+        with the OAuth login forms.
+    """
     if 'auths' not in vars:
         vars['auths'] = [a for a in ndb.get_multi(oauth_dropins.get_logins()) if a]
+
+    if login_forms:
+        vars.update({
+            'bluesky_button': oauth_dropins.bluesky.Start.button_html(
+                '/oauth/bluesky/start', image_prefix='/oauth_dropins_static/'),
+            'mastodon_button': oauth_dropins.mastodon.Start.button_html(
+                '/oauth/mastodon/start', image_prefix='/oauth_dropins_static/'),
+            'pixelfed_button': oauth_dropins.pixelfed.Start.button_html(
+                '/oauth/pixelfed/start', image_prefix='/oauth_dropins_static/'),
+            # threads_button': oauth_dropins.threads.Start.button_html(
+            #     '/oauth/threads/start', image_prefix='/oauth_dropins_static/'),
+        })
+
     return render_template(template, **vars)
 
 
@@ -217,16 +235,7 @@ def get_user(auth):
 @flask_util.headers(CACHE_CONTROL)
 def front_page():
     """View for the front page."""
-    return render('index.html',
-        bluesky_button=oauth_dropins.bluesky.Start.button_html(
-            '/oauth/bluesky/start', image_prefix='/oauth_dropins_static/'),
-        mastodon_button=oauth_dropins.mastodon.Start.button_html(
-            '/oauth/mastodon/start', image_prefix='/oauth_dropins_static/'),
-        pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
-            '/oauth/pixelfed/start', image_prefix='/oauth_dropins_static/'),
-        # threads_button=oauth_dropins.threads.Start.button_html(
-        #     '/oauth/threads/start', image_prefix='/oauth_dropins_static/'),
-    )
+    return render('index.html', login_forms=True)
 
 @app.get('/docs')
 @flask_util.headers(CACHE_CONTROL)
@@ -260,7 +269,7 @@ def accounts():
 
 
 @app.get('/review')
-@require_login('key')
+@require_login('auth')
 def review(auth):
     """Review an account's followers and follows."""
     cache_key = f'review-html-{auth.key.id()}'
@@ -371,9 +380,24 @@ def review(auth):
     return html
 
 
+@app.get('/choose-to-account')
+@require_login('from_auth')
+def choose_to_account(from_auth):
+    logins = oauth_dropins.get_logins()
+    if not logins:
+        return redirect('/', code=302)
+
+    auths = []
+    for auth in ndb.get_multi(logins):
+        if auth:
+            auth.url = f'/migrate-confirm?from_auth={from_auth.key.urlsafe().decode()}&to_auth={auth.key.urlsafe().decode()}'
+            auths.append(auth)
+
+    return render('choose_to_account.html', login_forms=True, auths=auths)
+
 @app.get('/migrate')
-@require_login('from_key')
-@require_login('to_key')
+@require_login('from_auth')
+@require_login('to_auth')
 def migrate_confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
     return render(
@@ -381,8 +405,8 @@ def migrate_confirm(from_auth, to_auth):
     )
 
 @app.post('/migrate')
-@require_login('from_key')
-@require_login('to_key')
+@require_login('from_auth')
+@require_login('to_auth')
 def migrate(from_auth, to_auth):
     """Migration handler."""
     logger.info(f'Migrating {from_auth.key.id()}')

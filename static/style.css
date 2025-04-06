@@ -127,7 +127,7 @@ pre .value, code .value, code.value {
   margin-right: 0;
 }
 
-#accounts .row {
+.account {
   text-align: left;
 }
 
