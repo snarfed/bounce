@@ -272,6 +272,10 @@ def choose_from():
 @require_login('from')
 def choose_to(from_auth):
     """Choose account to migrate to."""
+    if from_auth.key.id().startswith('did:web:'):
+        flash('Sorry, did:webs are not currently supported.')
+        return redirect('/', code=302)
+
     logins = oauth_dropins.get_logins()
     if not logins:
         return redirect('/', code=302)
@@ -437,7 +441,7 @@ def migrate(from_auth, to_auth):
         migration.put()
 
     if migration.state == 'in':
-        migrate_in(migration, from_user, to_user)
+        migrate_in(migration, from_auth, from_user)
         migration.state = 'done'
         migration.put()
 
@@ -494,18 +498,24 @@ def migrate_out(migration, from_user, to_user):
     # to_user.migrate_out(from_user, to_user.key.id())
 
 
-def migrate_in(migration, from_user, to_user):
+def migrate_in(migration, from_auth, from_user):
     """Migrates a source native account into Bridgy Fed to be a bridged account.
 
     Args:
       migration (Migration)
+      from_auth (oauth_dropins.models.BaseAuth)
       from_user (models.User)
-      to_user (models.User)
     """
     logging.info(f'Migrating {from_user.key.id()} in to bridged account TODO')
-    # from_user.migrate_out(to_user, from_user.key.id(),
-    #                       # TODO
-    #                       plc_code, dpop_token)
+
+    kwargs = {}
+    if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
+        kwargs = {
+            'dpop_token': DPoPTokenSerializer.default_loader(from_auth.dpop_token),
+            # 'plc_code': TODO
+        }
+
+    # from_user.migrate_in(to_user, from_user.key.id(), **kwargs)
 
 
 #

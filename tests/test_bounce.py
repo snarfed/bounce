@@ -104,17 +104,16 @@ class BounceTest(TestCase, Asserts):
 
         return auth
 
-    def make_bluesky(self, sess):
+    def make_bluesky(self, sess, did='did:plc:alice'):
         user_json = json.dumps({
             '$type': 'app.bsky.actor.defs#profileView',
             'handle': 'al.ice',
             'avatar': 'http://alice/pic',
         })
-        auth = BlueskyAuth(id='did:plc:alice', pds_url='http://some.pds/',
+        auth = BlueskyAuth(id=did, pds_url='http://some.pds/',
                            user_json=user_json, dpop_token=DPOP_TOKEN_STR).put()
 
-        sess.setdefault(LOGINS_SESSION_KEY, []).append(
-            ('BlueskyAuth', 'did:plc:alice'))
+        sess.setdefault(LOGINS_SESSION_KEY, []).append(('BlueskyAuth', did))
 
         return auth
 
@@ -160,6 +159,35 @@ class="logo" title="Bluesky" />
         self.assert_multiline_in("""\
 <img src="http://in.st/@alice/pic" class="profile">
 <span style="unicode-bidi: isolate">@alice@in.st</span>""", body)
+
+    def test_to(self):
+        with self.client.session_transaction() as sess:
+            self.make_bluesky(sess)
+            auth = self.make_mastodon(sess)
+
+        resp = self.client.get(f'/to?from={auth.urlsafe().decode()}')
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+
+        self.assert_multiline_in("""\
+<a class="actor" href="/review?from=agNhcHByHgsSDE1hc3RvZG9uQXV0aCIMQGFsaWNlQGluLnN0DA&to=agNhcHByHgsSC0JsdWVza3lBdXRoIg1kaWQ6cGxjOmFsaWNlDA">
+<img src="/oauth_dropins_static/bluesky_icon.png"
+class="logo" title="Bluesky" />
+<img src="http://alice/pic" class="profile">
+<span style="unicode-bidi: isolate">al.ice</span>""", body)
+        self.assertNotIn("""\
+<img src="http://in.st/@alice/pic" class="profile">
+<span style="unicode-bidi: isolate">@alice@in.st</span>""", body)
+
+    def test_to_did_web(self):
+        with self.client.session_transaction() as sess:
+            auth = self.make_bluesky(sess, did='did:web:alice.com')
+
+        resp = self.client.get(f'/to?from={auth.urlsafe().decode()}')
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual('/', resp.headers['Location'])
+        self.assertEqual(['Sorry, did:webs are not currently supported.'],
+                         get_flashed_messages())
 
     def test_review_no_auth_param(self):
         resp = self.client.get('/review')

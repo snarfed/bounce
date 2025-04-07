@@ -44,7 +44,7 @@
       <a id="logins" href="/from">
       {% for auth in auths %}  {# oauth-dropins auth entities #}
         <nobr title="{{ auth.site_name() }}: {{ auth.user_display_name() }}">
-          <img class="profile" src="{{ auth.image_url() }}" />
+          <img class="profile" src="{{ auth.image_url()|safe }}" />
           <img class="provider" width="24"
                src="/oauth_dropins_static/{{ auth.site_name().lower() }}_icon.png" />
         </nobr>

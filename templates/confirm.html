@@ -23,6 +23,12 @@
 <ul>
 </div>
 
+{% if from_auth.site_name() == 'Bluesky' %}
+<div class="row" style="text-align: left">
+<p>We've asked your Bluesky PDS to email you a security code for updating your 
+</div>
+{% endif %}
+
 <div class="row big">
 <form action="/migrate" method="post">
   <input type="submit" class="btn btn-success" value="Migrate" />
