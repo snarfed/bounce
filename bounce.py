@@ -140,27 +140,27 @@ class Migration(ndb.Model):
 #
 # views
 #
-def render(template, login_forms=False, **vars):
+def render(template, **vars):
     """Wrapper for Flask.render_template that populates common template vars.
-
-    Args:
-      login_forms (bool): whether to render and include the ``*_button`` variables
-        with the OAuth login forms.
     """
     if 'auths' not in vars:
-        vars['auths'] = [a for a in ndb.get_multi(oauth_dropins.get_logins()) if a]
+        vars['auths'] = []
+        for auth in ndb.get_multi(oauth_dropins.get_logins()):
+            if auth:
+                user_json = json.loads(auth.user_json)
+                auth.url = granary_source(auth).to_as1_actor(user_json).get('url')
+                vars['auths'].append(auth)
 
-    if login_forms:
-        vars.update({
-            'bluesky_button': oauth_dropins.bluesky.Start.button_html(
-                '/oauth/bluesky/start', image_prefix='/oauth_dropins_static/'),
-            'mastodon_button': oauth_dropins.mastodon.Start.button_html(
-                '/oauth/mastodon/start', image_prefix='/oauth_dropins_static/'),
-            'pixelfed_button': oauth_dropins.pixelfed.Start.button_html(
-                '/oauth/pixelfed/start', image_prefix='/oauth_dropins_static/'),
-            # threads_button': oauth_dropins.threads.Start.button_html(
-            #     '/oauth/threads/start', image_prefix='/oauth_dropins_static/'),
-        })
+    vars.update({
+        'bluesky_button': oauth_dropins.bluesky.Start.button_html(
+            '/oauth/bluesky/start', image_prefix='/oauth_dropins_static/'),
+        'mastodon_button': oauth_dropins.mastodon.Start.button_html(
+            '/oauth/mastodon/start', image_prefix='/oauth_dropins_static/'),
+        'pixelfed_button': oauth_dropins.pixelfed.Start.button_html(
+            '/oauth/pixelfed/start', image_prefix='/oauth_dropins_static/'),
+        'threads_button': oauth_dropins.threads.Start.button_html(
+            '/oauth/threads/start', image_prefix='/oauth_dropins_static/'),
+    })
 
     return render_template(template, **vars)
 
@@ -235,7 +235,7 @@ def get_user(auth):
 @flask_util.headers(CACHE_CONTROL)
 def front_page():
     """View for the front page."""
-    return render('index.html', login_forms=True)
+    return render('index.html')
 
 @app.get('/docs')
 @flask_util.headers(CACHE_CONTROL)
@@ -252,9 +252,9 @@ def logout():
     return redirect('/', code=302)
 
 
-@app.get('/accounts')
-def accounts():
-    """User accounts page. Requires logged in session."""
+@app.get('/from')
+def choose_from():
+    """Choose account to migrate from."""
     logins = oauth_dropins.get_logins()
     if not logins:
         return redirect('/', code=302)
@@ -262,32 +262,50 @@ def accounts():
     auths = []
     for auth in ndb.get_multi(logins):
         if auth:
-            auth.url = f'/review?key={auth.key.urlsafe().decode()}'
+            auth.url = f'/to?from={auth.key.urlsafe().decode()}'
             auths.append(auth)
 
-    return render('accounts.html', auths=auths)
+    return render('accounts.html', body_id='from', auths=auths)
+
+
+@app.get('/to')
+@require_login('from')
+def choose_to(from_auth):
+    """Choose account to migrate to."""
+    logins = oauth_dropins.get_logins()
+    if not logins:
+        return redirect('/', code=302)
+
+    from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
+    auths = []
+    for auth in ndb.get_multi(logins):
+        if auth and from_proto != AUTH_TO_PROTOCOL[auth.__class__]:
+            auth.url = f'/review?from={from_auth.key.urlsafe().decode()}&to={auth.key.urlsafe().decode()}'
+            auths.append(auth)
+
+    return render('accounts.html', body_id='to', auths=auths, from_proto=from_proto)
 
 
 @app.get('/review')
-@require_login('auth')
-def review(auth):
+@require_login('from')
+@require_login('to')
+def review(from_auth, to_auth):
     """Review an account's followers and follows."""
-    cache_key = f'review-html-{auth.key.id()}'
+    from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
+    assert from_proto in (ActivityPub, ATProto)
+    to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
+    assert to_proto in (ActivityPub, ATProto)
+
+    cache_key = f'review-html-{from_auth.key.id()}-{to_proto.ABBREV}'
     if 'force' not in request.args:
         if cached := Cache.get(cache_key):
-            logger.info(f'Returning cached review for {auth.key.id()}')
+            logger.info(f'Returning cached review for {from_auth.key.id()}')
             return cached
 
-    logger.info(f'Reviewing {auth.key.id()} {auth.user_display_name()}')
+    logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
-    source = granary_source(auth)
-    auth.url = source.to_as1_actor(json.loads(auth.user_json)).get('url')
-    from_proto = AUTH_TO_PROTOCOL[auth.__class__]
-    assert from_proto in (ActivityPub, ATProto)
-
-    # TODO: user chooses account they're migrating to first!
-    to_proto = ATProto if from_proto == ActivityPub else ActivityPub
-    assert to_proto in (ActivityPub, ATProto)
+    source = granary_source(from_auth)
+    from_auth.url = source.to_as1_actor(json.loads(from_auth.user_json)).get('url')
 
     #
     # followers
@@ -368,8 +386,8 @@ def review(auth):
 
     html = render(
         'review.html',
-        auth=auth,
-        to_proto=to_proto,
+        from_auth=from_auth,
+        to_auth=to_auth,
         followers=followers,
         follows=follows,
         follower_counts=[['type', 'count']] + sorted(follower_counts),
@@ -380,38 +398,20 @@ def review(auth):
     return html
 
 
-@app.get('/choose-to-account')
-@require_login('from_auth')
-def choose_to_account(from_auth):
-    logins = oauth_dropins.get_logins()
-    if not logins:
-        return redirect('/', code=302)
-
-    auths = []
-    for auth in ndb.get_multi(logins):
-        if auth and (AUTH_TO_PROTOCOL[from_auth.__class__]
-                     != AUTH_TO_PROTOCOL[auth.__class__]):
-            auth.url = f'/migrate-confirm?from_auth={from_auth.key.urlsafe().decode()}&to_auth={auth.key.urlsafe().decode()}'
-            auths.append(auth)
-
-    # TODO: only show protocols that aren't from
-    return render('choose_to_account.html', login_forms=True, auths=auths)
-
-
-@app.get('/migrate-confirm')
-@require_login('from_auth')
-@require_login('to_auth')
+@app.get('/confirm')
+@require_login('from')
+@require_login('to')
 def migrate_confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
     if AUTH_TO_PROTOCOL[from_auth.__class__] == AUTH_TO_PROTOCOL[to_auth.__class__]:
         error(f"Can't migrate {from_auth.__class__.__name__} to {to_auth.__class__.__name__}")
 
-    return render('migrate-confirm.html', from_auth=from_auth, to_auth=to_auth)
+    return render('confirm.html', from_auth=from_auth, to_auth=to_auth)
 
 
 @app.post('/migrate')
-@require_login('from_auth')
-@require_login('to_auth')
+@require_login('from')
+@require_login('to')
 def migrate(from_auth, to_auth):
     """Migration handler."""
     logger.info(f'Migrating {from_auth.key.id()}')

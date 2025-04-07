@@ -131,28 +131,28 @@ class BounceTest(TestCase, Asserts):
         self.assertEqual('/', resp.headers['Location'])
         self.assertNotIn(LOGINS_SESSION_KEY, session)
 
-    def test_accounts_no_logins(self):
-        resp = self.client.get('/accounts')
+    def test_from_no_logins(self):
+        resp = self.client.get('/from')
         self.assertEqual(302, resp.status_code)
         self.assertEqual('/', resp.headers['Location'])
 
-    def test_accounts(self):
+    def test_from(self):
         with self.client.session_transaction() as sess:
             self.make_bluesky(sess)
             self.make_mastodon(sess)
 
-        resp = self.client.get('/accounts')
+        resp = self.client.get('/from')
         self.assertEqual(200, resp.status_code)
         body = resp.get_data(as_text=True)
 
         self.assert_multiline_in("""\
-<a id="logins" href="/accounts">
+<a id="logins" href="/from">
 <nobr title="Bluesky: al.ice">""", body, ignore_blanks=True)
         self.assert_multiline_in("""\
 <nobr title="Mastodon: @alice@in.st">""", body)
 
         self.assert_multiline_in("""\
-<a class="actor" href="/review?key=agNhcHByHgsSC0JsdWVza3lBdXRoIg1kaWQ6cGxjOmFsaWNlDA">
+<a class="actor" href="/to?from=agNhcHByHgsSC0JsdWVza3lBdXRoIg1kaWQ6cGxjOmFsaWNlDA">
 <img src="/oauth_dropins_static/bluesky_icon.png"
 class="logo" title="Bluesky" />
 <img src="http://alice/pic" class="profile">
@@ -166,12 +166,15 @@ class="logo" title="Bluesky" />
         self.assertEqual(400, resp.status_code)
 
     def test_review_not_logged_in(self):
-        resp = self.client.get('/review?auth=ahBicmlkZ3ktZmVkZXJhdGVkchcLEgxNYXN0b2RvbkF1dGgiBWFAYi5jDA')
+        resp = self.client.get('/review?from=ahBicmlkZ3ktZmVkZXJhdGVkchcLEgxNYXN0b2RvbkF1dGgiBWFAYi5jDA&to=ahBicmlkZ3ktZmVkZXJhdGVkchcLEgxNYXN0b2RvbkF1dGgiBWFAYi5jDA')
         self.assertEqual(302, resp.status_code)
         self.assertEqual('/', resp.headers['Location'])
 
+    @patch('oauth_dropins.bluesky.oauth_client_for_pds',
+           return_value=OAuth2Client(token_endpoint='https://un/used',
+                                     client_id='unused', client_secret='unused'))
     @patch('requests.get')
-    def test_review_mastodon(self, mock_get):
+    def test_review_mastodon(self, mock_get, mock_oauth2client):
         alice = {
             'id': '234',
             'uri': 'http://in.st/users/alice',
@@ -206,9 +209,10 @@ class="logo" title="Bluesky" />
             Web(id='e.ve', enabled_protocols=['atproto']).put()
 
         with self.client.session_transaction() as sess:
-            auth = self.make_mastodon(sess)
+            from_auth = self.make_mastodon(sess)
+            to_auth = self.make_bluesky(sess)
 
-        resp = self.client.get(f'/review?auth={auth.urlsafe().decode()}')
+        resp = self.client.get(f'/review?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
 
         self.assertEqual(2, mock_get.call_count)
@@ -227,7 +231,7 @@ chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto",
 
         text = html_to_text(body)
         self.assert_multiline_in("""
-When you migrate  @alice@in.st to Bluesky...
+When you migrate  @alice@in.st to  al.ice ...
 ### You'll keep _all_ of your followers.
 * @alice@in.st · Ms Alice
 * @bo.b@bsky.brid.gy
@@ -237,7 +241,7 @@ When you migrate  @alice@in.st to Bluesky...
 * @e.ve@web.brid.gy""", text, ignore_blanks=True)
 
         mock_get.reset_mock()
-        resp = self.client.get(f'/review?auth={auth.urlsafe().decode()}')
+        resp = self.client.get(f'/review?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
         self.assertEqual(0, mock_get.call_count)
 
@@ -285,9 +289,10 @@ When you migrate  @alice@in.st to Bluesky...
                 copies=[Target(protocol='atproto', uri='did:plc:eve')]).put()
 
         with self.client.session_transaction() as sess:
-            auth = self.make_bluesky(sess)
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
 
-        resp = self.client.get(f'/review?auth={auth.urlsafe().decode()}')
+        resp = self.client.get(f'/review?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
 
         self.assertEqual(3, mock_get.call_count)
@@ -308,7 +313,7 @@ chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto",
 
         text = html_to_text(body)
         self.assert_multiline_in("""
-When you migrate  al.ice to the fediverse...
+When you migrate  al.ice to  @alice@in.st ...
 ### You'll keep _all_ of your followers.
 * al.ice · Ms Alice
 * bo.b
@@ -322,15 +327,15 @@ When you migrate  al.ice to the fediverse...
             auth = self.make_mastodon(sess)
 
         for fn in (self.client.get, self.client.post):
-            resp = self.client.post(f'/migrate?to_auth={auth.urlsafe().decode()}')
+            resp = self.client.post(f'/migrate?to={auth.urlsafe().decode()}')
             self.assertEqual(400, resp.status_code)
 
-    def test_migrate_no_to_auth(self):
+    def test_migrate_no_to(self):
         with self.client.session_transaction() as sess:
             auth = self.make_mastodon(sess)
 
         for fn in (self.client.get, self.client.post):
-            resp = self.client.post(f'/migrate?from_auth={auth.urlsafe().decode()}')
+            resp = self.client.post(f'/migrate?from={auth.urlsafe().decode()}')
             self.assertEqual(400, resp.status_code)
 
     def test_migrate_not_logged_in(self):
@@ -338,7 +343,7 @@ When you migrate  al.ice to the fediverse...
         to_auth = BlueskyAuth(id='did:foo').key.urlsafe().decode()
 
         for fn in (self.client.get, self.client.post):
-            resp = self.client.post(f'/migrate?from_auth={from_auth}&to_auth={to_auth}')
+            resp = self.client.post(f'/migrate?from={from_auth}&to={to_auth}')
             self.assertEqual(302, resp.status_code)
             self.assertEqual('/', resp.headers['Location'])
 
@@ -347,7 +352,7 @@ When you migrate  al.ice to the fediverse...
             from_auth = self.make_mastodon(sess)
             to_auth = self.make_bluesky(sess)
 
-        resp = self.client.post(f'/migrate?from_auth={from_auth.urlsafe().decode()}&to_auth={to_auth.urlsafe().decode()}')
+        resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
         self.assertEqual(404, resp.status_code)
 
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
@@ -376,7 +381,7 @@ When you migrate  al.ice to the fediverse...
                               to_follow=['did:bob', 'did:eve'],
                               ).put()
 
-        resp = self.client.post(f'/migrate?from_auth={from_auth.urlsafe().decode()}&to_auth={to_auth.urlsafe().decode()}')
+        resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
         self.assertEqual('ok', resp.get_data(as_text=True))
 
@@ -441,7 +446,7 @@ When you migrate  al.ice to the fediverse...
                               followed=['http://other/zed'],
                               ).put()
 
-        resp = self.client.post(f'/migrate?from_auth={from_auth.urlsafe().decode()}&to_auth={to_auth.urlsafe().decode()}')
+        resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
         self.assertEqual('ok', resp.get_data(as_text=True))
 

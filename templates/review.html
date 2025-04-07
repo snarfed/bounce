@@ -39,7 +39,9 @@
 </script>
 
 <div class="row big">
-<p>When you migrate {% include 'account_label.html' %} to {{ to_proto.PHRASE }}...</p>
+<p>When you migrate
+   {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %} to
+   {% with auth = to_auth %}{% include 'account_label.html' %}{% endwith %} ...</p>
 </div>
 
 <div class="row">

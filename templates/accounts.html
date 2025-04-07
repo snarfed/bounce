@@ -1,10 +1,16 @@
-{% set body_id = 'accounts' %}
 {% extends "base.html" %}
 
 {% block content %}
 
-<h1 class="row" style="text-align: center">Accounts</h1>
+<div class="row">
+<p class="big">Choose an account to migrate{% if body_id == 'to' %} <em>to</em>{% endif %}.</p>
+{% if body_id == 'to' %}
+  <p>We'll ask for write permission so that we can migrate your follows into this account.</p>
+{% endif %}
+</div>
 
+{% if auths %}
+<form>
 {% for auth in auths %}
 <div class="row big account">
   {% include 'account_label.html' %}
@@ -12,13 +18,21 @@
 {% if not loop.last %}<hr>{% endif %}
 {% endfor %}
 
-<br>
-<form action="/" method="get">
-  <input type="submit" class="btn btn-default" value="Add account" />
-</form>
-<form action="/logout" method="post">
-  <input type="submit" class="btn btn-default disable-button"
-         value="Log out of all accounts" />
-</form>
+<div class="row big">
+<p>...or migrate {% if body_id == 'to' %}to {% endif %}another account:</p>
+</div>
+
+{% endif %}
+
+<div class="row big" style="font-size: 14px">
+  {% if not from_proto or from_proto.LABEL != 'atproto' %}
+    <p>{{ bluesky_button|safe }}</p>
+  {% endif %}
+  {% if not from_proto or from_proto.LABEL != 'activitypub' %}
+    <p>{{ mastodon_button|safe }}</p>
+    <p>{{ pixelfed_button|safe }}</p>
+    <!-- <p>{{ threads_button|safe }}</p> -->
+  {% endif %}
+</div>
 
 {% endblock content %}
