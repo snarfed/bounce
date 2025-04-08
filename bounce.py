@@ -137,24 +137,21 @@ class Migration(ndb.Model):
     updated = ndb.DateTimeProperty(auto_now=True, tzinfo=timezone.utc)
 
 
-#
-# views
-#
-def render(template, oauth_path_suffix='', **vars):
-    """Wrapper for Flask.render_template that populates common template vars.
+def template_vars(oauth_path_suffix=''):
+    """Returns base template vars common to most views.
 
     Args:
       oauth_path_suffix: appended to the end of the OAuth start URL paths
     """
-    if 'auths' not in vars:
-        vars['auths'] = []
-        for auth in ndb.get_multi(oauth_dropins.get_logins()):
-            if auth:
-                user_json = json.loads(auth.user_json)
-                auth.url = granary_source(auth).to_as1_actor(user_json).get('url')
-                vars['auths'].append(auth)
+    auths = []
+    for auth in ndb.get_multi(oauth_dropins.get_logins()):
+        if auth:
+            user_json = json.loads(auth.user_json)
+            auth.url = granary_source(auth).to_as1_actor(user_json).get('url')
+            auths.append(auth)
 
-    vars.update({
+    return {
+        'auths': auths,
         'bluesky_button': oauth_dropins.bluesky.Start.button_html(
             f'/oauth/bluesky/start/{oauth_path_suffix}',
             image_prefix='/oauth_dropins_static/'),
@@ -167,9 +164,7 @@ def render(template, oauth_path_suffix='', **vars):
         'threads_button': oauth_dropins.threads.Start.button_html(
             f'/oauth/threads/start/{oauth_path_suffix}',
             image_prefix='/oauth_dropins_static/'),
-    })
-
-    return render_template(template, **vars)
+    }
 
 
 def require_login(params):
@@ -208,11 +203,12 @@ def require_login(params):
     return decorator
 
 
-def granary_source(auth):
+def granary_source(auth, with_auth=False):
     """Returns a granary source instance for a given auth entity.
 
     Args:
       auth (oauth_dropins.models.BaseAuth)
+      with_auth (bool)
 
     Returns:
       granary.source.Source:
@@ -223,12 +219,16 @@ def granary_source(auth):
                         user_id=auth.user_id())
 
     elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
-        oauth_client = oauth_dropins.bluesky.oauth_client_for_pds(
-            bluesky_oauth_client_metadata(), auth.pds_url)
-        token = DPoPTokenSerializer.default_loader(auth.dpop_token)
-        dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
+        extra = {}
+        if with_auth:
+            oauth_client = oauth_dropins.bluesky.oauth_client_for_pds(
+                bluesky_oauth_client_metadata(), auth.pds_url)
+            token = DPoPTokenSerializer.default_loader(auth.dpop_token)
+            dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
+            extra['auth'] =dpop_auth
+
         return Bluesky(pds_url=auth.pds_url, handle=auth.user_display_name(),
-                       did=auth.key.id(), auth=dpop_auth)
+                       did=auth.key.id(), **extra)
 
 
 def get_user(auth):
@@ -248,17 +248,21 @@ def get_user(auth):
             return ATProto.get_or_create(auth.key.id())
 
 
+#
+# views
+#
 @app.get('/')
 @flask_util.headers(CACHE_CONTROL)
 def front_page():
     """View for the front page."""
-    return render('index.html')
+    return render_template('index.html', **template_vars())
+
 
 @app.get('/docs')
 @flask_util.headers(CACHE_CONTROL)
 def docs():
     """View for the docs page."""
-    return render('docs.html')
+    return render_template('docs.html', **template_vars())
 
 
 @app.post('/logout')
@@ -272,15 +276,17 @@ def logout():
 @app.get('/from')
 def choose_from():
     """Choose account to migrate from."""
-    logins = oauth_dropins.get_logins()
-    auths = []
-    for auth in ndb.get_multi(logins):
-        if auth:
-            auth.url = f'/to?from={auth.key.urlsafe().decode()}'
-            auths.append(auth)
+    vars = template_vars(oauth_path_suffix='from')
 
-    return render('accounts.html', body_id='from', auths=auths,
-                  oauth_path_suffix='from')
+    for auth in vars['auths']:
+        auth.url = f'/to?from={auth.key.urlsafe().decode()}'
+
+    return render_template(
+        'accounts.html',
+        body_id='from',
+        accounts=vars['auths'],
+        **vars,
+    )
 
 
 @app.get('/to')
@@ -291,23 +297,23 @@ def choose_to(from_auth):
         flash('Sorry, did:webs are not currently supported.')
         return redirect('/', code=302)
 
-    logins = oauth_dropins.get_logins()
-    if not logins:
-        return redirect('/', code=302)
+    vars = template_vars(oauth_path_suffix='to')
+
+    for auth in vars['auths']:
+        auth.url = f'/review?from={from_auth.key.urlsafe().decode()}&to={auth.key.urlsafe().decode()}'
 
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
-    auths = []
-    for auth in ndb.get_multi(logins):
-        if auth and from_proto != AUTH_TO_PROTOCOL[auth.__class__]:
-            auth.url = f'/review?from={from_auth.key.urlsafe().decode()}&to={auth.key.urlsafe().decode()}'
-            auths.append(auth)
+    accounts = [auth for auth in vars['auths']
+                if from_proto != AUTH_TO_PROTOCOL[auth.__class__]]
 
-    return render('accounts.html',
-                  body_id='to',
-                  from_auth=from_auth,
-                  auths=auths,
-                  from_proto=from_proto,
-                  oauth_path_suffix='to')
+    return render_template(
+        'accounts.html',
+        body_id='to',
+        from_auth=from_auth,
+        from_proto=from_proto,
+        accounts=accounts,
+        **vars
+    )
 
     # STATE: how to preserve 'from' query param through OAuth here? state?
 
@@ -330,7 +336,7 @@ def review(from_auth, to_auth):
 
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
-    source = granary_source(from_auth)
+    source = granary_source(from_auth, with_auth=True)
     from_auth.url = source.to_as1_actor(json.loads(from_auth.user_json)).get('url')
 
     #
@@ -410,7 +416,7 @@ def review(from_auth, to_auth):
         for f in followers + follows:
             f['username'] = as2.address(as2.from_as1(f))
 
-    html = render(
+    html = render_template(
         'review.html',
         from_auth=from_auth,
         to_auth=to_auth,
@@ -419,6 +425,7 @@ def review(from_auth, to_auth):
         follower_counts=[['type', 'count']] + sorted(follower_counts),
         follow_counts=[['type', 'count']] + sorted(follow_counts),
         keep_follows_pct=round(total_bridged / len(follows) * 100),
+        **template_vars(),
     )
     Cache.put(cache_key, html, expire=timedelta(days=30))
     return html
@@ -432,7 +439,12 @@ def bluesky_password(from_auth, to_auth):
     if not isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
         error(f'{from_auth.key.id()} is not Bluesky')
 
-    return render('bluesky_password.html', from_auth=from_auth, to_auth=to_auth)
+    return render_template(
+        'bluesky_password.html',
+        from_auth=from_auth,
+        to_auth=to_auth,
+        **template_vars(),
+    )
 
 
 @app.post('/confirm')
@@ -452,7 +464,12 @@ def confirm(from_auth, to_auth):
         # if 'resend' in request.form:
         #     flash("Sent new PLC code to your Bluesky account's email address.")
 
-    return render('confirm.html', from_auth=from_auth, to_auth=to_auth)
+    return render_template(
+        'confirm.html',
+        from_auth=from_auth,
+        to_auth=to_auth,
+        **template_vars(),
+    )
 
 
 @app.post('/migrate')
@@ -501,7 +518,7 @@ def migrate_follows(migration, to_auth):
     logging.info(f'Creating follows for {to_auth.key_id()}')
     to_follow = migration.to_follow
     migration.to_follow = []
-    source = granary_source(to_auth)
+    source = granary_source(to_auth, with_auth=True)
 
     for user_id in to_follow:
         logger.info(f'Folowing {user_id}')

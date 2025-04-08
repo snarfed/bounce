@@ -3,19 +3,19 @@
 {% block content %}
 
 <div class="row">
-<p class="big">Choose an account to migrate{% if body_id == 'to' %}
+<p class="big">{{ 'Choose' if accounts else 'Log into' }} an account to migrate{% if body_id == 'to' %}
   {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
   <em>to</em>{% endif %}.</p>
-{% if body_id == 'to' %}
-  <p>We'll ask for write permission so that we can migrate your follows into this account.</p>
-{% endif %}
+<!-- {% if body_id == 'to' %} -->
+<!--   <p>We'll ask for write permission so that we can migrate your follows into this account.</p> -->
+<!-- {% endif %} -->
 </div>
 
-{% if auths %}
-{% for auth in auths %}
-<div class="row big account">
-  {% include 'account_label.html' %}
-</div>
+{% if accounts %}
+{% for auth in accounts %}
+  <div class="row big account">
+    {% include 'account_label.html' %}
+  </div>
 {% if not loop.last %}<hr>{% endif %}
 {% endfor %}
 
