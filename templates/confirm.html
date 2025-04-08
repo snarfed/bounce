@@ -23,27 +23,23 @@
 <ul>
 </div>
 
+
 <form action="/migrate" method="post">
-{% if from_auth.site_name() == 'Bluesky' %}
-<div class="row" style="text-align: left">
-  <p>
-    We've asked Bluesky to email you a security code to migrate your account's PDS. Please enter that code here.
-    <button form="resend" value="Resend code" />
-  </p>
-  <input required type="text" name="plc-code" id="plc-code" />
-</div>
-{% endif %}
+<div class="row">
+  {% if from_auth.site_name() == 'Bluesky' %}
+    <p>We've asked Bluesky to email you a confirmation. Please enter that code here.
+    <p><input required type="text" name="plc-code" id="plc-code"
+           placeholder="A1B2C-D3E4F" />
+  {% endif %}
 
-<div class="row big">
-  <input type="submit" class="btn btn-success" value="Migrate" />
+  <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
+  <input type="hidden" name="to" value="{{ to_auth.key.urlsafe().decode() }}" />
+  <input type="submit" class="btn btn-danger" value="Migrate" />
+
+  {% if from_auth.site_name() == 'Bluesky' %}
+    <p><a href="/bluesky-password?from_auth={{ from_auth.key.urlsafe().decode() }}&to_auth={{ to_auth.key.urlsafe().decode() }}">Click here to send a new code.</a>
+  {% endif %}
 </div>
 </form>
-
-<form id="resend" action="/confirm" method="post">
-  <input type="hidden" name="resend" />
-  <input type="hidden" name="from_auth" value="{{ from_auth.key.urlsafe() }}" />
-  <input type="hidden" name="to_auth" value="{{ to_auth.key.urlsafe() }}" />
-</form>
-
 
 {% endblock content %}

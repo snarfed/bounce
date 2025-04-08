@@ -190,7 +190,7 @@ def require_login(params):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             for param in params:
-                if urlsafe_key := request.args.get(param):
+                if urlsafe_key := request.values.get(param):
                     break
             else:
                 error(f'missing one of required params: {params}')
@@ -424,10 +424,21 @@ def review(from_auth, to_auth):
     return html
 
 
+@app.get('/bluesky-password')
+@require_login('from')
+@require_login('to')
+def bluesky_password(from_auth, to_auth):
+    """View for entering the user's Bluesky password."""
+    if not isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
+        error(f'{from_auth.key.id()} is not Bluesky')
+
+    return render('bluesky_password.html', from_auth=from_auth, to_auth=to_auth)
+
+
 @app.post('/confirm')
 @require_login('from')
 @require_login('to')
-def migrate_confirm(from_auth, to_auth):
+def confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
     if AUTH_TO_PROTOCOL[from_auth.__class__] == AUTH_TO_PROTOCOL[to_auth.__class__]:
         error(f"Can't migrate {from_auth.__class__.__name__} to {to_auth.__class__.__name__}")
@@ -435,10 +446,11 @@ def migrate_confirm(from_auth, to_auth):
     if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
         # ask their PDS to email them a code that we'll need for it to sign the
         # PLC update operation
-        pds_client = from_auth.oauth_api(bluesky_oauth_client_metadata())
+        pds_client = oauth_dropins.bluesky.BlueskyAuth._api_from_password(
+            from_auth.key.id(), get_required_param('password'))
         pds_client.com.atproto.identity.requestPlcOperationSignature()
-        if 'resend' in request.form:
-            flash("Sent new PLC code to your Bluesky account's email address.")
+        # if 'resend' in request.form:
+        #     flash("Sent new PLC code to your Bluesky account's email address.")
 
     return render('confirm.html', from_auth=from_auth, to_auth=to_auth)
 
@@ -542,7 +554,7 @@ def migrate_in(migration, from_auth, from_user):
     if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
         kwargs = {
             'dpop_token': DPoPTokenSerializer.default_loader(from_auth.dpop_token),
-            # 'plc_code': TODO
+            # 'plc_code': get_required_param('plc-code'),
         }
 
     # from_user.migrate_in(to_user, from_user.key.id(), **kwargs)
