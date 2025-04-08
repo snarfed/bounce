@@ -3,14 +3,15 @@
 {% block content %}
 
 <div class="row">
-<p class="big">Choose an account to migrate{% if body_id == 'to' %} <em>to</em>{% endif %}.</p>
+<p class="big">Choose an account to migrate{% if body_id == 'to' %}
+  {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
+  <em>to</em>{% endif %}.</p>
 {% if body_id == 'to' %}
   <p>We'll ask for write permission so that we can migrate your follows into this account.</p>
 {% endif %}
 </div>
 
 {% if auths %}
-<form>
 {% for auth in auths %}
 <div class="row big account">
   {% include 'account_label.html' %}
@@ -26,11 +27,11 @@
 
 <div class="row big" style="font-size: 14px">
   {% if not from_proto or from_proto.LABEL != 'atproto' %}
-    <p>{{ bluesky_button|safe }}</p>
+    <p>{{ bluesky_button|safe }}
   {% endif %}
   {% if not from_proto or from_proto.LABEL != 'activitypub' %}
-    <p>{{ mastodon_button|safe }}</p>
-    <p>{{ pixelfed_button|safe }}</p>
+    <p>{{ mastodon_button|safe }}
+    <p>{{ pixelfed_button|safe }}
     <!-- <p>{{ threads_button|safe }}</p> -->
   {% endif %}
 </div>

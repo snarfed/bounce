@@ -130,11 +130,6 @@ class BounceTest(TestCase, Asserts):
         self.assertEqual('/', resp.headers['Location'])
         self.assertNotIn(LOGINS_SESSION_KEY, session)
 
-    def test_from_no_logins(self):
-        resp = self.client.get('/from')
-        self.assertEqual(302, resp.status_code)
-        self.assertEqual('/', resp.headers['Location'])
-
     def test_from(self):
         with self.client.session_transaction() as sess:
             self.make_bluesky(sess)
@@ -350,7 +345,7 @@ When you migrate  al.ice to  @alice@in.st ...
 * bo.b
 * e.ve""", text, ignore_blanks=True)
 
-    def test_migrate_no_from_auth(self):
+    def test_migrate_no_from(self):
         with self.client.session_transaction() as sess:
             auth = self.make_mastodon(sess)
 
@@ -375,7 +370,7 @@ When you migrate  al.ice to  @alice@in.st ...
             self.assertEqual(302, resp.status_code)
             self.assertEqual('/', resp.headers['Location'])
 
-    def test_migrate_no_migration(self):
+    def test_migrate_no_stored_migration(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
             to_auth = self.make_bluesky(sess)

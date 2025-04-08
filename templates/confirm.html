@@ -23,16 +23,27 @@
 <ul>
 </div>
 
+<form action="/migrate" method="post">
 {% if from_auth.site_name() == 'Bluesky' %}
 <div class="row" style="text-align: left">
-<p>We've asked your Bluesky PDS to email you a security code for updating your 
+  <p>
+    We've asked Bluesky to email you a security code to migrate your account's PDS. Please enter that code here.
+    <button form="resend" value="Resend code" />
+  </p>
+  <input required type="text" name="plc-code" id="plc-code" />
 </div>
 {% endif %}
 
 <div class="row big">
-<form action="/migrate" method="post">
   <input type="submit" class="btn btn-success" value="Migrate" />
-</form>
 </div>
+</form>
+
+<form id="resend" action="/confirm" method="post">
+  <input type="hidden" name="resend" />
+  <input type="hidden" name="from_auth" value="{{ from_auth.key.urlsafe() }}" />
+  <input type="hidden" name="to_auth" value="{{ to_auth.key.urlsafe() }}" />
+</form>
+
 
 {% endblock content %}

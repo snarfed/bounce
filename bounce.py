@@ -140,8 +140,11 @@ class Migration(ndb.Model):
 #
 # views
 #
-def render(template, **vars):
+def render(template, oauth_path_suffix='', **vars):
     """Wrapper for Flask.render_template that populates common template vars.
+
+    Args:
+      oauth_path_suffix: appended to the end of the OAuth start URL paths
     """
     if 'auths' not in vars:
         vars['auths'] = []
@@ -153,32 +156,46 @@ def render(template, **vars):
 
     vars.update({
         'bluesky_button': oauth_dropins.bluesky.Start.button_html(
-            '/oauth/bluesky/start', image_prefix='/oauth_dropins_static/'),
+            f'/oauth/bluesky/start/{oauth_path_suffix}',
+            image_prefix='/oauth_dropins_static/'),
         'mastodon_button': oauth_dropins.mastodon.Start.button_html(
-            '/oauth/mastodon/start', image_prefix='/oauth_dropins_static/'),
+            f'/oauth/mastodon/start/{oauth_path_suffix}',
+            image_prefix='/oauth_dropins_static/'),
         'pixelfed_button': oauth_dropins.pixelfed.Start.button_html(
-            '/oauth/pixelfed/start', image_prefix='/oauth_dropins_static/'),
+            f'/oauth/pixelfed/start/{oauth_path_suffix}',
+            image_prefix='/oauth_dropins_static/'),
         'threads_button': oauth_dropins.threads.Start.button_html(
-            '/oauth/threads/start', image_prefix='/oauth_dropins_static/'),
+            f'/oauth/threads/start/{oauth_path_suffix}',
+            image_prefix='/oauth_dropins_static/'),
     })
 
     return render_template(template, **vars)
 
 
-def require_login(param):
+def require_login(params):
     """Decorator that requires and loads a logged in user.
 
     Passes the user into a positional arg to the function, as an oauth-dropins auth
     entity.
 
     Args:
-      param (str): HTTP query param with the url-safe ndb key for the oauth-dropins
-        auth entity
+      param (str or sequence of str): HTTP query param(s) with the url-safe ndb key
+        for the oauth-dropins auth entity
     """
+    if isinstance(params, str):
+        params = [params]
+    assert params
+
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
-            key = ndb.Key(urlsafe=get_required_param(param))
+            for param in params:
+                if urlsafe_key := request.args.get(param):
+                    break
+            else:
+                error(f'missing one of required params: {params}')
+
+            key = ndb.Key(urlsafe=urlsafe_key)
             if key in oauth_dropins.get_logins():
                 if auth := key.get():
                     return fn(*args, auth, **kwargs)
@@ -256,20 +273,18 @@ def logout():
 def choose_from():
     """Choose account to migrate from."""
     logins = oauth_dropins.get_logins()
-    if not logins:
-        return redirect('/', code=302)
-
     auths = []
     for auth in ndb.get_multi(logins):
         if auth:
             auth.url = f'/to?from={auth.key.urlsafe().decode()}'
             auths.append(auth)
 
-    return render('accounts.html', body_id='from', auths=auths)
+    return render('accounts.html', body_id='from', auths=auths,
+                  oauth_path_suffix='from')
 
 
 @app.get('/to')
-@require_login('from')
+@require_login(('from', 'auth_entity'))
 def choose_to(from_auth):
     """Choose account to migrate to."""
     if from_auth.key.id().startswith('did:web:'):
@@ -287,12 +302,19 @@ def choose_to(from_auth):
             auth.url = f'/review?from={from_auth.key.urlsafe().decode()}&to={auth.key.urlsafe().decode()}'
             auths.append(auth)
 
-    return render('accounts.html', body_id='to', auths=auths, from_proto=from_proto)
+    return render('accounts.html',
+                  body_id='to',
+                  from_auth=from_auth,
+                  auths=auths,
+                  from_proto=from_proto,
+                  oauth_path_suffix='to')
+
+    # STATE: how to preserve 'from' query param through OAuth here? state?
 
 
 @app.get('/review')
 @require_login('from')
-@require_login('to')
+@require_login(('to', 'auth_entity'))
 def review(from_auth, to_auth):
     """Review an account's followers and follows."""
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
@@ -402,13 +424,21 @@ def review(from_auth, to_auth):
     return html
 
 
-@app.get('/confirm')
+@app.post('/confirm')
 @require_login('from')
 @require_login('to')
 def migrate_confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
     if AUTH_TO_PROTOCOL[from_auth.__class__] == AUTH_TO_PROTOCOL[to_auth.__class__]:
         error(f"Can't migrate {from_auth.__class__.__name__} to {to_auth.__class__.__name__}")
+
+    if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
+        # ask their PDS to email them a code that we'll need for it to sign the
+        # PLC update operation
+        pds_client = from_auth.oauth_api(bluesky_oauth_client_metadata())
+        pds_client.com.atproto.identity.requestPlcOperationSignature()
+        if 'resend' in request.form:
+            flash("Sent new PLC code to your Bluesky account's email address.")
 
     return render('confirm.html', from_auth=from_auth, to_auth=to_auth)
 
@@ -540,23 +570,38 @@ class PixelfedCallback(FlashErrors, oauth_dropins.pixelfed.Callback):
 #     pass
 
 
-app.add_url_rule('/oauth/mastodon/start', view_func=MastodonStart.as_view(
-                     '/oauth/mastodon/start', '/oauth/mastodon/finish'),
+app.add_url_rule('/oauth/mastodon/start/from', view_func=MastodonStart.as_view(
+                     '/oauth/mastodon/start/from', '/oauth/mastodon/finish/from'),
                  methods=['POST'])
-app.add_url_rule('/oauth/mastodon/finish', view_func=MastodonCallback.as_view(
-                     '/oauth/mastodon/finish', '/review'))
-
-app.add_url_rule('/oauth/pixelfed/start', view_func=PixelfedStart.as_view(
-                     '/oauth/pixelfed/start', '/oauth/pixelfed/finish'),
+app.add_url_rule('/oauth/mastodon/finish/from', view_func=MastodonCallback.as_view(
+                     '/oauth/mastodon/finish/from', '/to'))
+app.add_url_rule('/oauth/mastodon/start/to', view_func=MastodonStart.as_view(
+                     '/oauth/mastodon/start/to', '/oauth/mastodon/finish/to'),
                  methods=['POST'])
-app.add_url_rule('/oauth/pixelfed/finish', view_func=PixelfedCallback.as_view(
-                     '/oauth/pixelfed/finish', '/review'))
+app.add_url_rule('/oauth/mastodon/finish/to', view_func=MastodonCallback.as_view(
+                     '/oauth/mastodon/finish/to', '/rev'))
 
-# app.add_url_rule('/oauth/threads/start', view_func=ThreadsStart.as_view(
-#                      '/oauth/threads/start', '/oauth/threads/finish'),
+app.add_url_rule('/oauth/pixelfed/start/from', view_func=PixelfedStart.as_view(
+                     '/oauth/pixelfed/start/from', '/oauth/pixelfed/finish/from'),
+                 methods=['POST'])
+app.add_url_rule('/oauth/pixelfed/finish/from', view_func=PixelfedCallback.as_view(
+                     '/oauth/pixelfed/finish/from', '/to'))
+app.add_url_rule('/oauth/pixelfed/start/to', view_func=PixelfedStart.as_view(
+                     '/oauth/pixelfed/start/to', '/oauth/pixelfed/finish/to'),
+                 methods=['POST'])
+app.add_url_rule('/oauth/pixelfed/finish/to', view_func=PixelfedCallback.as_view(
+                     '/oauth/pixelfed/finish/to', '/review'))
+
+# app.add_url_rule('/oauth/threads/start/from', view_func=ThreadsStart.as_view(
+#                      '/oauth/threads/start/from', '/oauth/threads/finish/from'),
 #                  methods=['POST'])
-# app.add_url_rule('/oauth/threads/finish', view_func=ThreadsCallback.as_view(
-#                      '/oauth/threads/finish', '/review'))
+# app.add_url_rule('/oauth/threads/finish/from', view_func=ThreadsCallback.as_view(
+#                      '/oauth/threads/finish/from', '/to'))
+# app.add_url_rule('/oauth/threads/start/to', view_func=ThreadsStart.as_view(
+#                      '/oauth/threads/start/to', '/oauth/threads/finish/to'),
+#                  methods=['POST'])
+# app.add_url_rule('/oauth/threads/finish/to', view_func=ThreadsCallback.as_view(
+#                      '/oauth/threads/finish/to', '/review'))
 
 
 #
@@ -568,7 +613,10 @@ def bluesky_oauth_client_metadata():
         'client_id': f'{request.host_url}oauth/bluesky/client-metadata.json',
         'client_name': 'Bounce',
         'client_uri': request.host_url,
-        'redirect_uris': [f'{request.host_url}oauth/bluesky/finish'],
+        'redirect_uris': [
+            f'{request.host_url}oauth/bluesky/finish/from',
+            f'{request.host_url}oauth/bluesky/finish/to',
+        ],
     }
 
 class BlueskyOAuthStart(FlashErrors, oauth_dropins.bluesky.OAuthStart):
@@ -589,7 +637,11 @@ def bluesky_oauth_client_metadata_handler():
     return bluesky_oauth_client_metadata()
 
 
-app.add_url_rule('/oauth/bluesky/start', view_func=BlueskyOAuthStart.as_view(
-    '/oauth/bluesky/start', '/oauth/bluesky/finish'), methods=['POST'])
-app.add_url_rule('/oauth/bluesky/finish', view_func=BlueskyOAuthCallback.as_view(
-    '/oauth/bluesky/finish', '/review'))
+app.add_url_rule('/oauth/bluesky/start/from', view_func=BlueskyOAuthStart.as_view(
+    '/oauth/bluesky/start/from', '/oauth/bluesky/finish/from'), methods=['POST'])
+app.add_url_rule('/oauth/bluesky/finish/from', view_func=BlueskyOAuthCallback.as_view(
+    '/oauth/bluesky/finish/from', '/to'))
+app.add_url_rule('/oauth/bluesky/start/to', view_func=BlueskyOAuthStart.as_view(
+    '/oauth/bluesky/start/to', '/oauth/bluesky/finish/to'), methods=['POST'])
+app.add_url_rule('/oauth/bluesky/finish/to', view_func=BlueskyOAuthCallback.as_view(
+    '/oauth/bluesky/finish/to', '/review'))
