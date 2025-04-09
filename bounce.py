@@ -152,18 +152,6 @@ def template_vars(oauth_path_suffix=''):
 
     return {
         'auths': auths,
-        'bluesky_button': oauth_dropins.bluesky.Start.button_html(
-            f'/oauth/bluesky/start/{oauth_path_suffix}',
-            image_prefix='/oauth_dropins_static/'),
-        'mastodon_button': oauth_dropins.mastodon.Start.button_html(
-            f'/oauth/mastodon/start/{oauth_path_suffix}',
-            image_prefix='/oauth_dropins_static/'),
-        'pixelfed_button': oauth_dropins.pixelfed.Start.button_html(
-            f'/oauth/pixelfed/start/{oauth_path_suffix}',
-            image_prefix='/oauth_dropins_static/'),
-        'threads_button': oauth_dropins.threads.Start.button_html(
-            f'/oauth/threads/start/{oauth_path_suffix}',
-            image_prefix='/oauth_dropins_static/'),
     }
 
 
@@ -276,7 +264,7 @@ def logout():
 @app.get('/from')
 def choose_from():
     """Choose account to migrate from."""
-    vars = template_vars(oauth_path_suffix='from')
+    vars = template_vars()
 
     for auth in vars['auths']:
         auth.url = f'/to?from={auth.key.urlsafe().decode()}'
@@ -285,6 +273,18 @@ def choose_from():
         'accounts.html',
         body_id='from',
         accounts=vars['auths'],
+        bluesky_button=oauth_dropins.bluesky.Start.button_html(
+            '/oauth/bluesky/start/from',
+            image_prefix='/oauth_dropins_static/'),
+        mastodon_button=oauth_dropins.mastodon.Start.button_html(
+            '/oauth/mastodon/start/from',
+            image_prefix='/oauth_dropins_static/'),
+        pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
+            '/oauth/pixelfed/start/from',
+            image_prefix='/oauth_dropins_static/'),
+        threads_button=oauth_dropins.threads.Start.button_html(
+            '/oauth/threads/start/from',
+            image_prefix='/oauth_dropins_static/'),
         **vars,
     )
 
@@ -297,29 +297,43 @@ def choose_to(from_auth):
         flash('Sorry, did:webs are not currently supported.')
         return redirect('/', code=302)
 
-    vars = template_vars(oauth_path_suffix='to')
+    vars = template_vars()
 
+    from_key = from_auth.key.urlsafe().decode()
     for auth in vars['auths']:
-        auth.url = f'/review?from={from_auth.key.urlsafe().decode()}&to={auth.key.urlsafe().decode()}'
+        auth.url = f'/review?from={from_key}&to={auth.key.urlsafe().decode()}'
 
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
     accounts = [auth for auth in vars['auths']
                 if from_proto != AUTH_TO_PROTOCOL[auth.__class__]]
 
+    state = f'<input type="hidden" name="state" value="{from_key}" />'
     return render_template(
         'accounts.html',
         body_id='to',
         from_auth=from_auth,
         from_proto=from_proto,
         accounts=accounts,
-        **vars
+        bluesky_button=oauth_dropins.bluesky.Start.button_html(
+            '/oauth/bluesky/start/to',
+            image_prefix='/oauth_dropins_static/', form_extra=state),
+        mastodon_button=oauth_dropins.mastodon.Start.button_html(
+            '/oauth/mastodon/start/to',
+            image_prefix='/oauth_dropins_static/', form_extra=state),
+        pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
+            '/oauth/pixelfed/start/to',
+            image_prefix='/oauth_dropins_static/', form_extra=state),
+        threads_button=oauth_dropins.threads.Start.button_html(
+            '/oauth/threads/start/to',
+            image_prefix='/oauth_dropins_static/', form_extra=state),
+        **vars,
     )
 
     # STATE: how to preserve 'from' query param through OAuth here? state?
 
 
 @app.get('/review')
-@require_login('from')
+@require_login(('from', 'state'))
 @require_login(('to', 'auth_entity'))
 def review(from_auth, to_auth):
     """Review an account's followers and follows."""
@@ -328,7 +342,7 @@ def review(from_auth, to_auth):
     to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
     assert to_proto in (ActivityPub, ATProto)
 
-    cache_key = f'review-html-{from_auth.key.id()}-{to_proto.ABBREV}'
+    cache_key = f'review-html-{from_auth.key.id()}-{to_auth.key.id()}'
     if 'force' not in request.args:
         if cached := Cache.get(cache_key):
             logger.info(f'Returning cached review for {from_auth.key.id()}')
@@ -581,19 +595,21 @@ def migrate_in(migration, from_auth, from_user):
 # OAuth
 #
 class MastodonStart(FlashErrors, oauth_dropins.mastodon.Start):
-    pass
+    DEFAULT_SCOPE = 'profile read:follows write:follows'
 
 class MastodonCallback(FlashErrors, oauth_dropins.mastodon.Callback):
     pass
 
 class PixelfedStart(FlashErrors, oauth_dropins.pixelfed.Start):
-    pass
+    # no granular scopes yet. afaict the available scopes aren't documented at all :(
+    # https://github.com/pixelfed/pixelfed/issues/2102#issuecomment-609474544
+    DEFAULT_SCOPE = 'read write'
 
 class PixelfedCallback(FlashErrors, oauth_dropins.pixelfed.Callback):
     pass
 
 # class ThreadsStart(FlashErrors, oauth_dropins.threads.Start):
-#     pass
+#     TODO: scopes
 
 # class ThreadsCallback(FlashErrors, oauth_dropins.threads.Callback):
 #     pass
@@ -608,7 +624,7 @@ app.add_url_rule('/oauth/mastodon/start/to', view_func=MastodonStart.as_view(
                      '/oauth/mastodon/start/to', '/oauth/mastodon/finish/to'),
                  methods=['POST'])
 app.add_url_rule('/oauth/mastodon/finish/to', view_func=MastodonCallback.as_view(
-                     '/oauth/mastodon/finish/to', '/rev'))
+                     '/oauth/mastodon/finish/to', '/review'))
 
 app.add_url_rule('/oauth/pixelfed/start/from', view_func=PixelfedStart.as_view(
                      '/oauth/pixelfed/start/from', '/oauth/pixelfed/finish/from'),
