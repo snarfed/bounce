@@ -27,7 +27,12 @@ from oauth_dropins.webutil import (
     flask_util,
     util,
 )
-from oauth_dropins.webutil.flask_util import error, FlashErrors, get_required_param
+from oauth_dropins.webutil.flask_util import (
+    error,
+    FlashErrors,
+    Found,
+    get_required_param,
+)
 from requests import RequestException
 from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
 
@@ -155,39 +160,65 @@ def template_vars(oauth_path_suffix=''):
     }
 
 
-def require_login(params):
-    """Decorator that requires and loads a logged in user.
+def require_accounts(from_params, to_params=None):
+    """Decorator that requires and loads both from and (optionally) to auth entities.
 
-    Passes the user into a positional arg to the function, as an oauth-dropins auth
-    entity.
+    Passes both entities as positional args to the function, as oauth-dropins auth
+    entities. Also performs sanity checks:
+    * Both must be logged in
+    * They must be different protocols
+    * If a Bluesky account is involved, it can't be a did:web
 
     Args:
-      param (str or sequence of str): HTTP query param(s) with the url-safe ndb key
-        for the oauth-dropins auth entity
+      from_params (str or sequence of str): HTTP query param(s) with the url-safe ndb
+        key for the from auth entity
+      to_params (str or sequence of str): HTTP query param(s) with the url-safe ndb key
+        for the to auth entity
     """
-    if isinstance(params, str):
-        params = [params]
-    assert params
+    assert from_params
+    if isinstance(from_params, str):
+        from_params = [from_params]
+    if isinstance(to_params, str):
+        to_params = [to_params]
+
+    def load(params):
+        for param in params:
+            if urlsafe_key := request.values.get(param):
+                break
+        else:
+            error(f'missing one of required params: {params}')
+
+        key = ndb.Key(urlsafe=urlsafe_key)
+        if key in oauth_dropins.get_logins():
+            if auth := key.get():
+                return auth
+
+        logger.warning(f'not logged in for {key}')
+        raise Found(location='/')
 
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
-            for param in params:
-                if urlsafe_key := request.values.get(param):
-                    break
-            else:
-                error(f'missing one of required params: {params}')
+            from_auth = load(from_params)
+            args += (from_auth,)
 
-            key = ndb.Key(urlsafe=urlsafe_key)
-            if key in oauth_dropins.get_logins():
-                if auth := key.get():
-                    return fn(*args, auth, **kwargs)
+            to_auth = None
+            if to_params:
+                to_auth = load(to_params)
+                if (AUTH_TO_PROTOCOL[from_auth.__class__]
+                        == AUTH_TO_PROTOCOL[to_auth.__class__]):
+                    error(f"Can't migrate {from_auth.__class__.__name__} to {to_auth.__class__.__name__}")
+                args += (to_auth,)
 
-            logger.warning(f'not logged in for {key}')
-            return redirect('/', code=302)
+            # Check for did:web in Bluesky accounts
+            for auth in (from_auth, to_auth):
+                if (isinstance(auth, oauth_dropins.bluesky.BlueskyAuth)
+                        and auth.key.id().startswith('did:web:')):
+                    flash('Sorry, did:webs are not currently supported.')
+                    return redirect('/', code=302)
 
+            return fn(*args, **kwargs)
         return wrapper
-
     return decorator
 
 
@@ -290,7 +321,7 @@ def choose_from():
 
 
 @app.get('/to')
-@require_login(('from', 'auth_entity'))
+@require_accounts(('from', 'auth_entity'))
 def choose_to(from_auth):
     """Choose account to migrate to."""
     if from_auth.key.id().startswith('did:web:'):
@@ -333,8 +364,7 @@ def choose_to(from_auth):
 
 
 @app.get('/review')
-@require_login(('from', 'state'))
-@require_login(('to', 'auth_entity'))
+@require_accounts(('from', 'state'), ('to', 'auth_entity'))
 def review(from_auth, to_auth):
     """Review an account's followers and follows."""
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
@@ -446,8 +476,7 @@ def review(from_auth, to_auth):
 
 
 @app.get('/bluesky-password')
-@require_login('from')
-@require_login('to')
+@require_accounts('from', 'to')
 def bluesky_password(from_auth, to_auth):
     """View for entering the user's Bluesky password."""
     if not isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
@@ -462,13 +491,9 @@ def bluesky_password(from_auth, to_auth):
 
 
 @app.post('/confirm')
-@require_login('from')
-@require_login('to')
+@require_accounts('from', 'to')
 def confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
-    if AUTH_TO_PROTOCOL[from_auth.__class__] == AUTH_TO_PROTOCOL[to_auth.__class__]:
-        error(f"Can't migrate {from_auth.__class__.__name__} to {to_auth.__class__.__name__}")
-
     if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
         # ask their PDS to email them a code that we'll need for it to sign the
         # PLC update operation
@@ -487,8 +512,7 @@ def confirm(from_auth, to_auth):
 
 
 @app.post('/migrate')
-@require_login('from')
-@require_login('to')
+@require_accounts('from', 'to')
 def migrate(from_auth, to_auth):
     """Migration handler."""
     logger.info(f'Migrating {from_auth.key.id()}')
