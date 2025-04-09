@@ -35,7 +35,7 @@ from activitypub import ActivityPub
 from atproto import ATProto
 from common import long_to_base64
 import ids
-from models import Target
+from models import Object, Target
 import protocol
 from web import Web
 
@@ -93,7 +93,7 @@ class BounceTest(TestCase, Asserts):
         app = MastodonApp(instance='https://in.st/', data='{}').put()
         user_json = json.dumps({
             'id': '234',
-            'uri':'http://in.st/@alice',
+            'uri':'http://in.st/users/alice',
             'avatar_static': 'http://in.st/@alice/pic',
         })
         auth = MastodonAuth(id='@alice@in.st', access_token_str='towkin', app=app,
@@ -193,18 +193,34 @@ class="logo" title="Bluesky" />
         self.assertEqual(302, resp.status_code)
         self.assertEqual('/', resp.headers['Location'])
 
+    def test_review_to_account_is_bridged(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        enabled_protocols=['atproto']).put()
+
+        resp = self.client.get(f'/review?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
+                         resp.headers['Location'])
+        flashed = get_flashed_messages()
+        self.assertTrue(flashed[0].startswith('@alice@in.st is already bridged to Bluesky.'), flashed)
+
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
     @patch('requests.get')
-    def test_review_mastodon(self, mock_get, mock_oauth2client):
+    def test_review_from_mastodon(self, mock_get, mock_oauth2client):
         alice = {
             'id': '234',
             'uri': 'http://in.st/users/alice',
             'username': 'alice',
             'display_name': 'Ms Alice',
             'acct': 'alice@in.st',
-            'url': 'http://in.st/@alice',
+            'url': 'http://in.st/users/alice',
             'avatar': 'http://in.st/alice/pic',
         }
         bob = {
@@ -230,6 +246,9 @@ class="logo" title="Bluesky" />
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             Web(id='e.ve', enabled_protocols=['atproto']).put()
+            # allow to accounts bridged elsewhere, just not to from protocol
+            Object(id='did:plc:alice', raw=DID_DOC).put()
+            ATProto(id='did:plc:alice', enabled_protocols=['web']).put()
 
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
@@ -262,6 +281,7 @@ When you migrate  @alice@in.st to  al.ice ...
 * @alice@in.st · Ms Alice
 * @bo.b@bsky.brid.gy
 * @e.ve@web.brid.gy""", text, ignore_blanks=True)
+        self.assertIn('<form action="/confirm" method="get">', body)
 
         mock_get.reset_mock()
         resp = self.client.get(f'/review?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
@@ -272,7 +292,7 @@ When you migrate  @alice@in.st to  al.ice ...
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
     @patch('requests.get')
-    def test_review_bluesky(self, mock_get, mock_oauth2client):
+    def test_review_from_bluesky(self, mock_get, mock_oauth2client):
         alice = {
             '$type': 'app.bsky.actor.defs#profileView',
             'did': 'did:plc:alice',
@@ -306,6 +326,7 @@ When you migrate  @alice@in.st to  al.ice ...
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             ATProto(id='did:plc:alice', enabled_protocols=['activitypub']).put()
+            ActivityPub(id='http://in.st/users/alice').put()
             ActivityPub(id='http://inst/bob',
                         copies=[Target(protocol='atproto', uri='did:plc:bob')]).put()
             Web(id='e.ve', enabled_protocols=['atproto'],  # not activitypub
@@ -344,6 +365,59 @@ When you migrate  al.ice to  @alice@in.st ...
 * al.ice · Ms Alice
 * bo.b
 * e.ve""", text, ignore_blanks=True)
+        self.assertIn('<form action="/bluesky-password" method="get">', body)
+
+    @patch('requests.post', side_effect=[
+        requests_response({  # createSession
+            'handle': 'han.dull',
+            'did': 'did:plc:alice',
+            'accessJwt': 'towkin',
+            'refreshJwt': 'reephrush',
+        }),
+        requests_response({}),  # requestPlcOperationSignature
+    ])
+    def test_confirm_from_bluesky_request_plc_code(self, mock_post):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        resp = self.client.post(f'/confirm?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}&password=hunter5')
+
+        self.assertEqual(2, mock_post.call_count)
+        self.assertEqual(
+            ('http://some.pds/xrpc/com.atproto.server.createSession',),
+            mock_post.call_args_list[0].args)
+        self.assertEqual(
+            {'identifier': 'did:plc:alice', 'password': 'hunter5'},
+            mock_post.call_args_list[0].kwargs['json'])
+        self.assertEqual(
+            ('http://some.pds/xrpc/com.atproto.identity.requestPlcOperationSignature',),
+            mock_post.call_args_list[1].args)
+
+    @patch('requests.post', side_effect=[
+        requests_response({  # createSession
+            'error': 'AuthenticationRequired',
+            'message': 'Invalid identifier or password',
+        }, status=401),
+    ])
+    def test_confirm_from_bluesky_bad_password(self, mock_post):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        params = f'from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}'
+        resp = self.client.post(f'/confirm?{params}&password=hunter5')
+
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/bluesky-password?{params}', resp.headers['Location'])
+        flashed = get_flashed_messages()
+        self.assertTrue(flashed[0].startswith('Login failed: '), flashed)
+
+        self.assertEqual(1, mock_post.call_count)
+        self.assertEqual(('http://some.pds/xrpc/com.atproto.server.createSession',),
+                         mock_post.call_args_list[0].args)
+        self.assertEqual({'identifier': 'did:plc:alice', 'password': 'hunter5'},
+                         mock_post.call_args_list[0].kwargs['json'])
 
     def test_migrate_no_from(self):
         with self.client.session_transaction() as sess:
@@ -397,7 +471,7 @@ When you migrate  al.ice to  @alice@in.st ...
             to_auth = self.make_bluesky(sess)
 
         with ndb.context.Context(bridgy_fed_ndb).use():
-            ActivityPub(id='http://in.st/@alice').put()
+            ActivityPub(id='http://in.st/users/alice').put()
             ATProto(id='did:plc:alice').put()
 
         migration = Migration(id=from_auth.id(), to=to_auth,

@@ -360,8 +360,6 @@ def choose_to(from_auth):
         **vars,
     )
 
-    # STATE: how to preserve 'from' query param through OAuth here? state?
-
 
 @app.get('/review')
 @require_accounts(('from', 'state'), ('to', 'auth_entity'))
@@ -377,6 +375,11 @@ def review(from_auth, to_auth):
         if cached := Cache.get(cache_key):
             logger.info(f'Returning cached review for {from_auth.key.id()}')
             return cached
+
+    to_user = get_user(to_auth)
+    if to_user.is_enabled(from_proto):
+        flash(f'{to_auth.user_display_name()} is already bridged to {from_proto.PHRASE}. Please <a href="https://fed.brid.gy/docs#opt-out">disable that</a> first or choose another account.')
+        return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
 
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
@@ -497,11 +500,16 @@ def confirm(from_auth, to_auth):
     if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
         # ask their PDS to email them a code that we'll need for it to sign the
         # PLC update operation
-        pds_client = oauth_dropins.bluesky.BlueskyAuth._api_from_password(
-            from_auth.key.id(), get_required_param('password'))
-        pds_client.com.atproto.identity.requestPlcOperationSignature()
-        # if 'resend' in request.form:
-        #     flash("Sent new PLC code to your Bluesky account's email address.")
+        bsky = Bluesky(pds_url=from_auth.pds_url,
+                       did=from_auth.key.id(),
+                       handle=from_auth.user_display_name(),
+                       app_password=get_required_param('password'))
+        try:
+            bsky.client.com.atproto.identity.requestPlcOperationSignature()
+        except RequestException as e:
+            _, body = util.interpret_http_exception(e)
+            flash(f'Login failed: {body}')
+            return redirect(f'/bluesky-password?from={from_auth.key.urlsafe().decode()}&to={to_auth.key.urlsafe().decode()}')
 
     return render_template(
         'confirm.html',
