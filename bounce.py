@@ -5,9 +5,13 @@ from functools import wraps
 from itertools import chain
 import json
 import logging
+import os
 from pathlib import Path
 import sys
 
+from arroba import xrpc_repo
+from arroba.datastore_storage import DatastoreStorage
+import arroba.server
 from flask import flash, Flask, redirect, render_template, request
 import flask_gae_static
 from google.cloud import ndb
@@ -88,6 +92,8 @@ app.wsgi_app = flask_util.ndb_context_middleware(
     app.wsgi_app, client=appengine_config.ndb_client)
 
 models.reset_protocol_properties()
+
+arroba.server.storage = DatastoreStorage(ndb_client=bridgy_fed_ndb)
 
 
 #
@@ -244,7 +250,7 @@ def granary_source(auth, with_auth=False):
                 bluesky_oauth_client_metadata(), auth.pds_url)
             token = DPoPTokenSerializer.default_loader(auth.dpop_token)
             dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
-            extra['auth'] =dpop_auth
+            extra['auth'] = dpop_auth
 
         return Bluesky(pds_url=auth.pds_url, handle=auth.user_display_name(),
                        did=auth.key.id(), **extra)
@@ -262,9 +268,10 @@ def get_user(auth):
     with ndb.context.Context(bridgy_fed_ndb).use():
         if isinstance(auth, (oauth_dropins.mastodon.MastodonAuth,
                              oauth_dropins.pixelfed.PixelfedAuth)):
-            return ActivityPub.get_or_create(json.loads(auth.user_json)['uri'])
+            return ActivityPub.get_or_create(json.loads(auth.user_json)['uri'],
+                                             allow_opt_out=True)
         elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
-            return ATProto.get_or_create(auth.key.id())
+            return ATProto.get_or_create(auth.key.id(), allow_opt_out=True)
 
 
 #
@@ -533,7 +540,7 @@ def migrate(from_auth, to_auth):
 
     from_user = get_user(from_auth)
     to_user = get_user(to_auth)
-    assert from_user.__class__ != to_user.__class__
+    assert from_user.__class__ != to_user.__class__, (from_user, to_user)
 
     if migration.state == 'follows':
         migrate_follows(migration, to_auth)
@@ -621,14 +628,32 @@ def migrate_in(migration, from_auth, from_user):
     """
     logging.info(f'Migrating {from_user.key.id()} in to bridged account TODO')
 
-    kwargs = {}
+    migrate_in_kwargs = {}
+
     if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
-        kwargs = {
+        migrate_in_kwargs = {
             'dpop_token': DPoPTokenSerializer.default_loader(from_auth.dpop_token),
             'plc_code': get_required_param('plc-code'),
         }
 
-    # from_user.migrate_in(to_user, from_user.key.id(), **kwargs)
+        # export repo from old PDS, import into BF
+        #
+        # note that this currently loads the repo into memory. to stream the output
+        # from getRepo, we'd need to modify lexrpc.Client, but that's doable. the
+        # harder part might be decoding the CAR streaming, in xrpc_repo.import_repo,
+        # which currently uses carbox. maybe still doable though?
+        did = from_auth.key.id()
+        logging.info(f'Importing repo from {from_auth.pds_url}')
+        client = from_auth.oauth_api(bluesky_oauth_client_metadata())
+        repo_car = client.com.atproto.sync.getRepo({}, did=did)
+
+        with ndb.context.Context(bridgy_fed_ndb).use(), \
+             app.test_request_context('/migrate', headers={
+                 'Authorization': f'Bearer {os.environ["REPO_TOKEN"]}',
+             }):
+                xrpc_repo.import_repo(repo_car)
+
+    # from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
 
 
 #

@@ -1,12 +1,15 @@
 """Unit tests for bounce.py."""
 import json
+import os
 from unittest import TestCase
 from unittest.mock import ANY, call, patch
 
-from arroba import did
+from arroba import did, server
+from arroba.tests import test_xrpc_repo
 from Crypto.PublicKey import RSA
 from flask import get_flashed_messages, session
 from google.cloud import ndb
+from granary import as2
 from granary.source import html_to_text
 import granary.mastodon
 from oauth_dropins.bluesky import BlueskyAuth
@@ -82,6 +85,7 @@ class BounceTest(TestCase, Asserts):
         protocol.Protocol.for_id.cache.clear()
         protocol.Protocol.for_handle.cache.clear()
 
+        os.environ.setdefault('REPO_TOKEN', 'reepow-towkin')
         util.now = lambda **kwargs: NOW
 
     def tearDown(self):
@@ -465,7 +469,7 @@ When you migrate  al.ice to  @alice@in.st ...
             'cid': 'xyzuvtsr',
         }),
     ])
-    def test_migrate_success(self, mock_post, mock_oauth2client):
+    def test_migrate_mastodon_to_bluesky_success(self, mock_post, mock_oauth2client):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
             to_auth = self.make_bluesky(sess)
@@ -521,13 +525,22 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response({
             'uri': 'at://did:plc:alice/app.bsky.actor.profile/self',
             'cid': 'abcdefgh',
-            'record': {'displayName': 'Alice'},
+            'value': {
+                '$type': 'app.bsky.actor.profile',
+                'displayName': 'Alice',
+            },
         }),
-        requests_response({'id': 'http://other/bob'}),
+        requests_response({'id': 'http://in.st/users/alice'},
+                          content_type=as2.CONTENT_TYPE),
         requests_response({'accounts': [{'id': '123', 'uri': 'http://other/bob'}]}),
         requests_response({'accounts': [{'id': '456', 'uri': 'http://other/eve'}]}),
+        requests_response(DID_DOC),
+        requests_response(test_xrpc_repo.SNARFED2_CAR,
+                          content_type='application/vnd.ipld.car'),
+        requests_response(test_xrpc_repo.SNARFED2_DID_DOC),
     ])
-    def test_migrate_resume_success(self, mock_get, mock_post, mock_oauth2client):
+    def test_migrate_bluesky_to_mastodon_resume(self, mock_get, mock_post,
+                                                mock_oauth2client):
         key = RSA.generate(1024)
         with ndb.context.Context(bridgy_fed_ndb).use():
             Web(id='fed.brid.gy', mod=long_to_base64(key.n),
@@ -547,22 +560,33 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(200, resp.status_code)
         self.assertEqual('ok', resp.get_data(as_text=True))
 
-        mock_get.assert_has_calls([
-            call('https://in.st/api/v2/search', params={
-                'resolve': True,
-                'q': 'http://other/bob',
-            }, headers=ANY, timeout=15, stream=True),
-            call('https://in.st/api/v2/search', params={
-                'resolve': True,
-                'q': 'http://other/eve',
-            }, headers=ANY, timeout=15, stream=True),
-        ])
+        mock_get.assert_any_call('https://in.st/api/v2/search', params={
+            'resolve': True,
+            'q': 'http://other/bob',
+        }, headers=ANY, timeout=15, stream=True)
+        mock_get.assert_any_call('https://in.st/api/v2/search', params={
+            'resolve': True,
+            'q': 'http://other/eve',
+        }, headers=ANY, timeout=15, stream=True)
+        mock_get.assert_any_call(  # getRepo
+            'https://some.pds/xrpc/com.atproto.sync.getRepo?did=did%3Aplc%3Aalice',
+            json=None, data=None, headers=ANY, auth=ANY)
+
         mock_post.assert_has_calls([
+            # follows
             call('https://in.st/api/v1/accounts/123/follow',
                  headers=ANY, timeout=15, stream=True),
             call('https://in.st/api/v1/accounts/456/follow',
                  headers=ANY, timeout=15, stream=True),
         ], any_order=True)
+
+        # check the repo import
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            repo = server.storage.load_repo(test_xrpc_repo.SNARFED2_DID)
+            self.assertIsNotNone(repo)
+            self.assertEqual(test_xrpc_repo.SNARFED2_HEAD, repo.head.cid)
+            self.assertEqual(test_xrpc_repo.SNARFED2_DID, repo.did)
+            self.assertEqual(test_xrpc_repo.SNARFED2_RECORDS, repo.get_contents())
 
         migration = migration.get()
         self.assertEqual(NOW, migration.last_attempt)
