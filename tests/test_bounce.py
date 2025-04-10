@@ -527,7 +527,7 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response({'accounts': [{'id': '123', 'uri': 'http://other/bob'}]}),
         requests_response({'accounts': [{'id': '456', 'uri': 'http://other/eve'}]}),
     ])
-    def test_migrate_partial_success(self, mock_get, mock_post, mock_oauth2client):
+    def test_migrate_resume_success(self, mock_get, mock_post, mock_oauth2client):
         key = RSA.generate(1024)
         with ndb.context.Context(bridgy_fed_ndb).use():
             Web(id='fed.brid.gy', mod=long_to_base64(key.n),
@@ -543,7 +543,7 @@ When you migrate  al.ice to  @alice@in.st ...
                               followed=['http://other/zed'],
                               ).put()
 
-        resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
+        resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}&plc-code=kowd')
         self.assertEqual(200, resp.status_code)
         self.assertEqual('ok', resp.get_data(as_text=True))
 

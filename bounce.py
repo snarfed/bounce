@@ -600,6 +600,14 @@ def migrate_out(migration, from_user, to_user):
       to_user (models.User)
     """
     logging.info(f'Migrating bridged account {from_user.key.id()} out to {to_user.key.id()}')
+
+    to_proto = to_user.__class__
+    if not from_user.is_enabled(to_proto):
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            pass
+            # from_user.enable_protocol(to_proto)
+            # to_proto.bot_follow(from_user)
+
     # to_user.migrate_out(from_user, to_user.key.id())
 
 
@@ -617,7 +625,7 @@ def migrate_in(migration, from_auth, from_user):
     if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
         kwargs = {
             'dpop_token': DPoPTokenSerializer.default_loader(from_auth.dpop_token),
-            # 'plc_code': get_required_param('plc-code'),
+            'plc_code': get_required_param('plc-code'),
         }
 
     # from_user.migrate_in(to_user, from_user.key.id(), **kwargs)
