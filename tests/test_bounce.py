@@ -457,30 +457,40 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual({'identifier': 'did:plc:alice', 'password': 'hunter5'},
                          mock_post.call_args_list[0].kwargs['json'])
 
+    def test_migrate_already_done(self):
+        Migration(id='did:plc:alice', state='done').put()
+
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual('/from', resp.headers['Location'])
+        flashed = get_flashed_messages()
+        self.assertEqual(['al.ice has already been migrated.'], flashed)
+
     def test_migrate_no_from(self):
         with self.client.session_transaction() as sess:
             auth = self.make_mastodon(sess)
 
-        for fn in (self.client.get, self.client.post):
-            resp = self.client.post(f'/migrate?to={auth.urlsafe().decode()}')
-            self.assertEqual(400, resp.status_code)
+        resp = self.client.post(f'/migrate?to={auth.urlsafe().decode()}')
+        self.assertEqual(400, resp.status_code)
 
     def test_migrate_no_to(self):
         with self.client.session_transaction() as sess:
             auth = self.make_mastodon(sess)
 
-        for fn in (self.client.get, self.client.post):
-            resp = self.client.post(f'/migrate?from={auth.urlsafe().decode()}')
-            self.assertEqual(400, resp.status_code)
+        resp = self.client.post(f'/migrate?from={auth.urlsafe().decode()}')
+        self.assertEqual(400, resp.status_code)
 
     def test_migrate_not_logged_in(self):
         from_auth = MastodonAuth(id='@alice@in.st').key.urlsafe().decode()
         to_auth = BlueskyAuth(id='did:foo').key.urlsafe().decode()
 
-        for fn in (self.client.get, self.client.post):
-            resp = self.client.post(f'/migrate?from={from_auth}&to={to_auth}')
-            self.assertEqual(302, resp.status_code)
-            self.assertEqual('/', resp.headers['Location'])
+        resp = self.client.post(f'/migrate?from={from_auth}&to={to_auth}')
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual('/', resp.headers['Location'])
 
     def test_migrate_no_stored_migration(self):
         with self.client.session_transaction() as sess:

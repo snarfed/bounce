@@ -225,6 +225,7 @@ def require_accounts(from_params, to_params=None):
 
             # TODO: load to user, check state, check that it's not already bridged
             # (move check from /review)
+            # load migration, check that it's not already done
 
             return fn(*args, **kwargs)
         return wrapper
@@ -535,8 +536,12 @@ def migrate(from_auth, to_auth):
     """Migration handler."""
     logger.info(f'Migrating {from_auth.key.id()}')
 
-    if not (migration := Migration.get_by_id(from_auth.key.id())):
+    migration = Migration.get_by_id(from_auth.key.id())
+    if not migration:
         error('migration not found', status=404)
+    elif migration.state == 'done':
+        flash(f'{from_auth.user_display_name()} has already been migrated.')
+        return redirect('/from')
 
     migration.last_attempt = util.now()
     migration.put()
@@ -633,7 +638,7 @@ def migrate_out(migration, from_user, to_user):
         with ndb.context.Context(bridgy_fed_ndb).use():
             from_user.enable_protocol(to_proto)
 
-    # to_user.migrate_out(from_user, to_user.key.id())
+    to_user.migrate_out(from_user, to_user.key.id())
 
 
 def migrate_in(migration, from_auth, from_user):
@@ -671,7 +676,7 @@ def migrate_in(migration, from_auth, from_user):
              }):
             xrpc_repo.import_repo(repo_car)
 
-    # from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
+    from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
 
 
 #
