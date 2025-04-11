@@ -127,18 +127,18 @@ class BounceTest(TestCase, Asserts):
                     private_exponent=long_to_base64(key.d)).put()
 
 
-    def make_mastodon(self, sess):
+    def make_mastodon(self, sess, name='alice'):
         app = MastodonApp(instance='http://in.st/', data='{}').put()
         user_json = json.dumps({
             'id': '234',
-            'uri':'http://in.st/users/alice',
-            'avatar_static': 'http://in.st/@alice/pic',
+            'uri':f'http://in.st/users/{name}',
+            'avatar_static': f'http://in.st/@{name}/pic',
         })
-        auth = MastodonAuth(id='@alice@in.st', access_token_str='towkin', app=app,
+        auth = MastodonAuth(id=f'@{name}@in.st', access_token_str='towkin', app=app,
                             user_json=user_json).put()
 
         sess.setdefault(LOGINS_SESSION_KEY, []).append(
-            ('MastodonAuth', '@alice@in.st'))
+            ('MastodonAuth', f'@{name}@in.st'))
 
         return auth
 
@@ -247,6 +247,22 @@ class="logo" title="Bluesky" />
         flashed = get_flashed_messages()
         self.assertTrue(flashed[0].startswith('@alice@in.st is already bridged to Bluesky.'), flashed)
 
+    def test_review_migration_in_progress(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            existing_to_auth = self.make_mastodon(sess, name='bob')
+            new_to_auth = self.make_mastodon(sess)
+
+        Migration(id='did:plc:alice activitypub', state='out',
+                  to=existing_to_auth).put()
+
+        resp = self.client.get(f'/review?from={from_auth.urlsafe().decode()}&to={new_to_auth.urlsafe().decode()}')
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
+                         resp.headers['Location'])
+        self.assertEqual(['al.ice has already begun migrating to @bob@in.st.'],
+                         get_flashed_messages())
+
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
@@ -283,7 +299,8 @@ class="logo" title="Bluesky" />
         ]
 
         with ndb.context.Context(bridgy_fed_ndb).use():
-            Web(id='e.ve', enabled_protocols=['atproto']).put()
+            Web(id='e.ve', enabled_protocols=['atproto'],
+                copies=[Target(protocol='atproto', uri='did:plc:eve')]).put()
             # allow to accounts bridged elsewhere, just not to from protocol
             Object(id='did:plc:alice', raw=DID_DOC).put()
             ATProto(id='did:plc:alice', enabled_protocols=['web']).put()
@@ -325,6 +342,11 @@ When you migrate  @alice@in.st to  al.ice ...
         resp = self.client.get(f'/review?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
         self.assertEqual(0, mock_get.call_count)
+
+        migration = Migration.get_by_id('@alice@in.st atproto')
+        self.assertEqual('follows', migration.state)
+        self.assertEqual([], migration.followed)
+        self.assertEqual(['did:plc:bob', 'did:plc:eve'], migration.to_follow)
 
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
@@ -405,6 +427,13 @@ When you migrate  al.ice to  @alice@in.st ...
 * e.ve""", text, ignore_blanks=True)
         self.assertIn('<form action="/bluesky-password" method="get">', body)
 
+        migration = Migration.get_by_id('did:plc:alice activitypub')
+        self.assertEqual('follows', migration.state)
+        self.assertEqual([], migration.followed)
+        self.assertCountEqual(
+            ['http://inst/bob', 'https://bsky.brid.gy/ap/did:plc:alice'],
+            migration.to_follow)
+
     @patch('requests.post', side_effect=[
         requests_response({  # createSession
             'handle': 'han.dull',
@@ -458,7 +487,7 @@ When you migrate  al.ice to  @alice@in.st ...
                          mock_post.call_args_list[0].kwargs['json'])
 
     def test_migrate_already_done(self):
-        Migration(id='did:plc:alice', state='done').put()
+        Migration(id='did:plc:alice activitypub', state='done').put()
 
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
@@ -532,9 +561,8 @@ When you migrate  al.ice to  @alice@in.st ...
             ActivityPub(id='http://in.st/users/alice').put()
             ATProto(id='did:plc:alice').put()
 
-        migration = Migration(id=from_auth.id(), to=to_auth,
-                              to_follow=['did:bob', 'did:eve'],
-                              ).put()
+        migration = Migration(id='@alice@in.st atproto', to=to_auth,
+                              to_follow=['did:bob', 'did:eve']).put()
 
         resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
@@ -596,10 +624,9 @@ When you migrate  al.ice to  @alice@in.st ...
             from_auth = self.make_bluesky(sess, did=SNARFED2_DID)
             to_auth = self.make_mastodon(sess)
 
-        migration = Migration(id=from_auth.id(), to=to_auth,
+        migration = Migration(id=f'{SNARFED2_DID} activitypub', to=to_auth,
                               to_follow=['http://other/bob', 'http://other/eve'],
-                              followed=['http://other/zed'],
-                              ).put()
+                              followed=['http://other/zed']).put()
 
         resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}&plc-code=kowd')
         self.assertEqual(200, resp.status_code)

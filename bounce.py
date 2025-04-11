@@ -133,7 +133,8 @@ class Cache(ndb.Model):
 class Migration(ndb.Model):
     """Stores state for a migration.
 
-    Key id is the from account's auth entity's key id.
+    Key id is '[from auth entity id] [to protocol Bridgy Fed label]', eg
+    'did:plc:alice activitypub'.
     """
     to = ndb.KeyProperty()  # auth entity
     state = ndb.StringProperty(choices=('follows', 'out', 'in', 'done'),
@@ -146,6 +147,40 @@ class Migration(ndb.Model):
     last_attempt = ndb.DateTimeProperty(tzinfo=timezone.utc)
     created = ndb.DateTimeProperty(auto_now_add=True, tzinfo=timezone.utc)
     updated = ndb.DateTimeProperty(auto_now=True, tzinfo=timezone.utc)
+
+
+    @classmethod
+    def _key_id(cls, from_auth, to_auth):
+        return f'{from_auth.key.id()} {AUTH_TO_PROTOCOL[to_auth.__class__].LABEL}'
+
+    @classmethod
+    def get(cls, from_auth, to_auth):
+        """
+        Args:
+          from_auth (oauth_dropins.models.BaseAuth)
+          to_auth (oauth_dropins.models.BaseAuth)
+
+        Returns:
+          Migration:
+        """
+        id = cls._key_id(from_auth, to_auth)
+        logger.info(f'get Migration {id}')
+        return cls.get_by_id(id)
+
+    @classmethod
+    def get_or_insert(cls, from_auth, to_auth, **kwargs):
+        """
+        Args:
+          from_auth (oauth_dropins.models.BaseAuth)
+          to_auth (oauth_dropins.models.BaseAuth)
+          kwargs: passed to :meth:`ndb.Model.get_or_insert`
+
+        Returns:
+          Migration:
+        """
+        id = cls._key_id(from_auth, to_auth)
+        logger.info(f'get_or_insert Migration {id} {kwargs}')
+        return super().get_or_insert(id, **kwargs)
 
 
 def template_vars(oauth_path_suffix=''):
@@ -387,12 +422,21 @@ def review(from_auth, to_auth):
             logger.info(f'Returning cached review for {from_auth.key.id()}')
             return cached
 
+    logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
+
+    migration = Migration.get_or_insert(from_auth, to_auth)
+    if migration.state != 'follows':
+        flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
+        return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
+    elif migration.to != to_auth.key:
+        # new migration or new (different) to account, reset progress
+        migration.followed = []
+        migration.to_follow = []
+
     to_user = get_user(to_auth)
     if to_user.is_enabled(from_proto):
         flash(f'{to_auth.user_display_name()} is already bridged to {from_proto.PHRASE}. Please <a href="https://fed.brid.gy/docs#opt-out">disable that</a> first or choose another account.')
         return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
-
-    logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
     source = granary_source(from_auth, with_auth=True)
     from_auth.url = source.to_as1_actor(json.loads(from_auth.user_json)).get('url')
@@ -439,7 +483,9 @@ def review(from_auth, to_auth):
         proto = Protocol.for_id(id, remote=False) or from_proto
         ids_by_proto[proto].append(id)
 
-    follow_counts = []
+    to_follow = []      # Users (with only key populated, no properties)
+    to_follow_ids = []  # str user ids, in to_proto
+    follow_counts = []  # (str protocol class, count)
     with ndb.context.Context(bridgy_fed_ndb).use():
         if from_proto.HAS_COPIES:
             ids = list(chain(*ids_by_proto.values()))
@@ -450,29 +496,47 @@ def review(from_auth, to_auth):
                     query = proto.query(proto.copies.uri.IN(ids))
                 if proto != to_proto:
                     query = query.filter(proto.enabled_protocols == to_proto.LABEL)
-                follow_counts.append([f'{proto.__name__}', query.count()])
+                keys = query.fetch(keys_only=True)
+                to_follow.extend(proto(key=key) for key in keys)
+                follow_counts.append([f'{proto.__name__}', len(keys)])
 
         else:
             for proto, ids in ids_by_proto.items():
                 if proto == to_proto:
-                    bridged = len(ids)
+                    bridged = ids
+                    to_follow_ids.extend(ids)
                 else:
-                    bridged = proto.query(
+                    query = proto.query(
                         proto.key.IN([proto(id=id).key for id in ids]),
                         proto.enabled_protocols == to_proto.LABEL,
-                    ).count()
+                    )
+                    bridged = query.fetch(keys_only=True)
+                    to_follow.extend(proto(key=key) for key in bridged)
 
-                follow_counts.append([f'{proto.__name__}', bridged])
+                follow_counts.append([f'{proto.__name__}', len(bridged)])
+
+        for user in to_follow:
+            if id := user.id_as(to_proto):
+                to_follow_ids.append(id)
+
+    for id in to_follow_ids:
+        if id not in migration.followed and id not in migration.to_follow:
+            migration.to_follow.append(id)
+    migration.put()
 
     total_bridged = sum(count for _, count in follow_counts)
     follow_counts.append(['not bridged', len(follows) - total_bridged])
 
-    logger.info(f'  {len(follows)} total, {follow_counts}')
+    logger.info(f'{len(follows)} total, {follow_counts}')
 
     # preprocess actors
     if from_proto == ActivityPub:
         for f in followers + follows:
             f['username'] = as2.address(as2.from_as1(f))
+
+    keep_follows_pct = 100
+    if follows:
+        keep_follows_pct = round(total_bridged / len(follows) * 100)
 
     html = render_template(
         'review.html',
@@ -482,7 +546,7 @@ def review(from_auth, to_auth):
         follows=follows,
         follower_counts=[['type', 'count']] + sorted(follower_counts),
         follow_counts=[['type', 'count']] + sorted(follow_counts),
-        keep_follows_pct=round(total_bridged / len(follows) * 100),
+        keep_follows_pct=keep_follows_pct,
         **template_vars(),
     )
     Cache.put(cache_key, html, expire=timedelta(days=30))
@@ -534,9 +598,9 @@ def confirm(from_auth, to_auth):
 @require_accounts('from', 'to')
 def migrate(from_auth, to_auth):
     """Migration handler."""
-    logger.info(f'Migrating {from_auth.key.id()}')
+    logger.info(f'Migrating {from_auth.key.id()} {to_auth.key.id()}')
 
-    migration = Migration.get_by_id(from_auth.key.id())
+    migration = Migration.get(from_auth, to_auth)
     if not migration:
         error('migration not found', status=404)
     elif migration.state == 'done':
@@ -638,7 +702,7 @@ def migrate_out(migration, from_user, to_user):
         with ndb.context.Context(bridgy_fed_ndb).use():
             from_user.enable_protocol(to_proto)
 
-    to_user.migrate_out(from_user, to_user.key.id())
+    # to_user.migrate_out(from_user, to_user.key.id())
 
 
 def migrate_in(migration, from_auth, from_user):
@@ -676,7 +740,7 @@ def migrate_in(migration, from_auth, from_user):
              }):
             xrpc_repo.import_repo(repo_car)
 
-    from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
+    # from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
 
 
 #
