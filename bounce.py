@@ -148,7 +148,6 @@ class Migration(ndb.Model):
     created = ndb.DateTimeProperty(auto_now_add=True, tzinfo=timezone.utc)
     updated = ndb.DateTimeProperty(auto_now=True, tzinfo=timezone.utc)
 
-
     @classmethod
     def _key_id(cls, from_auth, to_auth):
         return f'{from_auth.key.id()} {AUTH_TO_PROTOCOL[to_auth.__class__].LABEL}'
@@ -430,6 +429,7 @@ def review(from_auth, to_auth):
         return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
     elif migration.to != to_auth.key:
         # new migration or new (different) to account, reset progress
+        migration.to = to_auth.key
         migration.followed = []
         migration.to_follow = []
 
@@ -670,6 +670,44 @@ def migrate_follows(migration, to_auth):
                 raise
 
 
+def migrate_in(migration, from_auth, from_user):
+    """Migrates a source native account into Bridgy Fed to be a bridged account.
+
+    Args:
+      migration (Migration)
+      from_auth (oauth_dropins.models.BaseAuth)
+      from_user (models.User)
+    """
+    logging.info(f'Migrating {from_user.key.id()} in to bridged account TODO')
+
+    migrate_in_kwargs = {}
+
+    if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
+        # export repo from old PDS, import into BF
+        #
+        # note that this currently loads the repo into memory. to stream the output
+        # from getRepo, we'd need to modify lexrpc.Client, but that's doable. the
+        # harder part might be decoding the CAR streaming, in xrpc_repo.import_repo,
+        # which currently uses carbox. maybe still doable though?
+        did = from_auth.key.id()
+        old_pds_client = from_auth.oauth_api(bluesky_oauth_client_metadata())
+        repo_car = old_pds_client.com.atproto.sync.getRepo({}, did=did)
+
+        logging.info(f'Importing repo from {from_auth.pds_url}')
+        with ndb.context.Context(bridgy_fed_ndb).use(), \
+             app.test_request_context('/migrate', headers={
+                 'Authorization': f'Bearer {os.environ["REPO_TOKEN"]}',
+             }):
+            xrpc_repo.import_repo(repo_car)
+
+        migrate_in_kwargs = {
+            'plc_code': get_required_param('plc-code'),
+            'pds_client': old_pds_client,
+        }
+
+    # from_user.migrate_in(to_user, **migrate_in_kwargs)
+
+
 def migrate_out(migration, from_user, to_user):
     """Migrates a Bridgy Fed bridged account out to a native account.
 
@@ -705,49 +743,11 @@ def migrate_out(migration, from_user, to_user):
     # to_user.migrate_out(from_user, to_user.key.id())
 
 
-def migrate_in(migration, from_auth, from_user):
-    """Migrates a source native account into Bridgy Fed to be a bridged account.
-
-    Args:
-      migration (Migration)
-      from_auth (oauth_dropins.models.BaseAuth)
-      from_user (models.User)
-    """
-    logging.info(f'Migrating {from_user.key.id()} in to bridged account TODO')
-
-    migrate_in_kwargs = {}
-
-    if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
-        migrate_in_kwargs = {
-            'dpop_token': DPoPTokenSerializer.default_loader(from_auth.dpop_token),
-            'plc_code': get_required_param('plc-code'),
-        }
-
-        # export repo from old PDS, import into BF
-        #
-        # note that this currently loads the repo into memory. to stream the output
-        # from getRepo, we'd need to modify lexrpc.Client, but that's doable. the
-        # harder part might be decoding the CAR streaming, in xrpc_repo.import_repo,
-        # which currently uses carbox. maybe still doable though?
-        did = from_auth.key.id()
-        logging.info(f'Importing repo from {from_auth.pds_url}')
-        client = from_auth.oauth_api(bluesky_oauth_client_metadata())
-        repo_car = client.com.atproto.sync.getRepo({}, did=did)
-
-        with ndb.context.Context(bridgy_fed_ndb).use(), \
-             app.test_request_context('/migrate', headers={
-                 'Authorization': f'Bearer {os.environ["REPO_TOKEN"]}',
-             }):
-            xrpc_repo.import_repo(repo_car)
-
-    # from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
-
-
 #
 # OAuth
 #
 class MastodonStart(FlashErrors, oauth_dropins.mastodon.Start):
-    DEFAULT_SCOPE = 'profile read:follows write:follows'
+    DEFAULT_SCOPE = 'profile read:follows read:search write:follows'
 
 class MastodonCallback(FlashErrors, oauth_dropins.mastodon.Callback):
     pass
