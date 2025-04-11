@@ -223,6 +223,9 @@ def require_accounts(from_params, to_params=None):
                     flash('Sorry, did:webs are not currently supported.')
                     return redirect('/', code=302)
 
+            # TODO: load to user, check state, check that it's not already bridged
+            # (move check from /review)
+
             return fn(*args, **kwargs)
         return wrapper
     return decorator
@@ -544,16 +547,16 @@ def migrate(from_auth, to_auth):
 
     if migration.state == 'follows':
         migrate_follows(migration, to_auth)
-        migration.state = 'out'
-        migration.put()
-
-    if migration.state == 'out':
-        migrate_out(migration, from_user, to_user)
         migration.state = 'in'
         migration.put()
 
     if migration.state == 'in':
         migrate_in(migration, from_auth, from_user)
+        migration.state = 'out'
+        migration.put()
+
+    if migration.state == 'out':
+        migrate_out(migration, from_user, to_user)
         migration.state = 'done'
         migration.put()
 
@@ -608,12 +611,27 @@ def migrate_out(migration, from_user, to_user):
     """
     logging.info(f'Migrating bridged account {from_user.key.id()} out to {to_user.key.id()}')
 
+    from_proto = from_user.__class__
+    if from_proto.HAS_COPIES:
+        # connect to account to from account
+        while existing := to_user.get_copy(from_proto):
+            logger.warning(f'Overwriting {to_user.key.id()} {from_proto.LABEL} copy {existing}')
+            to_user.remove('copies', existing)
+
+        # TODO: will probably need to change for migrating from non-ATProto (ie
+        # non-portable-identity) protocols
+        logger.info(f'Setting {to_user.key.id()} {from_proto.LABEL} copy to {from_user.key.id()}')
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            to_user.add('copies', models.Target(protocol=from_proto.LABEL,
+                                                uri=from_user.key.id()))
+            to_user.put()
+            to_user.enable_protocol(from_proto)
+            from_proto.bot_follow(to_user)
+
     to_proto = to_user.__class__
     if not from_user.is_enabled(to_proto):
         with ndb.context.Context(bridgy_fed_ndb).use():
-            pass
-            # from_user.enable_protocol(to_proto)
-            # to_proto.bot_follow(from_user)
+            from_user.enable_protocol(to_proto)
 
     # to_user.migrate_out(from_user, to_user.key.id())
 
@@ -651,7 +669,7 @@ def migrate_in(migration, from_auth, from_user):
              app.test_request_context('/migrate', headers={
                  'Authorization': f'Bearer {os.environ["REPO_TOKEN"]}',
              }):
-                xrpc_repo.import_repo(repo_car)
+            xrpc_repo.import_repo(repo_car)
 
     # from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
 
