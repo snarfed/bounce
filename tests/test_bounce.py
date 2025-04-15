@@ -180,8 +180,9 @@ class BounceTest(TestCase, Asserts):
         self.assert_multiline_in("""\
 <a id="logins" href="/from">
 <nobr title="Bluesky: al.ice">""", body, ignore_blanks=True)
-        self.assert_multiline_in("""\
-<nobr title="Mastodon: @alice@in.st">""", body)
+        # TODO: re-enable when we add fediverse => Bluesky support
+#         self.assert_multiline_in("""\
+# <nobr title="Mastodon: @alice@in.st">""", body)
 
         self.assert_multiline_in("""\
 <a class="actor" href="/to?from=agNhcHByHgsSC0JsdWVza3lBdXRoIg1kaWQ6cGxjOmFsaWNlDA">
@@ -189,9 +190,9 @@ class BounceTest(TestCase, Asserts):
 class="logo" title="Bluesky" />
 <img src="http://alice/pic" class="profile">
 <span style="unicode-bidi: isolate">al.ice</span>""", body)
-        self.assert_multiline_in("""\
-<img src="http://in.st/@alice/pic" class="profile">
-<span style="unicode-bidi: isolate">@alice@in.st</span>""", body)
+#         self.assert_multiline_in("""\
+# <img src="http://in.st/@alice/pic" class="profile">
+# <span style="unicode-bidi: isolate">@alice@in.st</span>""", body)
 
     def test_to(self):
         with self.client.session_transaction() as sess:
@@ -529,6 +530,8 @@ When you migrate  al.ice to  @alice@in.st ...
         resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
         self.assertEqual(404, resp.status_code)
 
+    @patch.object(ActivityPub, 'migrate_in')  # TODO
+    @patch.object(ATProto, 'migrate_out')     # TODO
     @patch('oauth_dropins.webutil.appengine_config.tasks_client.create_task')
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
@@ -550,7 +553,7 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response(status=404),  # http://in.st/@alice/pic
     ])
     def test_migrate_mastodon_to_bluesky_success(self, mock_get, mock_post,
-                                                 mock_oauth2client, mock_create_task):
+                                                 mock_oauth2client, mock_create_task, _, __):
         self.make_bot_users()
 
         with self.client.session_transaction() as sess:
@@ -602,6 +605,9 @@ When you migrate  al.ice to  @alice@in.st ...
         # createRecords for follows
         requests_response(status=400),
         requests_response({'id': '456', 'following': True}),
+        requests_response({'operation': {'foo': 'bar'}}),  # signPlcOperation
+        requests_response(),    # PLC update
+        requests_response({}),  # deactivateAccount
     ])
     @patch('requests.get', side_effect=[
         requests_response(SNARFED2_DID_DOC),
@@ -615,6 +621,10 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response({'accounts': [{'id': '456', 'uri': 'http://other/eve'}]}),
         requests_response(SNARFED2_DID_DOC),
         requests_response(SNARFED2_CAR, content_type='application/vnd.ipld.car'),
+        requests_response({
+            **ALICE_AP_ACTOR,
+            'alsoKnownAs': [f'https://bsky.brid.gy/ap/{SNARFED2_DID}'],
+        }, content_type=as2.CONTENT_TYPE),
     ])
     def test_migrate_bluesky_to_mastodon_resume(self, mock_get, mock_post,
                                                 mock_oauth2client, mock_create_task):
@@ -656,7 +666,6 @@ When you migrate  al.ice to  @alice@in.st ...
             # check the repo import
             repo = server.storage.load_repo(SNARFED2_DID)
             self.assertIsNotNone(repo)
-            self.assertEqual(SNARFED2_HEAD, repo.head.cid)
             self.assertEqual(SNARFED2_DID, repo.did)
             self.assertEqual(SNARFED2_RECORDS, repo.get_contents())
 

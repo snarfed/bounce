@@ -631,7 +631,7 @@ def migrate(from_auth, to_auth):
         migration.put()
 
     if migration.state == 'in':
-        migrate_in(migration, from_auth, from_user)
+        migrate_in(migration, from_auth, from_user, to_user)
         migration.state = 'out'
         migration.put()
 
@@ -639,6 +639,9 @@ def migrate(from_auth, to_auth):
         migrate_out(migration, from_user, to_user)
         migration.state = 'done'
         migration.put()
+
+    # TODO: update profile
+    # TODO: update handle ? in same signPlcOperation ?
 
     # TODO: final report
     return 'ok'
@@ -681,7 +684,7 @@ def migrate_follows(migration, to_auth):
                 raise
 
 
-def migrate_in(migration, from_auth, from_user):
+def migrate_in(migration, from_auth, from_user, to_user):
     """Migrates a source native account into Bridgy Fed to be a bridged account.
 
     Args:
@@ -716,7 +719,8 @@ def migrate_in(migration, from_auth, from_user):
             'pds_client': old_pds_client,
         }
 
-    # from_user.migrate_in(to_user, **migrate_in_kwargs)
+    with ndb.context.Context(bridgy_fed_ndb).use():
+         from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
 
 
 def migrate_out(migration, from_user, to_user):
@@ -728,6 +732,15 @@ def migrate_out(migration, from_user, to_user):
       to_user (models.User)
     """
     logging.info(f'Migrating bridged account {from_user.key.id()} out to {to_user.key.id()}')
+
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        to_proto = to_user.__class__
+        if not from_user.is_enabled(to_proto):
+            from_user.enable_protocol(to_proto)
+
+        # TODO: tell the user to add the bridged Bluesky account to their Mastodon
+        # account's alsoKnownAs aliases
+        to_user.migrate_out(from_user, to_user.key.id())
 
     from_proto = from_user.__class__
     if from_proto.HAS_COPIES:
@@ -742,16 +755,10 @@ def migrate_out(migration, from_user, to_user):
         with ndb.context.Context(bridgy_fed_ndb).use():
             to_user.add('copies', models.Target(protocol=from_proto.LABEL,
                                                 uri=from_user.key.id()))
+            # TODO: to_user.obj.add copy of profile
             to_user.put()
             to_user.enable_protocol(from_proto)
             from_proto.bot_follow(to_user)
-
-    to_proto = to_user.__class__
-    if not from_user.is_enabled(to_proto):
-        with ndb.context.Context(bridgy_fed_ndb).use():
-            from_user.enable_protocol(to_proto)
-
-    # to_user.migrate_out(from_user, to_user.key.id())
 
 
 #
