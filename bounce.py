@@ -19,6 +19,7 @@ from granary import as2
 from granary.bluesky import Bluesky
 from granary.mastodon import Mastodon
 from granary.pixelfed import Pixelfed
+import lexrpc
 import oauth_dropins
 import oauth_dropins.bluesky
 import oauth_dropins.indieauth
@@ -289,17 +290,6 @@ def granary_source(auth, with_auth=False):
             token = DPoPTokenSerializer.default_loader(auth.dpop_token)
             dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
             extra['auth'] = dpop_auth
-
-            # def store_session(session):
-            #     logger.info(f'Storing Bluesky session for {auth.key.id()}: {session}')
-            #     auth_entity.session = session
-            #     auth_entity.put()
-
-            # extra.update({
-            #     'auth': dpop_auth,
-            #     'session_callback': store_session,
-            # })
-
 
         return Bluesky(pds_url=auth.pds_url, handle=auth.user_display_name(),
                        did=auth.key.id(), **extra)
@@ -598,6 +588,10 @@ def confirm(from_auth, to_auth):
             flash(f'Login failed: {body}')
             return redirect(f'/bluesky-password?from={from_auth.key.urlsafe().decode()}&to={to_auth.key.urlsafe().decode()}')
 
+        # store password-based access token, we'll use it later in /migrate
+        from_auth.session = bsky.client.session
+        from_auth.put()
+
     return render_template(
         'confirm.html',
         from_auth=from_auth,
@@ -704,11 +698,8 @@ def migrate_in(migration, from_auth, from_user, to_user):
         # from getRepo, we'd need to modify lexrpc.Client, but that's doable. the
         # harder part might be decoding the CAR streaming, in xrpc_repo.import_repo,
         # which currently uses carbox. maybe still doable though?
-        did = from_auth.key.id()
-        old_pds = Bluesky(pds_url=from_auth.pds_url, did=did,
-                          handle=from_auth.user_display_name(),
-                          app_password='...')
-        repo_car = old_pds.client.com.atproto.sync.getRepo({}, did=did)
+        old_pds_client = from_auth._api()
+        repo_car = old_pds_client.com.atproto.sync.getRepo({}, did=from_auth.key.id())
 
         logging.info(f'Importing repo from {from_auth.pds_url}')
         with ndb.context.Context(bridgy_fed_ndb).use(), \
@@ -719,7 +710,7 @@ def migrate_in(migration, from_auth, from_user, to_user):
 
         migrate_in_kwargs = {
             'plc_code': get_required_param('plc-code'),
-            'pds_client': old_pds.client,
+            'pds_client': old_pds_client,
         }
 
     with ndb.context.Context(bridgy_fed_ndb).use():

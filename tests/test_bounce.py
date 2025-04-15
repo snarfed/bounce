@@ -461,6 +461,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(
             ('https://some.pds/xrpc/com.atproto.identity.requestPlcOperationSignature',),
             mock_post.call_args_list[1].args)
+        self.assertEqual('towkin', from_auth.get().session['accessJwt'])
 
     @patch('requests.post', side_effect=[
         requests_response({  # createSession
@@ -486,6 +487,7 @@ When you migrate  al.ice to  @alice@in.st ...
                          mock_post.call_args_list[0].args)
         self.assertEqual({'identifier': 'did:plc:alice', 'password': 'hunter5'},
                          mock_post.call_args_list[0].kwargs['json'])
+        self.assertIsNone(from_auth.get().session)
 
     def test_migrate_already_done(self):
         Migration(id='did:plc:alice activitypub', state='done').put()
@@ -605,12 +607,6 @@ When you migrate  al.ice to  @alice@in.st ...
         # createRecords for follows
         requests_response(status=400),
         requests_response({'id': '456', 'following': True}),
-        requests_response({  # createSession
-            'handle': 'real.han.dull',
-            'did': 'did:plc:alice',
-            'accessJwt': 'towkin',
-            'refreshJwt': 'reephrush',
-        }),
         requests_response({'operation': {'foo': 'bar'}}),  # signPlcOperation
         requests_response(),    # PLC update
         requests_response({}),  # deactivateAccount
@@ -638,6 +634,10 @@ When you migrate  al.ice to  @alice@in.st ...
 
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess, did=SNARFED2_DID)
+            from_auth_entity = from_auth.get()
+            from_auth_entity.session = {'accessJwt': 'towkin'}
+            from_auth_entity.put()
+
             to_auth = self.make_mastodon(sess)
 
         migration = Migration(id=f'{SNARFED2_DID} activitypub', to=to_auth,
@@ -647,26 +647,6 @@ When you migrate  al.ice to  @alice@in.st ...
         resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}&plc-code=kowd')
         self.assertEqual(200, resp.status_code)
         self.assertEqual('ok', resp.get_data(as_text=True))
-
-        mock_get.assert_any_call('http://in.st/api/v2/search', params={
-            'resolve': True,
-            'q': 'http://other/bob',
-        }, headers=ANY, timeout=15, stream=True)
-        mock_get.assert_any_call('http://in.st/api/v2/search', params={
-            'resolve': True,
-            'q': 'http://other/eve',
-        }, headers=ANY, timeout=15, stream=True)
-        mock_get.assert_any_call(  # getRepo
-            f'https://some.pds/xrpc/com.atproto.sync.getRepo?did={quote(SNARFED2_DID)}',
-            json=None, data=None, headers=ANY, auth=ANY)
-
-        mock_post.assert_has_calls([
-            # follows
-            call('http://in.st/api/v1/accounts/123/follow',
-                 headers=ANY, timeout=15, stream=True),
-            call('http://in.st/api/v1/accounts/456/follow',
-                 headers=ANY, timeout=15, stream=True),
-        ], any_order=True)
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             # check the repo import
@@ -679,6 +659,51 @@ When you migrate  al.ice to  @alice@in.st ...
             ap_user = ActivityPub.get_by_id('http://in.st/users/alice')
             self.assertEqual([Target(protocol='atproto', uri=SNARFED2_DID)],
                              ap_user.copies)
+
+        mock_get.assert_has_calls([
+            call('http://in.st/api/v2/search', params={
+                'resolve': True,
+                'q': 'http://other/bob',
+            }, headers=ANY, timeout=15, stream=True),
+            call('http://in.st/api/v2/search', params={
+                'resolve': True,
+                'q': 'http://other/eve',
+            }, headers=ANY, timeout=15, stream=True),
+            call(f'https://some.pds/xrpc/com.atproto.sync.getRepo?did={quote(SNARFED2_DID)}',
+                 json=None, data=None, headers=ANY, auth=ANY),
+        ], any_order=True)
+
+        bsky_headers = {
+            'Authorization': 'Bearer towkin',
+            'User-Agent': 'Bridgy Fed (https://fed.brid.gy/)',
+            'Content-Type': 'application/json',
+        }
+        mock_post.assert_has_calls([
+            call('http://in.st/api/v1/accounts/123/follow',
+                 headers=ANY, timeout=15, stream=True),
+            call('http://in.st/api/v1/accounts/456/follow',
+                 headers=ANY, timeout=15, stream=True),
+            call('https://some.pds/xrpc/com.atproto.identity.signPlcOperation', json={
+                'token': 'kowd',
+                'rotationKeys': [did.encode_did_key(repo.rotation_key.public_key())],
+                'verificationMethod': [{
+                    'id': f'{SNARFED2_DID}#atproto',
+                    'type': 'Multikey',
+                    'controller': SNARFED2_DID,
+                    'publicKeyMultibase': did.encode_did_key(repo.signing_key.public_key()),
+                }],
+                'services': {
+                    'atproto_pds': {
+                        'type': 'AtprotoPersonalDataServer',
+                        'endpoint': 'https://atproto.brid.gy',
+                    },
+                },
+            }, data=None, headers=bsky_headers, auth=None),
+            call(f'https://plc.directory/{SNARFED2_DID}', json={'foo': 'bar'},
+                 timeout=15, stream=True, headers=ANY),
+            call('https://some.pds/xrpc/com.atproto.server.deactivateAccount',
+                 json=None, data=None, auth=None, headers=bsky_headers),
+        ], any_order=True)
 
         migration = migration.get()
         self.assertEqual(NOW, migration.last_attempt)
