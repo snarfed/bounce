@@ -447,6 +447,7 @@ def review(from_auth, to_auth):
     to_user = get_user(to_auth)
     if to_user.is_enabled(from_proto):
         flash(f'{to_auth.user_display_name()} is already bridged to {from_proto.PHRASE}. Please <a href="https://fed.brid.gy/docs#opt-out">disable that</a> first or choose another account.')
+        # TODO: remove from logins
         return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
 
     source = granary_source(from_auth, with_auth=True)
@@ -704,8 +705,10 @@ def migrate_in(migration, from_auth, from_user, to_user):
         # harder part might be decoding the CAR streaming, in xrpc_repo.import_repo,
         # which currently uses carbox. maybe still doable though?
         did = from_auth.key.id()
-        old_pds_client = from_auth.oauth_api(bluesky_oauth_client_metadata())
-        repo_car = old_pds_client.com.atproto.sync.getRepo({}, did=did)
+        old_pds = Bluesky(pds_url=from_auth.pds_url, did=did,
+                          handle=from_auth.user_display_name(),
+                          app_password='...')
+        repo_car = old_pds.client.com.atproto.sync.getRepo({}, did=did)
 
         logging.info(f'Importing repo from {from_auth.pds_url}')
         with ndb.context.Context(bridgy_fed_ndb).use(), \
@@ -716,7 +719,7 @@ def migrate_in(migration, from_auth, from_user, to_user):
 
         migrate_in_kwargs = {
             'plc_code': get_required_param('plc-code'),
-            'pds_client': old_pds_client,
+            'pds_client': old_pds.client,
         }
 
     with ndb.context.Context(bridgy_fed_ndb).use():

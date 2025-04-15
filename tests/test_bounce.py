@@ -148,7 +148,7 @@ class BounceTest(TestCase, Asserts):
             'handle': 'al.ice',
             'avatar': 'http://alice/pic',
         })
-        auth = BlueskyAuth(id=did, pds_url='http://some.pds/',
+        auth = BlueskyAuth(id=did, pds_url='https://some.pds/',
                            user_json=user_json, dpop_token=DPOP_TOKEN_STR).put()
 
         sess.setdefault(LOGINS_SESSION_KEY, []).append(('BlueskyAuth', did))
@@ -402,10 +402,10 @@ When you migrate  @alice@in.st to  al.ice ...
 
         self.assertEqual(3, mock_get.call_count)
         self.assertEqual(
-            ('http://some.pds/xrpc/app.bsky.graph.getFollowers?actor=did%3Aplc%3Aalice&limit=100',),
+            ('https://some.pds/xrpc/app.bsky.graph.getFollowers?actor=did%3Aplc%3Aalice&limit=100',),
             mock_get.call_args_list[1].args)
         self.assertEqual(
-            ('http://some.pds/xrpc/app.bsky.graph.getFollows?actor=did%3Aplc%3Aalice&limit=100',),
+            ('https://some.pds/xrpc/app.bsky.graph.getFollows?actor=did%3Aplc%3Aalice&limit=100',),
             mock_get.call_args_list[2].args)
 
         body = resp.get_data(as_text=True)
@@ -453,13 +453,13 @@ When you migrate  al.ice to  @alice@in.st ...
 
         self.assertEqual(2, mock_post.call_count)
         self.assertEqual(
-            ('http://some.pds/xrpc/com.atproto.server.createSession',),
+            ('https://some.pds/xrpc/com.atproto.server.createSession',),
             mock_post.call_args_list[0].args)
         self.assertEqual(
             {'identifier': 'did:plc:alice', 'password': 'hunter5'},
             mock_post.call_args_list[0].kwargs['json'])
         self.assertEqual(
-            ('http://some.pds/xrpc/com.atproto.identity.requestPlcOperationSignature',),
+            ('https://some.pds/xrpc/com.atproto.identity.requestPlcOperationSignature',),
             mock_post.call_args_list[1].args)
 
     @patch('requests.post', side_effect=[
@@ -482,7 +482,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertTrue(flashed[0].startswith('Login failed: '), flashed)
 
         self.assertEqual(1, mock_post.call_count)
-        self.assertEqual(('http://some.pds/xrpc/com.atproto.server.createSession',),
+        self.assertEqual(('https://some.pds/xrpc/com.atproto.server.createSession',),
                          mock_post.call_args_list[0].args)
         self.assertEqual({'identifier': 'did:plc:alice', 'password': 'hunter5'},
                          mock_post.call_args_list[0].kwargs['json'])
@@ -572,7 +572,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual('ok', resp.get_data(as_text=True))
 
         mock_post.assert_has_calls([
-            call('http://some.pds/xrpc/com.atproto.repo.createRecord', json={
+            call('https://some.pds/xrpc/com.atproto.repo.createRecord', json={
                 'repo': 'did:plc:alice',
                 'collection': 'app.bsky.graph.follow',
                 'record': {
@@ -581,7 +581,7 @@ When you migrate  al.ice to  @alice@in.st ...
                     'createdAt': '2022-01-02T03:04:05.000Z',
                 },
             }, data=None, headers=ANY, auth=ANY),
-            call('http://some.pds/xrpc/com.atproto.repo.createRecord', json={
+            call('https://some.pds/xrpc/com.atproto.repo.createRecord', json={
                 'repo': 'did:plc:alice',
                 'collection': 'app.bsky.graph.follow',
                 'record': {
@@ -605,6 +605,12 @@ When you migrate  al.ice to  @alice@in.st ...
         # createRecords for follows
         requests_response(status=400),
         requests_response({'id': '456', 'following': True}),
+        requests_response({  # createSession
+            'handle': 'real.han.dull',
+            'did': 'did:plc:alice',
+            'accessJwt': 'towkin',
+            'refreshJwt': 'reephrush',
+        }),
         requests_response({'operation': {'foo': 'bar'}}),  # signPlcOperation
         requests_response(),    # PLC update
         requests_response({}),  # deactivateAccount
@@ -619,8 +625,8 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response({'accounts': [{'id': '123', 'uri': 'http://other/bob'}]}),
         requests_response({'accounts': [{'id': '456', 'uri': 'http://other/eve'}]}),
-        requests_response(SNARFED2_DID_DOC),
         requests_response(SNARFED2_CAR, content_type='application/vnd.ipld.car'),
+        requests_response(SNARFED2_DID_DOC),
         requests_response({
             **ALICE_AP_ACTOR,
             'alsoKnownAs': [f'https://bsky.brid.gy/ap/{SNARFED2_DID}'],
