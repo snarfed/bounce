@@ -26,14 +26,10 @@
 {% endif %}
 
 <div class="row big" style="font-size: 14px">
-  {% if not from_proto or from_proto.LABEL != 'atproto' %}
-    <p>{{ bluesky_button|safe }}
-  {% endif %}
-  {% if not from_proto or from_proto.LABEL != 'activitypub' %}
     <p>{{ mastodon_button|safe }}
     <p>{{ pixelfed_button|safe }}
-    <!-- <p>{{ threads_button|safe }}</p> -->
-  {% endif %}
+    <p>{{ bluesky_button|safe }}
+    <p>{{ threads_button|safe }}</p>
 </div>
 
 {% endblock content %}

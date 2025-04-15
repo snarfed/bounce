@@ -290,6 +290,17 @@ def granary_source(auth, with_auth=False):
             dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
             extra['auth'] = dpop_auth
 
+            # def store_session(session):
+            #     logger.info(f'Storing Bluesky session for {auth.key.id()}: {session}')
+            #     auth_entity.session = session
+            #     auth_entity.put()
+
+            # extra.update({
+            #     'auth': dpop_auth,
+            #     'session_callback': store_session,
+            # })
+
+
         return Bluesky(pds_url=auth.pds_url, handle=auth.user_display_name(),
                        did=auth.key.id(), **extra)
 
@@ -342,25 +353,26 @@ def choose_from():
     """Choose account to migrate from."""
     vars = template_vars()
 
-    for auth in vars['auths']:
-        auth.url = f'/to?from={auth.key.urlsafe().decode()}'
+    accounts = [a for a in vars['auths'] if isinstance(a, oauth_dropins.bluesky.BlueskyAuth)]
+    for acct in accounts:
+        acct.url = f'/to?from={acct.key.urlsafe().decode()}'
 
     return render_template(
         'accounts.html',
         body_id='from',
-        accounts=vars['auths'],
+        accounts=accounts,
         bluesky_button=oauth_dropins.bluesky.Start.button_html(
             '/oauth/bluesky/start/from',
             image_prefix='/oauth_dropins_static/'),
-        mastodon_button=oauth_dropins.mastodon.Start.button_html(
-            '/oauth/mastodon/start/from',
-            image_prefix='/oauth_dropins_static/'),
-        pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
-            '/oauth/pixelfed/start/from',
-            image_prefix='/oauth_dropins_static/'),
-        threads_button=oauth_dropins.threads.Start.button_html(
-            '/oauth/threads/start/from',
-            image_prefix='/oauth_dropins_static/'),
+        # mastodon_button=oauth_dropins.mastodon.Start.button_html(
+        #     '/oauth/mastodon/start/from',
+        #     image_prefix='/oauth_dropins_static/'),
+        # pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
+        #     '/oauth/pixelfed/start/from',
+        #     image_prefix='/oauth_dropins_static/'),
+        # threads_button=oauth_dropins.threads.Start.button_html(
+        #     '/oauth/threads/start/from',
+        #     image_prefix='/oauth_dropins_static/'),
         **vars,
     )
 
@@ -374,14 +386,13 @@ def choose_to(from_auth):
         return redirect('/', code=302)
 
     vars = template_vars()
-
     from_key = from_auth.key.urlsafe().decode()
-    for auth in vars['auths']:
-        auth.url = f'/review?from={from_key}&to={auth.key.urlsafe().decode()}'
 
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
     accounts = [auth for auth in vars['auths']
                 if from_proto != AUTH_TO_PROTOCOL[auth.__class__]]
+    for acct in accounts:
+        acct.url = f'/review?from={from_key}&to={acct.key.urlsafe().decode()}'
 
     state = f'<input type="hidden" name="state" value="{from_key}" />'
     return render_template(
@@ -390,18 +401,18 @@ def choose_to(from_auth):
         from_auth=from_auth,
         from_proto=from_proto,
         accounts=accounts,
-        bluesky_button=oauth_dropins.bluesky.Start.button_html(
-            '/oauth/bluesky/start/to',
-            image_prefix='/oauth_dropins_static/', form_extra=state),
+        # bluesky_button=oauth_dropins.bluesky.Start.button_html(
+        #     '/oauth/bluesky/start/to',
+        #     image_prefix='/oauth_dropins_static/', form_extra=state),
         mastodon_button=oauth_dropins.mastodon.Start.button_html(
             '/oauth/mastodon/start/to',
             image_prefix='/oauth_dropins_static/', form_extra=state),
         pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
             '/oauth/pixelfed/start/to',
             image_prefix='/oauth_dropins_static/', form_extra=state),
-        threads_button=oauth_dropins.threads.Start.button_html(
-            '/oauth/threads/start/to',
-            image_prefix='/oauth_dropins_static/', form_extra=state),
+        # threads_button=oauth_dropins.threads.Start.button_html(
+        #     '/oauth/threads/start/to',
+        #     image_prefix='/oauth_dropins_static/', form_extra=state),
         **vars,
     )
 
