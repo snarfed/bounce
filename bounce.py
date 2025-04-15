@@ -437,7 +437,7 @@ def review(from_auth, to_auth):
     to_user = get_user(to_auth)
     if to_user.is_enabled(from_proto):
         flash(f'{to_auth.user_display_name()} is already bridged to {from_proto.PHRASE}. Please <a href="https://fed.brid.gy/docs#opt-out">disable that</a> first or choose another account.')
-        # TODO: remove from logins
+        oauth_dropins.logout(to_auth)
         return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
 
     source = granary_source(from_auth, with_auth=True)
@@ -692,13 +692,16 @@ def migrate_in(migration, from_auth, from_user, to_user):
     migrate_in_kwargs = {}
 
     if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
+        # use the password-based session stored earlier in /confirm, since
+        # signPlcOperation (below) doesn't support OAuth DPoP tokens
+        old_pds_client = from_auth._api()
+
         # export repo from old PDS, import into BF
         #
         # note that this currently loads the repo into memory. to stream the output
         # from getRepo, we'd need to modify lexrpc.Client, but that's doable. the
         # harder part might be decoding the CAR streaming, in xrpc_repo.import_repo,
         # which currently uses carbox. maybe still doable though?
-        old_pds_client = from_auth._api()
         repo_car = old_pds_client.com.atproto.sync.getRepo({}, did=from_auth.key.id())
 
         logging.info(f'Importing repo from {from_auth.pds_url}')
