@@ -203,7 +203,7 @@ def template_vars(oauth_path_suffix=''):
     }
 
 
-def require_accounts(from_params, to_params=None):
+def require_accounts(from_params, to_params=None, failures_to=None):
     """Decorator that requires and loads both from and (optionally) to auth entities.
 
     Passes both entities as positional args to the function, as oauth-dropins auth
@@ -217,6 +217,8 @@ def require_accounts(from_params, to_params=None):
         key for the from auth entity
       to_params (str or sequence of str): HTTP query param(s) with the url-safe ndb key
         for the to auth entity
+      failures_to (str): optional URL path to redirect to if the user declines or
+        an error happennns.
     """
     assert from_params
     if isinstance(from_params, str):
@@ -242,6 +244,10 @@ def require_accounts(from_params, to_params=None):
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
+            if request.values.get('declined'):
+                flash("You'll need to approve the prompt to continue.")
+                return redirect(failures_to or '/')
+
             from_auth = load(from_params)
             args += (from_auth,)
 
@@ -370,7 +376,7 @@ def choose_from():
 
 
 @app.get('/to')
-@require_accounts(('from', 'auth_entity'))
+@require_accounts(('from', 'auth_entity'), failures_to='/from')
 def choose_to(from_auth):
     """Choose account to migrate to."""
     if from_auth.key.id().startswith('did:web:'):
@@ -410,7 +416,7 @@ def choose_to(from_auth):
 
 
 @app.get('/review')
-@require_accounts(('from', 'state'), ('to', 'auth_entity'))
+@require_accounts(('from', 'state'), ('to', 'auth_entity'), failures_to='/from')
 def review(from_auth, to_auth):
     """Review an account's followers and follows."""
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
@@ -490,7 +496,7 @@ def review(from_auth, to_auth):
     ids_by_proto = defaultdict(list)
     for followee in follows:
         followee['image'] = util.get_first(followee, 'image')
-        # STATE TODO: if wrapped, extract from protocol
+        # TODO: if wrapped, extract from protocol
         id = common.unwrap(followee.get('id'))
         proto = Protocol.for_id(id, remote=False) or from_proto
         ids_by_proto[proto].append(id)
@@ -698,7 +704,7 @@ def migrate_in(migration, from_auth, from_user, to_user):
       from_auth (oauth_dropins.models.BaseAuth)
       from_user (models.User)
     """
-    logging.info(f'Migrating {from_user.key.id()} in to bridged account TODO')
+    logging.info(f'Migrating {from_user.key.id()} in')
 
     migrate_in_kwargs = {}
 
