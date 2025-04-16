@@ -312,12 +312,14 @@ def get_user(auth):
     Returns:
       models.User:
     """
-    with ndb.context.Context(bridgy_fed_ndb).use():
-        if isinstance(auth, (oauth_dropins.mastodon.MastodonAuth,
-                             oauth_dropins.pixelfed.PixelfedAuth)):
-            return ActivityPub.get_or_create(json.loads(auth.user_json)['uri'],
-                                             allow_opt_out=True)
-        elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
+    if isinstance(auth, (oauth_dropins.mastodon.MastodonAuth,
+                         oauth_dropins.pixelfed.PixelfedAuth)):
+        actor_id = auth.actor_id()
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            return ActivityPub.get_or_create(actor_id, allow_opt_out=True)
+
+    elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
+        with ndb.context.Context(bridgy_fed_ndb).use():
             return ATProto.get_or_create(auth.key.id(), allow_opt_out=True)
 
 
