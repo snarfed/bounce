@@ -218,7 +218,7 @@ def require_accounts(from_params, to_params=None, failures_to=None):
       to_params (str or sequence of str): HTTP query param(s) with the url-safe ndb key
         for the to auth entity
       failures_to (str): optional URL path to redirect to if the user declines or
-        an error happennns.
+        an error happens.
     """
     assert from_params
     if isinstance(from_params, str):
@@ -275,6 +275,25 @@ def require_accounts(from_params, to_params=None, failures_to=None):
     return decorator
 
 
+def bluesky_session_callback(auth_entity):
+    """Returns a callable to pass to lexrpc.Client as session_callback.
+
+    When an access token or OAuth DPoP token is refreshed, stores the new token
+    back to the datastore in the auth entity.
+    """
+    def callback(session_or_auth):
+        if isinstance(session_or_auth, dict):
+            if session_or_auth != auth_entity.session:
+                auth_entity.session = session_or_auth
+                auth_entity.put()
+
+        elif isinstance(session_or_auth, OAuth2AccessTokenAuth):
+            serialized = DPoPTokenSerializer.default_dumper(auth.dpop_token)
+            if session_or_auth.token != serialized:
+                auth_entity.dpop_token = serialized
+                auth_entity.put()
+
+
 def granary_source(auth, with_auth=False):
     """Returns a granary source instance for a given auth entity.
 
@@ -300,7 +319,8 @@ def granary_source(auth, with_auth=False):
             extra['auth'] = dpop_auth
 
         return Bluesky(pds_url=auth.pds_url, handle=auth.user_display_name(),
-                       did=auth.key.id(), **extra)
+                       did=auth.key.id(), session_callback=bluesky_session_callback,
+                       **extra)
 
 
 def get_user(auth):
@@ -713,7 +733,7 @@ def migrate_in(migration, from_auth, from_user, to_user):
     if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
         # use the password-based session stored earlier in /confirm, since
         # signPlcOperation (below) doesn't support OAuth DPoP tokens
-        old_pds_client = from_auth._api()
+        old_pds_client = from_auth._api(session_callback=bluesky_session_callback)
 
         # export repo from old PDS, import into BF
         #
