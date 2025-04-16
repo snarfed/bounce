@@ -638,8 +638,12 @@ def migrate(from_auth, to_auth):
     # TODO: update profile
     # TODO: update handle ? in same signPlcOperation ?
 
-    # TODO: final report
-    return 'ok'
+    return render_template(
+        'done.html',
+        from_auth=from_auth,
+        to_auth=to_auth,
+        **template_vars(),
+    )
 
 
 def migrate_follows(migration, to_auth):

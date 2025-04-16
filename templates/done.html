@@ -1,0 +1,13 @@
+{% set body_id = 'done' %}
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="row big">
+<p>Success! You've migrated
+  {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
+  to
+  {% with auth = to_auth %}{% include 'account_label.html' %}{% endwith %}.
+</div>
+
+{% endblock content %}
