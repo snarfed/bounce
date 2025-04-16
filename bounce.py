@@ -45,6 +45,7 @@ from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
 from activitypub import ActivityPub
 from atproto import ATProto
 import common
+import ids
 import models
 from protocol import Protocol
 from web import Web
@@ -54,6 +55,7 @@ logger = logging.getLogger(__name__)
 PROTOCOLS = set(p for p in models.PROTOCOLS.values() if p and p.LABEL != 'ui')
 
 BRIDGY_FED_PROJECT_ID = 'bridgy-federated'
+# TODO: use BF context kwargs. can we connect to memcache, over VPC connector?
 bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
 
 # Cache-Control header for static files
@@ -424,6 +426,14 @@ def review(from_auth, to_auth):
 
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
+    # TODO: check account status
+    #
+    # ineligible = """Hi! Your account isn't eligible for bridging yet because {desc}. <a href="https://fed.brid.gy/docs#troubleshooting">More details here.</a> You can try again once that's fixed by unfollowing and re-following this account."""
+    # if self.status and self.status not in ('nobot', 'private'):
+    #     if desc := USER_STATUS_DESCRIPTIONS.get(self.status):
+    #         dms.maybe_send(from_proto=to_proto, to_user=self, type=self.status,
+    #                        text=ineligible.format(desc=desc))
+
     migration = Migration.get_or_insert(from_auth, to_auth)
     if migration.state != 'follows':
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
@@ -635,9 +645,6 @@ def migrate(from_auth, to_auth):
         migration.state = 'done'
         migration.put()
 
-    # TODO: update profile
-    # TODO: update handle ? in same signPlcOperation ?
-
     return render_template(
         'done.html',
         from_auth=from_auth,
@@ -736,12 +743,10 @@ def migrate_out(migration, from_user, to_user):
 
     with ndb.context.Context(bridgy_fed_ndb).use():
         to_proto = to_user.__class__
-        if not from_user.is_enabled(to_proto):
-            from_user.enable_protocol(to_proto)
-
-        # TODO: tell the user to add the bridged Bluesky account to their Mastodon
-        # account's alsoKnownAs aliases
-        to_user.migrate_out(from_user, to_user.key.id())
+        if from_user.is_enabled(to_proto):
+            # TODO: tell the user to add the bridged Bluesky account to their Mastodon
+            # account's alsoKnownAs aliases
+            to_user.migrate_out(from_user, to_user.key.id())
 
     from_proto = from_user.__class__
     if from_proto.HAS_COPIES:
@@ -756,10 +761,16 @@ def migrate_out(migration, from_user, to_user):
         with ndb.context.Context(bridgy_fed_ndb).use():
             to_user.add('copies', models.Target(protocol=from_proto.LABEL,
                                                 uri=from_user.key.id()))
-            # TODO: to_user.obj.add copy of profile
             to_user.put()
             to_user.enable_protocol(from_proto)
             from_proto.bot_follow(to_user)
+
+            # update profile from to account
+            from_profile_id = ids.profile_id(id=from_user.key.id(), proto=from_proto)
+            to_user.obj.add('copies', models.Target(protocol=from_proto.LABEL,
+                                                    uri=from_profile_id))
+            to_user.obj.put()
+            to_proto.receive(obj=to_user.obj, authed_as=to_user.key.id())
 
 
 #

@@ -571,7 +571,7 @@ When you migrate  al.ice to  @alice@in.st ...
 
         resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
-        self.assertEqual('ok', resp.get_data(as_text=True))
+        self.assertIn('Success!', resp.get_data(as_text=True))
 
         mock_post.assert_has_calls([
             call('https://some.pds/xrpc/com.atproto.repo.createRecord', json={
@@ -646,7 +646,7 @@ When you migrate  al.ice to  @alice@in.st ...
 
         resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}&plc-code=kowd')
         self.assertEqual(200, resp.status_code)
-        self.assertEqual('ok', resp.get_data(as_text=True))
+        self.assertIn('Success!', resp.get_data(as_text=True))
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             # check the repo import
@@ -655,10 +655,18 @@ When you migrate  al.ice to  @alice@in.st ...
             self.assertEqual(SNARFED2_DID, repo.did)
             self.assertEqual(SNARFED2_RECORDS, repo.get_contents())
 
-            # check the destination user
+            # check the users
             ap_user = ActivityPub.get_by_id('http://in.st/users/alice')
+            self.assertEqual(['atproto'], ap_user.enabled_protocols)
             self.assertEqual([Target(protocol='atproto', uri=SNARFED2_DID)],
                              ap_user.copies)
+            profile_uri = f'at://{SNARFED2_DID}/app.bsky.actor.profile/self'
+            self.assertEqual([Target(protocol='atproto', uri=profile_uri)],
+                             ap_user.obj.copies)
+
+            bsky_user = ATProto.get_by_id(SNARFED2_DID)
+            self.assertEqual([], bsky_user.enabled_protocols)
+            self.assertEqual([], bsky_user.copies)
 
         mock_get.assert_has_calls([
             call('http://in.st/api/v2/search', params={
