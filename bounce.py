@@ -323,7 +323,7 @@ def granary_source(auth, with_auth=False):
                        **extra)
 
 
-def get_user(auth):
+def _get_user(auth):
     """Loads and returns the Bridgy Fed user for a given auth entity.
 
     Args:
@@ -332,15 +332,39 @@ def get_user(auth):
     Returns:
       models.User:
     """
-    if isinstance(auth, (oauth_dropins.mastodon.MastodonAuth,
-                         oauth_dropins.pixelfed.PixelfedAuth)):
-        actor_id = auth.actor_id()
-        with ndb.context.Context(bridgy_fed_ndb).use():
-            return ActivityPub.get_or_create(actor_id, allow_opt_out=True)
+    proto = AUTH_TO_PROTOCOL[auth.__class__]
+    id = auth.actor_id() if proto == ActivityPub else auth.key.id()
 
-    elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
-        with ndb.context.Context(bridgy_fed_ndb).use():
-            return ATProto.get_or_create(auth.key.id(), allow_opt_out=True)
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        return proto.get_or_create(id, allow_opt_out=True)
+
+
+get_from_user = _get_user
+
+
+def get_to_user(*, to_auth, from_auth):
+    """Loads a "to" user and checks that it's eligible for migration.
+
+    If it's ineligible, returns ``None``.
+    """
+    user = _get_user(to_auth)
+
+    # eligibility checks
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        # keep in sync with bridgy_fed.models.User.enabled_protocol!
+        if user.status and user.status not in ('nobot', 'private'):
+            desc = models.USER_STATUS_DESCRIPTIONS.get(user.status)
+            flash(f"Sorry, {to_auth.user_display_name()} isn't eligible yet because {desc}. <a href='https://fed.brid.gy/docs#troubleshooting'>More details here.</a> Feel free to try again once that's fixed!")
+            oauth_dropins.logout(to_auth)
+            raise Found(location=f'/to?from={from_auth.key.urlsafe().decode()}')
+
+        from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
+        if user.is_enabled(from_proto):
+            flash(f'{to_auth.user_display_name()} is already bridged to {from_proto.PHRASE}. Please <a href="https://fed.brid.gy/docs#opt-out">disable that</a> first or choose another account.')
+            oauth_dropins.logout(to_auth)
+            raise Found(location=f'/to?from={from_auth.key.urlsafe().decode()}')
+
+    return user
 
 
 #
@@ -454,14 +478,6 @@ def review(from_auth, to_auth):
 
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
-    # TODO: check account status
-    #
-    # ineligible = """Hi! Your account isn't eligible for bridging yet because {desc}. <a href="https://fed.brid.gy/docs#troubleshooting">More details here.</a> You can try again once that's fixed by unfollowing and re-following this account."""
-    # if self.status and self.status not in ('nobot', 'private'):
-    #     if desc := USER_STATUS_DESCRIPTIONS.get(self.status):
-    #         dms.maybe_send(from_proto=to_proto, to_user=self, type=self.status,
-    #                        text=ineligible.format(desc=desc))
-
     migration = Migration.get_or_insert(from_auth, to_auth)
     if migration.state != 'follows':
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
@@ -472,12 +488,7 @@ def review(from_auth, to_auth):
         migration.followed = []
         migration.to_follow = []
 
-    to_user = get_user(to_auth)
-    if to_user.is_enabled(from_proto):
-        flash(f'{to_auth.user_display_name()} is already bridged to {from_proto.PHRASE}. Please <a href="https://fed.brid.gy/docs#opt-out">disable that</a> first or choose another account.')
-        oauth_dropins.logout(to_auth)
-        return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
-
+    to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
     source = granary_source(from_auth, with_auth=True)
     from_auth.url = source.to_as1_actor(json.loads(from_auth.user_json)).get('url')
 
@@ -654,8 +665,8 @@ def migrate(from_auth, to_auth):
     migration.last_attempt = util.now()
     migration.put()
 
-    from_user = get_user(from_auth)
-    to_user = get_user(to_auth)
+    from_user = get_from_user(from_auth)
+    to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
     assert from_user.__class__ != to_user.__class__, (from_user, to_user)
 
     if migration.state == 'follows':

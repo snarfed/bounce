@@ -248,6 +248,22 @@ class="logo" title="Bluesky" />
         flashed = get_flashed_messages()
         self.assertTrue(flashed[0].startswith('@alice@in.st is already bridged to Bluesky.'), flashed)
 
+    def test_review_to_account_ineligible_for_bridging(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            obj = Object(id='profile', as2={'displayName': 'alice'})
+            ActivityPub(id='http://in.st/users/alice', obj_key=obj.put()).put()
+
+        resp = self.client.get(f'/review?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
+                         resp.headers['Location'])
+        self.assertTrue(get_flashed_messages()[0].startswith(
+            "Sorry, @alice@in.st isn't eligible yet because you haven't set a profile picture."))
+
     def test_review_migration_in_progress(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
@@ -554,8 +570,8 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response(status=404),  # http://in.st/@alice/pic
     ])
-    def test_migrate_mastodon_to_bluesky_success(self, mock_get, mock_post,
-                                                 mock_oauth2client, mock_create_task, _, __):
+    def test_migrate_mastodon_to_bluesky_success(
+            self, mock_get, mock_post, mock_oauth2client, mock_create_task, _, __):
         self.make_bot_users()
 
         with self.client.session_transaction() as sess:
