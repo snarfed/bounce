@@ -46,6 +46,8 @@ from activitypub import ActivityPub
 from atproto import ATProto
 from common import long_to_base64
 import ids
+import memcache
+import models
 from models import Object, Target
 import protocol
 from web import Web
@@ -111,6 +113,11 @@ class BounceTest(TestCase, Asserts):
         did.resolve_plc.cache.clear()
         did.resolve_web.cache.clear()
         ids.web_ap_base_domain.cache.clear()
+        memcache.memcache.clear()
+        memcache.pickle_memcache.clear()
+        memcache.global_cache.clear()
+        models.get_original_object_key.cache_clear()
+        models.get_original_user_key.cache_clear()
         protocol.Protocol.for_id.cache.clear()
         protocol.Protocol.for_handle.cache.clear()
 
@@ -365,10 +372,10 @@ chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto",
         text = html_to_text(body)
         self.assert_multiline_in("""
 When you migrate  @alice@in.st to  al.ice ...
-### You'll keep _all_ of your followers.
+### You'll keep _all_ of your 2 followers.
 * @alice@in.st
 * Bawb · ba.wb
-### You'll keep _67%_ of your follows.
+### You'll keep _67%_ of your 3 follows.
 * @alice@in.st
 * Bawb · ba.wb
 * 🌐 e.ve""", text, ignore_blanks=True)
@@ -455,10 +462,10 @@ chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto",
         text = html_to_text(body)
         self.assert_multiline_in("""
 When you migrate  al.ice to  @alice@in.st ...
-### You'll keep _all_ of your followers.
+### You'll keep _all_ of your 2 followers.
 * al.ice
 * bawb
-### You'll keep _67%_ of your follows.
+### You'll keep _67%_ of your 3 follows.
 * al.ice
 * bawb
 * 🌐 e.ve""", text, ignore_blanks=True)

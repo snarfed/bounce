@@ -19,6 +19,7 @@ from granary import as2
 from granary.bluesky import Bluesky
 from granary.mastodon import Mastodon
 from granary.pixelfed import Pixelfed
+import humanize
 import lexrpc
 import oauth_dropins
 import oauth_dropins.bluesky
@@ -601,11 +602,18 @@ def review(from_auth, to_auth):
                 if user:
                     preview.append(user.user_link(pictures=True))
 
+    # total counts in human-friendly form, eg 12K, 2M
+    # hacky, uses humanize's file size function and then tweaks it
+    # https://humanize.readthedocs.io/en/latest/filesize/
+    def humanize_number(num):
+        return humanize.naturalsize(num, format='%.0f')\
+                       .upper().removesuffix('BYTES').rstrip('B').replace(' ', '')
+
+    # percentage of follows that will be kept
     keep_follows_pct = 100
     if follows:
         keep_follows_pct = round(total_bridged / len(follows) * 100)
 
-    # TODO: include total follow[er] counts
     html = render_template(
         'review.html',
         from_auth=from_auth,
@@ -614,6 +622,8 @@ def review(from_auth, to_auth):
         follows_preview=follows_preview,
         follower_counts=[['type', 'count']] + sorted(follower_counts),
         follow_counts=[['type', 'count']] + sorted(follow_counts),
+        total_followers=humanize_number(len(followers)),
+        total_follows=humanize_number(len(follows)),
         keep_follows_pct=keep_follows_pct,
         **template_vars(),
     )
