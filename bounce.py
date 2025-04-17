@@ -46,6 +46,7 @@ from activitypub import ActivityPub
 from atproto import ATProto
 import common
 import ids
+from ids import translate_user_id
 import models
 from protocol import Protocol
 from web import Web
@@ -60,6 +61,8 @@ bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
 
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
+
+FOLLOWERS_PREVIEW_LEN = 20
 
 AUTH_TO_PROTOCOL = {
     oauth_dropins.bluesky.BlueskyAuth: ATProto,
@@ -265,10 +268,6 @@ def require_accounts(from_params, to_params=None, failures_to=None):
                         and auth.key.id().startswith('did:web:')):
                     flash('Sorry, did:webs are not currently supported.')
                     return redirect('/', code=302)
-
-            # TODO: load to user, check state, check that it's not already bridged
-            # (move check from /review)
-            # load migration, check that it's not already done
 
             return fn(*args, **kwargs)
         return wrapper
@@ -529,7 +528,6 @@ def review(from_auth, to_auth):
     ids_by_proto = defaultdict(list)
     for followee in follows:
         followee['image'] = util.get_first(followee, 'image')
-        # TODO: if wrapped, extract from protocol
         id = common.unwrap(followee.get('id'))
         proto = Protocol.for_id(id, remote=False) or from_proto
         ids_by_proto[proto].append(id)
@@ -580,21 +578,40 @@ def review(from_auth, to_auth):
 
     logger.info(f'{len(follows)} total, {follow_counts}')
 
-    # preprocess actors
-    if from_proto == ActivityPub:
-        for f in followers + follows:
-            f['username'] = as2.address(as2.from_as1(f))
+    # generate previews of individual follower and following users (BF Users)
+    followers_preview = []
+    follows_preview = []
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        for source, preview in (followers, followers_preview), (follows, follows_preview):
+            for actor in source[:FOLLOWERS_PREVIEW_LEN]:
+                user = None
+                id = actor['id']
+                if from_proto.HAS_COPIES:
+                    if key := models.get_original_user_key(id):
+                        user = key.get()
+                    else:
+                        user = from_proto.get_or_create(id, allow_opt_out=True)
+
+                else:
+                    if proto := Protocol.for_id(id):
+                        if proto != from_proto:
+                            id = translate_user_id(id=id, from_=from_proto, to=proto)
+                        user = proto.get_or_create(id, allow_opt_out=True)
+
+                if user:
+                    preview.append(user.user_link(pictures=True))
 
     keep_follows_pct = 100
     if follows:
         keep_follows_pct = round(total_bridged / len(follows) * 100)
 
+    # TODO: include total follow[er] counts
     html = render_template(
         'review.html',
         from_auth=from_auth,
         to_auth=to_auth,
-        followers=followers,
-        follows=follows,
+        followers_preview=followers_preview,
+        follows_preview=follows_preview,
         follower_counts=[['type', 'count']] + sorted(follower_counts),
         follow_counts=[['type', 'count']] + sorted(follow_counts),
         keep_follows_pct=keep_follows_pct,

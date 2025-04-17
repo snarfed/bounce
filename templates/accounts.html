@@ -5,7 +5,7 @@
 <div class="row">
 <p class="big">{{ 'Choose' if accounts else 'Log into' }} an account to migrate{% if body_id == 'to' %}
   {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
-  <em>to</em>{% endif %}.</p>
+  to{% endif %}.</p>
 <!-- {% if body_id == 'to' %} -->
 <!--   <p>We'll ask for write permission so that we can migrate your follows into this account.</p> -->
 <!-- {% endif %} -->

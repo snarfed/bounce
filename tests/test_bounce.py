@@ -1,4 +1,5 @@
 """Unit tests for bounce.py."""
+import copy
 import json
 import os
 from unittest import TestCase
@@ -74,11 +75,15 @@ SNARFED2_DID_DOC = {  # add #atproto_pds
     **SNARFED2_DID_DOC,
 }
 ALICE_BSKY_PROFILE = {
-    '$type': 'app.bsky.actor.profile',
-    'displayName': 'Alice',
-    'avatar': {
-        '$type': 'blob',
-        'ref': {'$link': 'bafkreicqp'},
+    'uri': 'at://did:plc:alice/app.bsky.actor.profile/self',
+    'cid': 'abcdefgh',
+    'value': {
+        '$type': 'app.bsky.actor.profile',
+        'displayName': 'Alice',
+        'avatar': {
+            '$type': 'blob',
+            'ref': {'$link': 'bafkreicqp'},
+        },
     },
 }
 ALICE_AP_ACTOR = {
@@ -308,13 +313,28 @@ class="logo" title="Bluesky" />
             'url': 'http://e.ve/',
             'avatar': 'http://e.ve/pic',
         }
+
+        bob_bsky_profile = copy.deepcopy(ALICE_BSKY_PROFILE)
+        bob_bsky_profile['value']['displayName'] = 'Bawb'
+
         mock_get.side_effect = [
             # followers
             requests_response([alice, bob], content_type='application/json'),
             # follows
             requests_response([alice, bob, eve], content_type='application/json'),
+            # alice AP actor
+            requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
+            requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
+            # bob DID doc
+            requests_response({
+                # 'id': 'did:plc:alice',
+                'alsoKnownAs': ['at://ba.wb'],
+            }),
+            # bob bsky profile
+            requests_response(bob_bsky_profile),
         ]
 
+        self.make_bot_users()
         with ndb.context.Context(bridgy_fed_ndb).use():
             Web(id='e.ve', enabled_protocols=['atproto'],
                 copies=[Target(protocol='atproto', uri='did:plc:eve')]).put()
@@ -329,7 +349,6 @@ class="logo" title="Bluesky" />
         resp = self.client.get(f'/review?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
         self.assertEqual(200, resp.status_code)
 
-        self.assertEqual(2, mock_get.call_count)
         self.assertEqual(('http://in.st/api/v1/accounts/234/followers?limit=80',),
                          mock_get.call_args_list[0].args)
         self.assertEqual(('http://in.st/api/v1/accounts/234/following?limit=80',),
@@ -347,12 +366,12 @@ chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto",
         self.assert_multiline_in("""
 When you migrate  @alice@in.st to  al.ice ...
 ### You'll keep _all_ of your followers.
-* @alice@in.st · Ms Alice
-* @bo.b@bsky.brid.gy
+* @alice@in.st
+* Bawb · ba.wb
 ### You'll keep _67%_ of your follows.
-* @alice@in.st · Ms Alice
-* @bo.b@bsky.brid.gy
-* @e.ve@web.brid.gy""", text, ignore_blanks=True)
+* @alice@in.st
+* Bawb · ba.wb
+* 🌐 e.ve""", text, ignore_blanks=True)
         self.assertIn('<form action="/confirm" method="get">', body)
 
         mock_get.reset_mock()
@@ -390,7 +409,7 @@ When you migrate  @alice@in.st to  al.ice ...
             'avatar': 'http://eve/pic',
         }
         mock_get.side_effect = [
-            requests_response({}),  # did:plc:alice
+            requests_response(DID_DOC),  # did:plc:alice
             requests_response({
                 'subject': {'did': 'did:plc:alice', 'handle': 'al.ice'},
                 'followers': [alice, bob],
@@ -404,7 +423,8 @@ When you migrate  @alice@in.st to  al.ice ...
         with ndb.context.Context(bridgy_fed_ndb).use():
             ATProto(id='did:plc:alice', enabled_protocols=['activitypub']).put()
             ActivityPub(id='http://in.st/users/alice').put()
-            ActivityPub(id='http://inst/bob',
+            obj_key = Object(id='bob', as2={'preferredUsername': 'bawb'}).put()
+            ActivityPub(id='http://inst/bob', obj_key=obj_key,
                         copies=[Target(protocol='atproto', uri='did:plc:bob')]).put()
             Web(id='e.ve', enabled_protocols=['atproto'],  # not activitypub
                 copies=[Target(protocol='atproto', uri='did:plc:eve')]).put()
@@ -436,12 +456,12 @@ chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto",
         self.assert_multiline_in("""
 When you migrate  al.ice to  @alice@in.st ...
 ### You'll keep _all_ of your followers.
-* al.ice · Ms Alice
-* bo.b
+* al.ice
+* bawb
 ### You'll keep _67%_ of your follows.
-* al.ice · Ms Alice
-* bo.b
-* e.ve""", text, ignore_blanks=True)
+* al.ice
+* bawb
+* 🌐 e.ve""", text, ignore_blanks=True)
         self.assertIn('<form action="/bluesky-password" method="get">', body)
 
         migration = Migration.get_by_id('did:plc:alice activitypub')
@@ -629,11 +649,7 @@ When you migrate  al.ice to  @alice@in.st ...
     ])
     @patch('requests.get', side_effect=[
         requests_response(SNARFED2_DID_DOC),
-        requests_response({
-            'uri': 'at://did:plc:alice/app.bsky.actor.profile/self',
-            'cid': 'abcdefgh',
-            'value': ALICE_BSKY_PROFILE,
-        }),
+        requests_response(ALICE_BSKY_PROFILE),
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response({'accounts': [{'id': '123', 'uri': 'http://other/bob'}]}),
         requests_response({'accounts': [{'id': '456', 'uri': 'http://other/eve'}]}),
