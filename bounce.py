@@ -39,6 +39,7 @@ from oauth_dropins.webutil.flask_util import (
     Found,
     get_required_param,
 )
+from oauth_dropins.webutil.models import JsonProperty
 from requests import RequestException
 from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
 
@@ -154,6 +155,10 @@ class Migration(ndb.Model):
         'migrate-in',
         'migrate-done',
     ))
+
+    # data for review. contents depend on state. if state is review-done, these
+    # are template parameters for rendering review.html.
+    review = JsonProperty()
 
     # user ids to follow
     to_follow = ndb.StringProperty(repeated=True)
@@ -486,7 +491,8 @@ def review(from_auth, to_auth):
 
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
-    migration = Migration.get_or_insert(from_auth, to_auth)
+    migration = Migration.get_or_insert(from_auth, to_auth,
+                                        state='review-fetch-followers')
     if migration.state and migration.state.startswith('migrate-'):
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
         return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
@@ -495,15 +501,51 @@ def review(from_auth, to_auth):
         migration.to = to_auth.key
         migration.followed = []
         migration.to_follow = []
+        migration.state = 'review-fetch-followers'
+        migration.review = {}
+        migration.put()
 
     to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
     source = granary_source(from_auth, with_auth=True)
     from_auth.url = source.to_as1_actor(json.loads(from_auth.user_json)).get('url')
 
-    #
-    # followers
-    #
-    logger.info('Fetching followers')
+    # Process based on migration state
+    if migration.state in (None, 'review-fetch-followers'):
+        review_followers(migration, from_auth)
+        migration.state = 'review-fetch-follows'
+        migration.put()
+
+    if migration.state == 'review-fetch-follows':
+        review_follows(migration, from_auth, to_auth)
+        migration.state = 'review-analyze'
+        migration.put()
+
+    if migration.state == 'review-analyze':
+        analyze_review(migration, from_auth)
+        migration.state = 'review-done'
+        migration.put()
+
+    assert migration.state == 'review-done'
+    return render_template(
+        'review.html',
+        from_auth=from_auth,
+        to_auth=to_auth,
+        **migration.review,
+        **template_vars(),
+    )
+
+
+def review_followers(migration, from_auth):
+    """Fetches followers for the account being reviewed.
+
+    Args:
+      migration (Migration)
+      from_auth (oauth_dropins.models.BaseAuth)
+    """
+    logger.info(f'Fetching followers for {from_auth.key_id()}')
+    from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
+
+    source = granary_source(from_auth, with_auth=True)
     followers = source.get_followers()
     ids = [f['id'] for f in followers if f.get('id')]
     for follower in followers:
@@ -520,18 +562,34 @@ def review(from_auth, to_auth):
         follower_counts.append([from_proto.__name__, len(followers) - rest])
 
     else:
-        by_protocol = defaultdict(list)
+        by_proto = defaultdict(list)
         for id in ids:
             domain = util.domain_from_link(id)
-            by_protocol[BRIDGE_DOMAIN_TO_PROTOCOL.get(domain, ActivityPub)].append(id)
-        follower_counts = list((model.__name__, len(ids)) for model, ids in by_protocol.items())
+            by_proto[BRIDGE_DOMAIN_TO_PROTOCOL.get(domain, ActivityPub)].append(id)
+        follower_counts = list((model.__name__, len(ids))
+                               for model, ids in by_proto.items())
 
     logger.info(f'  {len(followers)} total, {follower_counts}')
 
-    #
-    # follows
-    #
-    logger.info('Fetching follows')
+    migration.review.update({
+        'followers_preview_raw': followers[:FOLLOWERS_PREVIEW_LEN],
+        'follower_counts': follower_counts,
+    })
+
+
+def review_follows(migration, from_auth, to_auth):
+    """Fetches follows for the account being reviewed.
+
+    Args:
+      migration (Migration)
+      from_auth (oauth_dropins.models.BaseAuth)
+      to_auth (oauth_dropins.models.BaseAuth)
+    """
+    from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
+    to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
+    logger.info(f'Fetching follows for {from_auth.key_id()} with to proto {to_proto.LABEL}')
+
+    source = granary_source(from_auth, with_auth=True)
     follows = source.get_follows()
 
     ids_by_proto = defaultdict(list)
@@ -580,20 +638,37 @@ def review(from_auth, to_auth):
     for id in to_follow_ids:
         if id not in migration.followed and id not in migration.to_follow:
             migration.to_follow.append(id)
-    migration.state = 'review-done'
-    migration.put()
 
-    total_bridged = sum(count for _, count in follow_counts)
-    follow_counts.append(['not bridged', len(follows) - total_bridged])
+    total_bridged_follows = sum(count for _, count in follow_counts)
+    follow_counts.append(['not bridged', len(follows) - total_bridged_follows])
 
     logger.info(f'{len(follows)} total, {follow_counts}')
+
+    migration.review.update({
+        'follows_preview_raw': follows[:FOLLOWERS_PREVIEW_LEN],
+        'follow_counts': follow_counts,
+        'total_bridged_follows': total_bridged_follows,
+    })
+
+
+def analyze_review(migration, from_auth):
+    """Analyzes the follow/follower data and generates previews.
+
+    Args:
+      migration (Migration)
+    """
+    from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
+    logger.info(f'Generating review for {from_auth.key_id()}')
 
     # generate previews of individual follower and following users (BF Users)
     followers_preview = []
     follows_preview = []
     with ndb.context.Context(bridgy_fed_ndb).use():
-        for source, preview in (followers, followers_preview), (follows, follows_preview):
-            for actor in source[:FOLLOWERS_PREVIEW_LEN]:
+        for raw, preview in (
+                (migration.review['followers_preview_raw'], followers_preview),
+                (migration.review['follows_preview_raw'], follows_preview),
+        ):
+            for actor in raw[:FOLLOWERS_PREVIEW_LEN]:
                 user = None
                 id = actor['id']
                 if from_proto.HAS_COPIES:
@@ -618,26 +693,28 @@ def review(from_auth, to_auth):
         return humanize.naturalsize(num, format='%.0f')\
                        .upper().removesuffix('BYTES').rstrip('B').replace(' ', '')
 
-    # percentage of follows that will be kept
-    keep_follows_pct = 100
-    if follows:
-        keep_follows_pct = round(total_bridged / len(follows) * 100)
+    # total counts, percentage of follows that will be kept
+    follow_counts = migration.review['follow_counts']
+    total_follows = sum(count for _, count in follow_counts)
 
-    html = render_template(
-        'review.html',
-        from_auth=from_auth,
-        to_auth=to_auth,
-        followers_preview=followers_preview,
-        follows_preview=follows_preview,
-        follower_counts=[['type', 'count']] + sorted(follower_counts),
-        follow_counts=[['type', 'count']] + sorted(follow_counts),
-        total_followers=humanize_number(len(followers)),
-        total_follows=humanize_number(len(follows)),
-        keep_follows_pct=keep_follows_pct,
-        **template_vars(),
-    )
-    Cache.put(cache_key, html, expire=timedelta(days=30))
-    return html
+    follower_counts = migration.review['follower_counts']
+    total_followers = sum(count for _, count in follower_counts)
+
+    keep_follows_pct = 100
+    if total_follows > 0:
+        total_bridged_follows = migration.review['total_bridged_follows']
+        assert total_bridged_follows <= total_follows
+        keep_follows_pct = round(total_bridged_follows / total_follows * 100)
+
+    migration.review.update({
+        'followers_preview': followers_preview,
+        'follows_preview': follows_preview,
+        'total_followers': humanize_number(total_followers),
+        'total_follows': humanize_number(total_follows),
+        'follower_counts': [['type', 'count']] + sorted(follower_counts),
+        'follow_counts': [['type', 'count']] + sorted(follow_counts),
+        'keep_follows_pct': keep_follows_pct,
+    })
 
 
 @app.get('/bluesky-password')
