@@ -144,8 +144,16 @@ class Migration(ndb.Model):
     'did:plc:alice activitypub'.
     """
     to = ndb.KeyProperty()  # auth entity
-    state = ndb.StringProperty(choices=('follows', 'out', 'in', 'done'),
-                               default='follows')
+    state = ndb.StringProperty(choices=(
+        'review-fetch-followers',
+        'review-fetch-follows',
+        'review-analyze',
+        'review-done',
+        'migrate-follows',
+        'migrate-out',
+        'migrate-in',
+        'migrate-done',
+    ))
 
     # user ids to follow
     to_follow = ndb.StringProperty(repeated=True)
@@ -479,7 +487,7 @@ def review(from_auth, to_auth):
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
     migration = Migration.get_or_insert(from_auth, to_auth)
-    if migration.state != 'follows':
+    if migration.state and migration.state.startswith('migrate-'):
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
         return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
     elif migration.to != to_auth.key:
@@ -572,6 +580,7 @@ def review(from_auth, to_auth):
     for id in to_follow_ids:
         if id not in migration.followed and id not in migration.to_follow:
             migration.to_follow.append(id)
+    migration.state = 'review-done'
     migration.put()
 
     total_bridged = sum(count for _, count in follow_counts)
@@ -685,7 +694,7 @@ def migrate(from_auth, to_auth):
     migration = Migration.get(from_auth, to_auth)
     if not migration:
         error('migration not found', status=404)
-    elif migration.state == 'done':
+    elif migration.state == 'migrate-done':
         flash(f'{from_auth.user_display_name()} has already been migrated.')
         return redirect('/from')
 
@@ -696,19 +705,19 @@ def migrate(from_auth, to_auth):
     to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
     assert from_user.__class__ != to_user.__class__, (from_user, to_user)
 
-    if migration.state == 'follows':
+    if migration.state in ('review-done', 'migrate-follows'):
         migrate_follows(migration, to_auth)
-        migration.state = 'in'
+        migration.state = 'migrate-in'
         migration.put()
 
-    if migration.state == 'in':
+    if migration.state == 'migrate-in':
         migrate_in(migration, from_auth, from_user, to_user)
-        migration.state = 'out'
+        migration.state = 'migrate-out'
         migration.put()
 
-    if migration.state == 'out':
+    if migration.state == 'migrate-out':
         migrate_out(migration, from_user, to_user)
-        migration.state = 'done'
+        migration.state = 'migrate-done'
         migration.put()
 
     return render_template(
