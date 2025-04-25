@@ -425,6 +425,27 @@ a img.shadow:hover
   list-style: none;
 }
 
+/*
+ * Review progress
+ */
+.progress-checklist {
+  list-style-type: none;
+}
+
+.progress-spinner {
+  width: 1em;
+  display: inline-block;
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/*
+ * Docs
+ */
 .docs table {
   border-collapse: collapse;
   width: auto;

@@ -1,0 +1,40 @@
+{% set body_id = 'review-progress' %}
+{% extends "base.html" %}
+
+{% block content %}
+<meta http-equiv="refresh" content="5">
+
+{% set from_label %}
+  {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
+{% endset %}
+
+<div class="row big">
+<p>Reviewing {{ from_label }}...</p>
+</div>
+
+<div class="row" style="text-align: left">
+<ul class="progress-checklist">
+  {% for state in [State.review_followers, State.review_follows, State.review_analyze] %}
+    <div class="col-md-3 col-md-offset-4
+                col-sm-4 col-sm-offset-2
+                col-xs-8">
+    {{ {
+        'review_followers': 'Analyzing followers...',
+        'review_follows': 'Analyzing follows...',
+        'review_analyze': 'Processing account...',
+      }[state.name]
+    }}
+    </div>
+
+    <div class="col-xs-2 col-sm-1">
+      {% if State[migration.state] == state %}
+        <img class="progress-spinner" src="/static/star.svg" />
+      {% elif State[migration.state].value > state.value %}
+        <span class="progress-checkbox">✅</span>
+      {% endif %}
+    </div>
+  {% endfor %}
+</ul>
+</div>
+
+{% endblock content %}

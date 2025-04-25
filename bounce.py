@@ -722,6 +722,22 @@ def analyze_review(migration, from_auth):
     })
 
 
+@app.get('/review-progress')
+@require_accounts('from', 'to')
+def review_progress(from_auth, to_auth):
+    """Progress/status page for in progress review."""
+    migration = Migration.get(from_auth, to_auth)
+    assert migration
+    return render_template(
+        'review_progress.html',
+        from_auth=from_auth,
+        to_auth=to_auth,
+        migration=migration,
+        State=Migration.State,
+        **template_vars(),
+    )
+
+
 @app.get('/bluesky-password')
 @require_accounts('from', 'to')
 def bluesky_password(from_auth, to_auth):
