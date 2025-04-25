@@ -282,7 +282,7 @@ class="logo" title="Bluesky" />
             existing_to_auth = self.make_mastodon(sess, name='bob')
             new_to_auth = self.make_mastodon(sess)
 
-        Migration(id='did:plc:alice activitypub', state='migrate-out',
+        Migration(id='did:plc:alice activitypub', state='migrate_out',
                   to=existing_to_auth).put()
 
         resp = self.client.get(f'/review?from={from_auth.urlsafe().decode()}&to={new_to_auth.urlsafe().decode()}')
@@ -387,7 +387,7 @@ When you migrate  @alice@in.st to  al.ice ...
         self.assertEqual(0, mock_get.call_count)
 
         migration = Migration.get_by_id('@alice@in.st atproto')
-        self.assertEqual('review-done', migration.state)
+        self.assertEqual('review_done', migration.state)
         self.assertEqual([], migration.followed)
         self.assertEqual(['did:plc:bob', 'did:plc:eve'], migration.to_follow)
 
@@ -472,7 +472,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertIn('<form action="/bluesky-password" method="get">', body)
 
         migration = Migration.get_by_id('did:plc:alice activitypub')
-        self.assertEqual('review-done', migration.state)
+        self.assertEqual('review_done', migration.state)
         self.assertEqual([], migration.followed)
         self.assertCountEqual(
             ['http://inst/bob', 'https://bsky.brid.gy/ap/did:plc:alice'],
@@ -533,7 +533,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertIsNone(from_auth.get().session)
 
     def test_migrate_already_done(self):
-        Migration(id='did:plc:alice activitypub', state='migrate-done').put()
+        Migration(id='did:plc:alice activitypub', state='migrate_done').put()
 
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
@@ -611,7 +611,7 @@ When you migrate  al.ice to  @alice@in.st ...
 
         migration = Migration(id='@alice@in.st atproto', to=to_auth,
                               to_follow=['did:bob', 'did:eve'],
-                              state='review-done',
+                              state='review_done',
                               ).put()
 
         resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}')
@@ -684,7 +684,7 @@ When you migrate  al.ice to  @alice@in.st ...
         migration = Migration(id=f'{SNARFED2_DID} activitypub', to=to_auth,
                               to_follow=['http://other/bob', 'http://other/eve'],
                               followed=['http://other/zed'],
-                              state='review-done',
+                              state='review_done',
                               ).put()
 
         resp = self.client.post(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}&plc-code=kowd')
