@@ -146,8 +146,8 @@ class Migration(ndb.Model):
     """
     to = ndb.KeyProperty()  # auth entity
     state = ndb.StringProperty(choices=(
-        'review-fetch-followers',
-        'review-fetch-follows',
+        'review-followers',
+        'review-follows',
         'review-analyze',
         'review-done',
         'migrate-follows',
@@ -491,17 +491,18 @@ def review(from_auth, to_auth):
 
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
-    migration = Migration.get_or_insert(from_auth, to_auth,
-                                        state='review-fetch-followers')
+    migration = Migration.get_or_insert(from_auth, to_auth, state='review-followers')
     if migration.state and migration.state.startswith('migrate-'):
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
         return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
-    elif migration.to != to_auth.key:
-        # new migration or new (different) to account, reset progress
+    elif not migration.to or migration.to != to_auth.key:
+        # new migration or new (different) to account
+        if migration.state not in (None, 'review-followers'):
+            # reuse followers data, it's independent of the protocol we're migrating to
+            migration.state = 'review-follows'
         migration.to = to_auth.key
         migration.followed = []
         migration.to_follow = []
-        migration.state = 'review-fetch-followers'
         migration.review = {}
         migration.put()
 
@@ -510,12 +511,12 @@ def review(from_auth, to_auth):
     from_auth.url = source.to_as1_actor(json.loads(from_auth.user_json)).get('url')
 
     # Process based on migration state
-    if migration.state in (None, 'review-fetch-followers'):
+    if migration.state in (None, 'review-followers'):
         review_followers(migration, from_auth)
-        migration.state = 'review-fetch-follows'
+        migration.state = 'review-follows'
         migration.put()
 
-    if migration.state == 'review-fetch-follows':
+    if migration.state == 'review-follows':
         review_follows(migration, from_auth, to_auth)
         migration.state = 'review-analyze'
         migration.put()
