@@ -40,7 +40,7 @@ from oauth_dropins.webutil.flask_util import (
     Found,
     get_required_param,
 )
-from oauth_dropins.webutil.models import JsonProperty
+from oauth_dropins.webutil.models import EnumProperty, JsonProperty
 from requests import RequestException
 from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
 
@@ -139,6 +139,18 @@ class Cache(ndb.Model):
         super(cls, cached).put()
 
 
+class State(Enum):
+    # in order!
+    review_followers = auto()
+    review_follows = auto()
+    review_analyze = auto()
+    review_done = auto()
+    migrate_follows = auto()
+    migrate_out = auto()
+    migrate_in = auto()
+    migrate_done = auto()
+
+
 class Migration(ndb.Model):
     """Stores state for a migration.
 
@@ -147,18 +159,7 @@ class Migration(ndb.Model):
     """
     to = ndb.KeyProperty()  # auth entity
 
-    State = Enum('State', (
-        # in order!
-        'review_followers',
-        'review_follows',
-        'review_analyze',
-        'review_done',
-        'migrate_follows',
-        'migrate_out',
-        'migrate_in',
-        'migrate_done',
-    ))
-    state = ndb.StringProperty(choices=[s.name for s in State])
+    state = EnumProperty(State)
 
     # data for review. contents depend on state. if state is review_done, these
     # are template parameters for rendering review.html.
@@ -495,15 +496,15 @@ def review(from_auth, to_auth):
 
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
-    migration = Migration.get_or_insert(from_auth, to_auth, state='review_followers')
-    if migration.state and migration.state.startswith('migrate_'):
+    migration = Migration.get_or_insert(from_auth, to_auth, state=State.review_followers)
+    if migration.state and migration.state >= State.migrate_follows:
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
         return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
     elif not migration.to or migration.to != to_auth.key:
         # new migration or new (different) to account
-        if migration.state not in (None, 'review_followers'):
+        if migration.state not in (None, State.review_followers):
             # reuse followers data, it's independent of the protocol we're migrating to
-            migration.state = 'review_follows'
+            migration.state = State.review_follows
         migration.to = to_auth.key
         migration.followed = []
         migration.to_follow = []
@@ -515,22 +516,22 @@ def review(from_auth, to_auth):
     from_auth.url = source.to_as1_actor(json.loads(from_auth.user_json)).get('url')
 
     # Process based on migration state
-    if migration.state in (None, 'review_followers'):
+    if migration.state in (None, State.review_followers):
         review_followers(migration, from_auth)
-        migration.state = 'review_follows'
+        migration.state = State.review_follows
         migration.put()
 
-    if migration.state == 'review_follows':
+    if migration.state == State.review_follows:
         review_follows(migration, from_auth, to_auth)
-        migration.state = 'review_analyze'
+        migration.state = State.review_analyze
         migration.put()
 
-    if migration.state == 'review_analyze':
+    if migration.state == State.review_analyze:
         analyze_review(migration, from_auth)
-        migration.state = 'review_done'
+        migration.state = State.review_done
         migration.put()
 
-    assert migration.state == 'review_done'
+    assert migration.state == State.review_done
     return render_template(
         'review.html',
         from_auth=from_auth,
@@ -733,7 +734,7 @@ def review_progress(from_auth, to_auth):
         from_auth=from_auth,
         to_auth=to_auth,
         migration=migration,
-        State=Migration.State,
+        State=State,
         **template_vars(),
     )
 
@@ -792,7 +793,7 @@ def migrate(from_auth, to_auth):
     migration = Migration.get(from_auth, to_auth)
     if not migration:
         error('migration not found', status=404)
-    elif migration.state == 'migrate_done':
+    elif migration.state == State.migrate_done:
         flash(f'{from_auth.user_display_name()} has already been migrated.')
         return redirect('/from')
 
@@ -803,19 +804,19 @@ def migrate(from_auth, to_auth):
     to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
     assert from_user.__class__ != to_user.__class__, (from_user, to_user)
 
-    if migration.state in ('review_done', 'migrate_follows'):
+    if migration.state in (State.review_done, State.migrate_follows):
         migrate_follows(migration, to_auth)
-        migration.state = 'migrate_in'
+        migration.state = State.migrate_in
         migration.put()
 
-    if migration.state == 'migrate_in':
+    if migration.state == State.migrate_in:
         migrate_in(migration, from_auth, from_user, to_user)
-        migration.state = 'migrate_out'
+        migration.state = State.migrate_out
         migration.put()
 
-    if migration.state == 'migrate_out':
+    if migration.state == State.migrate_out:
         migrate_out(migration, from_user, to_user)
-        migration.state = 'migrate_done'
+        migration.state = State.migrate_done
         migration.put()
 
     return render_template(
