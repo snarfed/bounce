@@ -35,6 +35,7 @@ from oauth_dropins.webutil import (
     util,
 )
 from oauth_dropins.webutil.flask_util import (
+    cloud_tasks_only,
     error,
     FlashErrors,
     Found,
@@ -498,11 +499,35 @@ def choose_to(from_auth):
 @app.get('/review')
 @require_accounts(('from', 'state'), ('to', 'auth_entity'), failures_to='/from')
 def review(from_auth, to_auth):
-    """Review an account's followers and follows."""
+    """Reviews a "from" account's followers and follows."""
+    migration = Migration.get_or_insert(from_auth, to_auth, state='review_followers')
+    if migration.state >= State.migrate_follows:
+        flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
+        return redirect(url('/to', from_auth))
+
+    return render_template(
+        ('review.html' if migration.state == State.review_done
+         else 'review_progress.html'),
+        from_auth=from_auth,
+        to_auth=to_auth,
+        migration=migration,
+        State=State,
+        **migration.review,
+        **template_vars(),
+    )
+
+
+@cloud_tasks_only()
+@app.post('/queue/review')
+@require_accounts(('from', 'state'), ('to', 'auth_entity'))
+def review_task(from_auth, to_auth):
+    """Review a "from" account's followers and follows."""
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
     assert from_proto in (ActivityPub, ATProto)
     to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
     assert to_proto in (ActivityPub, ATProto)
+
+    logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
     cache_key = f'review-html-{from_auth.key.id()}-{to_auth.key.id()}'
     if 'force' not in request.args:
@@ -547,14 +572,7 @@ def review(from_auth, to_auth):
         migration.state = State.review_done
         migration.put()
 
-    assert migration.state == State.review_done
-    return render_template(
-        'review.html',
-        from_auth=from_auth,
-        to_auth=to_auth,
-        **migration.review,
-        **template_vars(),
-    )
+    return 'OK'
 
 
 def review_followers(migration, from_auth):
@@ -737,22 +755,6 @@ def analyze_review(migration, from_auth):
         'follow_counts': [['type', 'count']] + sorted(follow_counts),
         'keep_follows_pct': keep_follows_pct,
     })
-
-
-@app.get('/review-progress')
-@require_accounts('from', 'to')
-def review_progress(from_auth, to_auth):
-    """Progress/status page for in progress review."""
-    migration = Migration.get(from_auth, to_auth)
-    assert migration
-    return render_template(
-        'review_progress.html',
-        from_auth=from_auth,
-        to_auth=to_auth,
-        migration=migration,
-        State=State,
-        **template_vars(),
-    )
 
 
 @app.get('/bluesky-password')
