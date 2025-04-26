@@ -164,7 +164,7 @@ class Migration(ndb.Model):
 
     # data for review. contents depend on state. if state is review_done, these
     # are template parameters for rendering review.html.
-    review = JsonProperty()
+    review = JsonProperty(default={})
 
     # user ids to follow
     to_follow = ndb.StringProperty(repeated=True)
@@ -500,10 +500,30 @@ def choose_to(from_auth):
 @require_accounts(('from', 'state'), ('to', 'auth_entity'), failures_to='/from')
 def review(from_auth, to_auth):
     """Reviews a "from" account's followers and follows."""
-    migration = Migration.get_or_insert(from_auth, to_auth, state='review_followers')
-    if migration.state >= State.migrate_follows:
+    logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
+
+    migration = Migration.get_or_insert(from_auth, to_auth,
+                                        state=State.review_followers)
+    if migration.state and migration.state >= State.migrate_follows:
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
         return redirect(url('/to', from_auth))
+    elif not migration.to or migration.to != to_auth.key:
+        if migration.to:
+            logger.info(f'  overwriting existing to {migration.to} with {to_auth.key}')
+        # new migration or new (different) to account
+        if migration.state not in (None, State.review_followers):
+            # reuse followers data, it's independent of the protocol we're migrating to
+            migration.state = State.review_follows
+        migration.to = to_auth.key
+        migration.followed = []
+        migration.to_follow = []
+        migration.review = {}
+        migration.put()
+
+    # check that "to" user is eligible
+    get_to_user(to_auth=to_auth, from_auth=from_auth)
+
+    # TODO: create task
 
     return render_template(
         ('review.html' if migration.state == State.review_done
@@ -517,47 +537,25 @@ def review(from_auth, to_auth):
     )
 
 
-@cloud_tasks_only()
 @app.post('/queue/review')
+@cloud_tasks_only()
 @require_accounts(('from', 'state'), ('to', 'auth_entity'))
 def review_task(from_auth, to_auth):
     """Review a "from" account's followers and follows."""
-    from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
-    assert from_proto in (ActivityPub, ATProto)
-    to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
-    assert to_proto in (ActivityPub, ATProto)
-
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
+    migration = Migration.get(from_auth, to_auth)
+    assert migration, (from_auth, to_auth)
 
-    cache_key = f'review-html-{from_auth.key.id()}-{to_auth.key.id()}'
-    if 'force' not in request.args:
-        if cached := Cache.get(cache_key):
-            logger.info(f'Returning cached review for {from_auth.key.id()}')
-            return cached
+    logger.info(f'  {migration.key} {migration.state}')
+    if migration.state is None:
+        migration.state = State.review_followers
+    assert migration.state <= State.review_done
 
-    logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
-
-    migration = Migration.get_or_insert(from_auth, to_auth, state=State.review_followers)
-    if migration.state and migration.state >= State.migrate_follows:
-        flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
-        return redirect(url('/to', from_auth))
-    elif not migration.to or migration.to != to_auth.key:
-        # new migration or new (different) to account
-        if migration.state not in (None, State.review_followers):
-            # reuse followers data, it's independent of the protocol we're migrating to
-            migration.state = State.review_follows
-        migration.to = to_auth.key
-        migration.followed = []
-        migration.to_follow = []
-        migration.review = {}
-        migration.put()
-
-    to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
     source = granary_source(from_auth, with_auth=True)
     from_auth.url = source.to_as1_actor(json.loads(from_auth.user_json)).get('url')
 
     # Process based on migration state
-    if migration.state in (None, State.review_followers):
+    if migration.state == State.review_followers:
         review_followers(migration, from_auth)
         migration.state = State.review_follows
         migration.put()

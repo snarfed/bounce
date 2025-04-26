@@ -175,7 +175,8 @@ class BounceTest(TestCase, Asserts):
             data['to'] = to_key.urlsafe().decode()
 
         param = 'query_string' if fn == self.client.get else 'data'
-        return fn(path, **{param: data})
+
+        return fn(path, headers={'X-AppEngine-TaskName': 'foo'}, **{param: data})
 
     def get(self, path, *args, **kwargs):
         return self._req(self.client.get, path, *args, **kwargs)
@@ -251,19 +252,17 @@ class="logo" title="Bluesky" />
         self.assertEqual(['Sorry, did:webs are not currently supported.'],
                          get_flashed_messages())
 
-    def test_review_task_no_auth_param(self):
-        resp = self.client.post('/queue/review')
-        self.assertEqual(400, resp.status_code)
-
-    def test_review_task_not_logged_in(self):
-        resp = self.client.post('/queue/review', data={
-            'from': 'ahBicmlkZ3ktZmVkZXJhdGVkchcLEgxNYXN0b2RvbkF1dGgiBWFAYi5jDA',
-            'to': 'ahBicmlkZ3ktZmVkZXJhdGVkchcLEgxNYXN0b2RvbkF1dGgiBWFAYi5jDA',
-        })
+    def test_review_not_logged_in(self):
+        resp = self.get('/review', BlueskyAuth(id='did:foo').key,
+                        MastodonAuth(id='@bar@ba.z').key)
         self.assertEqual(302, resp.status_code)
         self.assertEqual('/', resp.headers['Location'])
 
-    def test_review_task_to_account_is_bridged(self):
+    def test_review_task_no_auth_param(self):
+        resp = self.post('/queue/review')
+        self.assertEqual(400, resp.status_code)
+
+    def test_review_to_account_is_bridged(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
@@ -272,14 +271,14 @@ class="logo" title="Bluesky" />
             ActivityPub(id='http://in.st/users/alice',
                         enabled_protocols=['atproto']).put()
 
-        resp = self.post('/queue/review', from_auth, to_auth)
+        resp = self.get('/review', from_auth, to_auth)
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
                          resp.headers['Location'])
         flashed = get_flashed_messages()
         self.assertTrue(flashed[0].startswith('@alice@in.st is already bridged to Bluesky.'), flashed)
 
-    def test_review_task_to_account_ineligible_for_bridging(self):
+    def test_review_to_account_ineligible_for_bridging(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
@@ -288,14 +287,14 @@ class="logo" title="Bluesky" />
             obj = Object(id='profile', as2={'displayName': 'alice'})
             ActivityPub(id='http://in.st/users/alice', obj_key=obj.put()).put()
 
-        resp = self.post('/queue/review', from_auth, to_auth)
+        resp = self.get('/review', from_auth, to_auth)
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
                          resp.headers['Location'])
         self.assertTrue(get_flashed_messages()[0].startswith(
             "Sorry, @alice@in.st isn't eligible yet because you haven't set a profile picture."))
 
-    def test_review_task_migration_in_progress(self):
+    def test_review_migration_in_progress(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             existing_to_auth = self.make_mastodon(sess, name='bob')
@@ -304,7 +303,7 @@ class="logo" title="Bluesky" />
         Migration(id='did:plc:alice activitypub', state=State.migrate_out,
                   to=existing_to_auth).put()
 
-        resp = self.post('/queue/review', from_auth, new_to_auth)
+        resp = self.get('/review', from_auth, new_to_auth)
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
                          resp.headers['Location'])
@@ -372,6 +371,7 @@ class="logo" title="Bluesky" />
             from_auth = self.make_mastodon(sess)
             to_auth = self.make_bluesky(sess)
 
+        Migration.get_or_insert(from_auth.get(), to_auth.get())
         resp = self.post('/queue/review', from_auth, to_auth)
         self.assertEqual(200, resp.status_code)
 
@@ -463,6 +463,7 @@ class="logo" title="Bluesky" />
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
 
+        Migration.get_or_insert(from_auth.get(), to_auth.get())
         resp = self.post('/queue/review', from_auth, to_auth)
         self.assertEqual(200, resp.status_code)
 
