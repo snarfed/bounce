@@ -1,7 +1,7 @@
 """UI pages."""
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from enum import auto, Enum
+from enum import auto, IntEnum
 from functools import wraps
 from itertools import chain
 import json
@@ -139,7 +139,7 @@ class Cache(ndb.Model):
         super(cls, cached).put()
 
 
-class State(Enum):
+class State(IntEnum):
     # in order!
     review_followers = auto()
     review_follows = auto()
@@ -205,6 +205,23 @@ class Migration(ndb.Model):
         id = cls._key_id(from_auth, to_auth)
         logger.info(f'get_or_insert Migration {id} {kwargs}')
         return super().get_or_insert(id, **kwargs)
+
+
+def url(path, from_auth, to_auth=None):
+    """Simple helper to create URLs with from and optional to auth entities.
+
+    Args:
+          from_auth (oauth_dropins.models.BaseAuth)
+          to_auth (oauth_dropins.models.BaseAuth)
+
+    Returns:
+      str: URL with ``from`` and optionally ``to`` query params
+    """
+    url = f'{path}?from={from_auth.key.urlsafe().decode()}'
+    if to_auth:
+        url += f'&to={to_auth.key.urlsafe().decode()}'
+
+    return url
 
 
 def template_vars(oauth_path_suffix=''):
@@ -286,7 +303,7 @@ def require_accounts(from_params, to_params=None, failures_to=None):
                 if (isinstance(auth, oauth_dropins.bluesky.BlueskyAuth)
                         and auth.key.id().startswith('did:web:')):
                     flash('Sorry, did:webs are not currently supported.')
-                    return redirect('/', code=302)
+                    return redirect('/')
 
             return fn(*args, **kwargs)
         return wrapper
@@ -374,13 +391,13 @@ def get_to_user(*, to_auth, from_auth):
             desc = models.USER_STATUS_DESCRIPTIONS.get(user.status)
             flash(f"Sorry, {to_auth.user_display_name()} isn't eligible yet because {desc}. <a href='https://fed.brid.gy/docs#troubleshooting'>More details here.</a> Feel free to try again once that's fixed!")
             oauth_dropins.logout(to_auth)
-            raise Found(location=f'/to?from={from_auth.key.urlsafe().decode()}')
+            raise Found(location=url('/to', from_auth))
 
         from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
         if user.is_enabled(from_proto):
             flash(f'{to_auth.user_display_name()} is already bridged to {from_proto.PHRASE}. Please <a href="https://fed.brid.gy/docs#opt-out">disable that</a> first or choose another account.')
             oauth_dropins.logout(to_auth)
-            raise Found(location=f'/to?from={from_auth.key.urlsafe().decode()}')
+            raise Found(location=url('/to', from_auth))
 
     return user
 
@@ -407,7 +424,7 @@ def logout():
     """Logs the user out of all current login sessions."""
     oauth_dropins.logout()
     flash("OK, you're now logged out.")
-    return redirect('/', code=302)
+    return redirect('/')
 
 
 @app.get('/from')
@@ -417,7 +434,7 @@ def choose_from():
 
     accounts = [a for a in vars['auths'] if isinstance(a, oauth_dropins.bluesky.BlueskyAuth)]
     for acct in accounts:
-        acct.url = f'/to?from={acct.key.urlsafe().decode()}'
+        acct.url = url('/to', acct)
 
     return render_template(
         'accounts.html',
@@ -445,18 +462,17 @@ def choose_to(from_auth):
     """Choose account to migrate to."""
     if from_auth.key.id().startswith('did:web:'):
         flash('Sorry, did:webs are not currently supported.')
-        return redirect('/', code=302)
+        return redirect('/')
 
     vars = template_vars()
-    from_key = from_auth.key.urlsafe().decode()
 
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
     accounts = [auth for auth in vars['auths']
                 if from_proto != AUTH_TO_PROTOCOL[auth.__class__]]
     for acct in accounts:
-        acct.url = f'/review?from={from_key}&to={acct.key.urlsafe().decode()}'
+        acct.url = url('/review', from_auth, acct)
 
-    state = f'<input type="hidden" name="state" value="{from_key}" />'
+    state = f'<input type="hidden" name="state" value="{from_auth.key.urlsafe().decode()}" />'
     return render_template(
         'accounts.html',
         body_id='to',
@@ -499,7 +515,7 @@ def review(from_auth, to_auth):
     migration = Migration.get_or_insert(from_auth, to_auth, state=State.review_followers)
     if migration.state and migration.state >= State.migrate_follows:
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
-        return redirect(f'/to?from={from_auth.key.urlsafe().decode()}', code=302)
+        return redirect(url('/to', from_auth))
     elif not migration.to or migration.to != to_auth.key:
         # new migration or new (different) to account
         if migration.state not in (None, State.review_followers):
@@ -770,7 +786,7 @@ def confirm(from_auth, to_auth):
         except RequestException as e:
             _, body = util.interpret_http_exception(e)
             flash(f'Login failed: {body}')
-            return redirect(f'/bluesky-password?from={from_auth.key.urlsafe().decode()}&to={to_auth.key.urlsafe().decode()}')
+            return redirect(url('/bluesky-password', from_auth, to_auth))
 
         # store password-based access token, we'll use it later in /migrate
         from_auth.session = bsky.client.session
