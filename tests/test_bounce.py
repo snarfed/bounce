@@ -24,7 +24,7 @@ from oauth_dropins.bluesky import BlueskyAuth
 from oauth_dropins.mastodon import MastodonApp, MastodonAuth
 from oauth_dropins.views import LOGINS_SESSION_KEY
 from oauth_dropins.webutil import flask_util, testutil, util
-from oauth_dropins.webutil.appengine_config import ndb_client
+from oauth_dropins.webutil.appengine_config import ndb_client, tasks_client
 from oauth_dropins.webutil.testutil import (
     Asserts,
     NOW,
@@ -44,7 +44,7 @@ from requests_oauth2client import (
 import activitypub
 from activitypub import ActivityPub
 from atproto import ATProto
-from common import long_to_base64
+from common import long_to_base64, TASKS_LOCATION
 import ids
 import memcache
 import models
@@ -184,6 +184,19 @@ class BounceTest(TestCase, Asserts):
     def post(self, path, *args, **kwargs):
         return self._req(self.client.post, path, *args, **kwargs)
 
+    def assert_task(self, mock_create_task, queue, from_auth, to_auth):
+        # somewhat duplicated from bridgy-fed.tests.testutil.TestCase. if it gets any
+        # more complicated, switch to reusing that
+        calls = mock_create_task.call_args_list
+        self.assertEqual(1, len(calls))
+
+        kwargs = calls[0][1]
+        self.assertEqual(f'projects//locations/{TASKS_LOCATION}/queues/{queue}',
+                         kwargs['parent'])
+        self.assertEqual(
+            f'from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}'.encode(),
+            kwargs['task']['app_engine_http_request']['body'])
+
     def test_front_page(self):
         got = self.client.get('/')
         self.assert_equals(200, got.status_code)
@@ -310,11 +323,27 @@ class="logo" title="Bluesky" />
         self.assertEqual(['al.ice has already begun migrating to @bob@in.st.'],
                          get_flashed_messages())
 
+    @patch.object(tasks_client, 'create_task')
+    @patch('requests.get', return_value=requests_response(
+        ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE))
+    def test_review_from_bluesky(self, mock_get, mock_create_task):
+        self.make_bot_users()
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        resp = self.get('/review', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+
+        migration = Migration.get_by_id('did:plc:alice activitypub')
+        self.assertEqual(State.review_followers, migration.state)
+        self.assert_task(mock_create_task, 'review', from_auth, to_auth)
+
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
     @patch('requests.get')
-    def test_review_task_from_mastodon(self, mock_get, mock_oauth2client):
+    def test_review_task_mastodon_to_bluesky(self, mock_get, mock_oauth2client):
         alice = {
             'id': '234',
             'uri': 'http://in.st/users/alice',
@@ -386,6 +415,8 @@ class="logo" title="Bluesky" />
         self.assertEqual(0, mock_get.call_count)
 
         migration = Migration.get_by_id('@alice@in.st atproto')
+        self.assertEqual(from_auth, migration.from_)
+        self.assertEqual(to_auth, migration.to)
         self.assertEqual(State.review_done, migration.state)
         self.assertEqual([], migration.followed)
         self.assertEqual(['did:plc:bob', 'did:plc:eve'], migration.to_follow)
@@ -418,7 +449,7 @@ class="logo" title="Bluesky" />
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
     @patch('requests.get')
-    def test_review_task_from_bluesky(self, mock_get, mock_oauth2client):
+    def test_review_task_bluesky_to_mastodon(self, mock_get, mock_oauth2client):
         alice = {
             '$type': 'app.bsky.actor.defs#profileView',
             'did': 'did:plc:alice',
@@ -476,6 +507,8 @@ class="logo" title="Bluesky" />
             mock_get.call_args_list[2].args)
 
         migration = Migration.get_by_id('did:plc:alice activitypub')
+        self.assertEqual(from_auth, migration.from_)
+        self.assertEqual(to_auth, migration.to)
         self.assertEqual(State.review_done, migration.state)
         self.assertEqual([], migration.followed)
         self.assertCountEqual(

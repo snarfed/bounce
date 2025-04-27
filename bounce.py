@@ -158,7 +158,8 @@ class Migration(ndb.Model):
     Key id is '[from auth entity id] [to protocol Bridgy Fed label]', eg
     'did:plc:alice activitypub'.
     """
-    to = ndb.KeyProperty()  # auth entity
+    from_ = ndb.KeyProperty()  # auth entities
+    to = ndb.KeyProperty()
 
     state = EnumProperty(State)
 
@@ -193,6 +194,7 @@ class Migration(ndb.Model):
         return cls.get_by_id(id)
 
     @classmethod
+    @ndb.transactional()
     def get_or_insert(cls, from_auth, to_auth, **kwargs):
         """
         Args:
@@ -205,7 +207,24 @@ class Migration(ndb.Model):
         """
         id = cls._key_id(from_auth, to_auth)
         logger.info(f'get_or_insert Migration {id} {kwargs}')
-        return super().get_or_insert(id, **kwargs)
+
+        if not (migration := cls.get_by_id(id)):
+            migration = Migration(id=id, from_=from_auth.key, to=to_auth.key, **kwargs)
+            migration.put()
+
+        return migration
+
+    def create_task(self, queue):
+        """Creates a review or migrate task for this migration.
+
+        Args:
+          queue: 'review' or 'migrate'
+        """
+        assert queue in ('review', 'migrate'), queue
+        common.create_task(queue, **{
+            'from': self.from_.urlsafe().decode(),
+            'to': self.to.urlsafe().decode(),
+        })
 
 
 def url(path, from_auth, to_auth=None):
@@ -374,7 +393,6 @@ def _get_user(auth):
     with ndb.context.Context(bridgy_fed_ndb).use():
         return proto.get_or_create(id, allow_opt_out=True)
 
-
 get_from_user = _get_user
 
 
@@ -502,8 +520,7 @@ def review(from_auth, to_auth):
     """Reviews a "from" account's followers and follows."""
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
 
-    migration = Migration.get_or_insert(from_auth, to_auth,
-                                        state=State.review_followers)
+    migration = Migration.get_or_insert(from_auth, to_auth)
     if migration.state and migration.state >= State.migrate_follows:
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
         return redirect(url('/to', from_auth))
@@ -511,7 +528,7 @@ def review(from_auth, to_auth):
         if migration.to:
             logger.info(f'  overwriting existing to {migration.to} with {to_auth.key}')
         # new migration or new (different) to account
-        if migration.state not in (None, State.review_followers):
+        if migration.state and migration.state > State.review_follows:
             # reuse followers data, it's independent of the protocol we're migrating to
             migration.state = State.review_follows
         migration.to = to_auth.key
@@ -523,7 +540,11 @@ def review(from_auth, to_auth):
     # check that "to" user is eligible
     get_to_user(to_auth=to_auth, from_auth=from_auth)
 
-    # TODO: create task
+    if migration.state is None:
+        # new migration. start review!
+        migration.state = State.review_followers
+        migration.put()
+        migration.create_task('review')
 
     return render_template(
         ('review.html' if migration.state == State.review_done
