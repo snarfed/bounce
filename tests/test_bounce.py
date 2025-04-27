@@ -88,12 +88,64 @@ ALICE_BSKY_PROFILE = {
         },
     },
 }
+BOB_BSKY_PROFILE = copy.deepcopy(ALICE_BSKY_PROFILE)
+BOB_BSKY_PROFILE['value']['displayName'] = 'Bawb'
 ALICE_AP_ACTOR = {
     'type': 'Person',
     'id': 'http://in.st/users/alice',
     'image': 'http://in.st/@alice/pic',
 }
 
+ALICE_AP_HTML = '<span class="logo" title="ActivityPub"><img src="/static/fediverse_logo.svg"></span> <a class="h-card u-author" rel="me" href="http://in.st/users/alice" title="@alice@in.st"><img src="http://in.st/@alice/pic" class="profile"> @alice@in.st</a>'
+ALICE_BS_HTML = '<span class="logo" title="ATProto"><img src="/oauth_dropins_static/bluesky.svg"></span> <a class="h-card u-author" rel="me" href="https://bsky.app/profile/al.ice" title="al.ice">al.ice</a>'
+BOB_AP_HTML = '<span class="logo" title="ActivityPub"><img src="/static/fediverse_logo.svg"></span> <a class="h-card u-author" rel="me" href="http://inst/bob" title="bawb"><span style="unicode-bidi: isolate">bawb</span></a>'
+BOB_BS_HTML = '<span class="logo" title="ATProto"><img src="/oauth_dropins_static/bluesky.svg"></span> <a class="h-card u-author" rel="me" href="https://bsky.app/profile/ba.wb" title="Bawb &middot; ba.wb"><span style="unicode-bidi: isolate">Bawb</span> &middot; ba.wb</a>'
+EVE_WEB_HTML = '<span class="logo" title="Web">🌐</span> <a class="h-card u-author" rel="me" href="https://e.ve/" title="e.ve">e.ve</a>'
+REVIEW_DATA_MASTODON_TO_BLUESKY = {
+    'followers_preview': [ALICE_AP_HTML, BOB_BS_HTML],
+    'follows_preview': [ALICE_AP_HTML, BOB_BS_HTML, EVE_WEB_HTML],
+    # 'followers_preview_raw': [ALICE_AS1, BOB_AS1],
+    # 'follows_preview_raw': [ALICE_AS1, BOB_AS1, EVE_AS1],
+    'total_followers': '2',
+    'total_follows': '3',
+    'total_bridged_follows': 2,
+    'follower_counts': [
+        ['type', 'count'],
+        ['ATProto', 1],
+        ['ActivityPub', 1],
+    ],
+    'follow_counts': [
+        ['type', 'count'],
+        ['ATProto', 1],
+        ['ActivityPub', 0],
+        ['Web', 1],
+        ['not bridged', 1],
+    ],
+    'keep_follows_pct': 67,
+}
+REVIEW_DATA_BLUESKY_TO_MASTODON = {
+    'followers_preview': [ALICE_BS_HTML, BOB_AP_HTML],
+    'follows_preview': [ALICE_BS_HTML, BOB_AP_HTML, EVE_WEB_HTML],
+    # 'followers_preview_raw': [ALICE_AS1, BOB_AS1],
+    # 'follows_preview_raw': [ALICE_AS1, BOB_AS1, EVE_AS1],
+    'total_followers': '2',
+    'total_follows': '3',
+    'total_bridged_follows': 2,
+    'follower_counts': [
+        ['type', 'count'],
+        ['ATProto', 1],
+        ['ActivityPub', 1],
+        ['Web', 0],
+    ],
+    'follow_counts': [
+        ['type', 'count'],
+        ['ATProto', 1],
+        ['ActivityPub', 1],
+        ['Web', 0],
+        ['not bridged', 1],
+    ],
+    'keep_follows_pct': 67,
+}
 
 class BounceTest(TestCase, Asserts):
 
@@ -343,7 +395,44 @@ class="logo" title="Bluesky" />
         self.assertEqual(State.review_followers, migration.state)
         self.assert_task(mock_create_task, 'review', from_auth, to_auth)
 
-    def test_review_done(self):
+    @patch('requests.get', side_effect=[
+        requests_response(DID_DOC),  # did:plc:alice
+        requests_response(ALICE_BSKY_PROFILE),
+    ])
+    def test_review_done_mastodon_to_bluesky(self, mock_get):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+            to_auth = self.make_bluesky(sess)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.review_done,
+                                review=REVIEW_DATA_MASTODON_TO_BLUESKY)
+
+        resp = self.get('/review', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+
+        body = resp.get_data(as_text=True)
+        self.assertNotIn('<meta http-equiv="refresh" content="5">', body)
+        self.assert_multiline_in("""
+document.getElementById('followers-chart'));
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1]])""", body)
+        self.assert_multiline_in("""
+document.getElementById('follows-chart'));
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 0], ["Web", 1], ["not bridged", 1]])""", body)
+
+        text = html_to_text(body)
+        self.assert_multiline_in("""
+When you migrate  @alice@in.st to  al.ice ...
+### You'll keep _all_ of your 2 followers.
+* @alice@in.st
+* Bawb · ba.wb
+### You'll keep _67%_ of your 3 follows.
+* @alice@in.st
+* Bawb · ba.wb
+* 🌐 e.ve""", text, ignore_blanks=True)
+        self.assertIn('<form action="/confirm" method="get">', body)
+
+    def test_review_done_bluesky_to_mastodon(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
@@ -351,23 +440,33 @@ class="logo" title="Bluesky" />
         with ndb.context.Context(bridgy_fed_ndb).use():
             ActivityPub(id='http://in.st/users/alice').put()
 
-        data = {
-            'followers_preview': [],
-            'follows_preview': [],
-            'total_followers': '2',
-            'total_follows': '3',
-            'total_bridged_follows': 2,
-            'follower_counts': [],
-            'follow_counts': [],
-            'keep_follows_pct': 67,
-        }
         Migration.get_or_insert(from_auth.get(), to_auth.get(),
-                                state=State.review_done, review=data)
+                                state=State.review_done,
+                                review=REVIEW_DATA_BLUESKY_TO_MASTODON)
 
         resp = self.get('/review', from_auth, to_auth)
         self.assertEqual(200, resp.status_code)
-        self.assertNotIn('<meta http-equiv="refresh" content="5">',
-                         resp.get_data(as_text=True))
+
+        body = resp.get_data(as_text=True)
+        self.assertNotIn('<meta http-equiv="refresh" content="5">', body)
+        self.assert_multiline_in("""
+document.getElementById('followers-chart'));
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Web", 0]])""", body)
+        self.assert_multiline_in("""
+document.getElementById('follows-chart'));
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Web", 0], ["not bridged", 1]])""", body)
+
+        text = html_to_text(body)
+        self.assert_multiline_in("""
+When you migrate  al.ice to  @alice@in.st ...
+### You'll keep _all_ of your 2 followers.
+* al.ice
+* bawb
+### You'll keep _67%_ of your 3 follows.
+* al.ice
+* bawb
+* 🌐 e.ve""", text, ignore_blanks=True)
+        self.assertIn('<form action="/bluesky-password" method="get">', body)
 
     @patch('requests.get')
     def test_review_task_mastodon_to_bluesky(self, mock_get):
@@ -395,9 +494,6 @@ class="logo" title="Bluesky" />
             'avatar': 'http://e.ve/pic',
         }
 
-        bob_bsky_profile = copy.deepcopy(ALICE_BSKY_PROFILE)
-        bob_bsky_profile['value']['displayName'] = 'Bawb'
-
         mock_get.side_effect = [
             # followers
             requests_response([alice, bob], content_type='application/json'),
@@ -412,7 +508,7 @@ class="logo" title="Bluesky" />
                 'alsoKnownAs': ['at://ba.wb'],
             }),
             # bob bsky profile
-            requests_response(bob_bsky_profile),
+            requests_response(BOB_BSKY_PROFILE),
         ]
 
         self.make_bot_users()
@@ -447,30 +543,8 @@ class="logo" title="Bluesky" />
         self.assertEqual(State.review_done, migration.state)
         self.assertEqual([], migration.followed)
         self.assertEqual(['did:plc:bob', 'did:plc:eve'], migration.to_follow)
-
-        alice = '<span class="logo" title="ActivityPub"><img src="/static/fediverse_logo.svg"></span> <a class="h-card u-author" rel="me" href="http://in.st/users/alice" title="@alice@in.st"><img src="http://in.st/@alice/pic" class="profile"> @alice@in.st</a>'
-        bob = '<span class="logo" title="ATProto"><img src="/oauth_dropins_static/bluesky.svg"></span> <a class="h-card u-author" rel="me" href="https://bsky.app/profile/ba.wb" title="Bawb &middot; ba.wb"><span style="unicode-bidi: isolate">Bawb</span> &middot; ba.wb</a>'
-        eve = '<span class="logo" title="Web">🌐</span> <a class="h-card u-author" rel="me" href="https://e.ve/" title="e.ve">e.ve</a>'
-        self.assert_equals({
-            'followers_preview': [alice, bob],
-            'follows_preview': [alice, bob, eve],
-            'total_followers': '2',
-            'total_follows': '3',
-            'total_bridged_follows': 2,
-            'follower_counts': [
-                ['type', 'count'],
-                ['ATProto', 1],
-                ['ActivityPub', 1],
-            ],
-            'follow_counts': [
-                ['type', 'count'],
-                ['ATProto', 1],
-                ['ActivityPub', 0],
-                ['Web', 1],
-                ['not bridged', 1],
-            ],
-            'keep_follows_pct': 67,
-        }, migration.review, ignore=['follows_preview_raw', 'followers_preview_raw'])
+        self.assert_equals(REVIEW_DATA_MASTODON_TO_BLUESKY, migration.review,
+                           ignore=['follows_preview_raw', 'followers_preview_raw'])
 
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
@@ -541,31 +615,8 @@ class="logo" title="Bluesky" />
         self.assertCountEqual(
             ['http://inst/bob', 'https://bsky.brid.gy/ap/did:plc:alice'],
             migration.to_follow)
-
-        alice = '<span class="logo" title="ATProto"><img src="/oauth_dropins_static/bluesky.svg"></span> <a class="h-card u-author" rel="me" href="https://bsky.app/profile/al.ice" title="al.ice">al.ice</a>'
-        bob = '<span class="logo" title="ActivityPub"><img src="/static/fediverse_logo.svg"></span> <a class="h-card u-author" rel="me" href="http://inst/bob" title="bawb"><span style="unicode-bidi: isolate">bawb</span></a>'
-        eve = '<span class="logo" title="Web">🌐</span> <a class="h-card u-author" rel="me" href="https://e.ve/" title="e.ve">e.ve</a>'
-        self.assert_equals({
-            'followers_preview': [alice, bob],
-            'follows_preview': [alice, bob, eve],
-            'total_followers': '2',
-            'total_follows': '3',
-            'total_bridged_follows': 2,
-            'follower_counts': [
-                ['type', 'count'],
-                ['ATProto', 1],
-                ['ActivityPub', 1],
-                ['Web', 0],
-            ],
-            'follow_counts': [
-                ['type', 'count'],
-                ['ATProto', 1],
-                ['ActivityPub', 1],
-                ['Web', 0],
-                ['not bridged', 1],
-            ],
-            'keep_follows_pct': 67,
-        }, migration.review, ignore=['follows_preview_raw', 'followers_preview_raw'])
+        self.assert_equals(REVIEW_DATA_BLUESKY_TO_MASTODON, migration.review,
+                           ignore=['follows_preview_raw', 'followers_preview_raw'])
 
     @patch('requests.post', side_effect=[
         requests_response({  # createSession
