@@ -671,7 +671,7 @@ When you migrate  al.ice to  @alice@in.st ...
                          mock_post.call_args_list[0].kwargs['json'])
         self.assertIsNone(from_auth.get().session)
 
-    def test_migrate_done(self):
+    def test_migrate_post_done(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
@@ -680,6 +680,18 @@ When you migrate  al.ice to  @alice@in.st ...
                                 state=State.migrate_done)
 
         resp = self.post('/migrate', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
+
+    def test_migrate_get_done(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.migrate_done)
+
+        resp = self.get('/migrate', from_auth, to_auth)
         self.assertEqual(200, resp.status_code)
         self.assertNotIn('<meta http-equiv="refresh" content="5">',
                          resp.get_data(as_text=True))
@@ -724,9 +736,8 @@ When you migrate  al.ice to  @alice@in.st ...
                                             state=State.review_done)
 
         resp = self.post('/migrate', from_auth, to_auth)
-        self.assertEqual(200, resp.status_code)
-        self.assertIn('<meta http-equiv="refresh" content="5">',
-                      resp.get_data(as_text=True))
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
         self.assert_task(mock_create_task, 'migrate', from_auth, to_auth)
 

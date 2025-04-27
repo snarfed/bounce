@@ -147,8 +147,8 @@ class State(IntEnum):
     review_analyze = auto()
     review_done = auto()
     migrate_follows = auto()
-    migrate_out = auto()
     migrate_in = auto()
+    migrate_out = auto()
     migrate_done = auto()
 
 
@@ -824,8 +824,8 @@ def confirm(from_auth, to_auth):
 
 @app.post('/migrate')
 @require_accounts('from', 'to')
-def migrate(from_auth, to_auth):
-    """Migration handler that starts a background task."""
+def migrate_post(from_auth, to_auth):
+    """Migrate handler that starts a background task."""
     logger.info(f'Migrating {from_auth.key.id()} {to_auth.key.id()}')
 
     migration = Migration.get(from_auth, to_auth)
@@ -843,6 +843,20 @@ def migrate(from_auth, to_auth):
 
     if migration.state < State.migrate_done:
         migration.create_task('migrate')
+
+    return redirect(url('/migrate', from_auth, to_auth))
+
+
+@app.get('/migrate')
+@require_accounts('from', 'to')
+def migrate_get(from_auth, to_auth):
+    """Migrate handler that shows progress or the final result."""
+    migration = Migration.get(from_auth, to_auth)
+    if not migration:
+        error('migration not found', status=404)
+    elif not migration.state or migration.state < State.review_done:
+        flash(f'Migration can only start after review is completed.')
+        return redirect(url('/review', from_auth, to_auth))
 
     return render_template(
         ('migrated.html' if migration.state == State.migrate_done
