@@ -262,12 +262,12 @@ def template_vars(oauth_path_suffix=''):
     }
 
 
-def require_accounts(from_params, to_params=None, failures_to=None):
+def require_accounts(from_params, to_params=None, logged_in=True, failures_to=None):
     """Decorator that requires and loads both from and (optionally) to auth entities.
 
     Passes both entities as positional args to the function, as oauth-dropins auth
     entities. Also performs sanity checks:
-    * Both must be logged in
+    * Both must be logged in (if ``logged_in`` is True)
     * They must be different protocols
     * If a Bluesky account is involved, it can't be a did:web
 
@@ -276,6 +276,7 @@ def require_accounts(from_params, to_params=None, failures_to=None):
         key for the from auth entity
       to_params (str or sequence of str): HTTP query param(s) with the url-safe ndb key
         for the to auth entity
+      logged_in (bool): whether to require the auth entities are actually logged in
       failures_to (str): optional URL path to redirect to if the user declines or
         an error happens.
     """
@@ -293,8 +294,8 @@ def require_accounts(from_params, to_params=None, failures_to=None):
             error(f'missing one of required params: {params}')
 
         key = ndb.Key(urlsafe=urlsafe_key)
-        if key in oauth_dropins.get_logins():
-            if auth := key.get():
+        if auth := key.get():
+            if not logged_in or key in oauth_dropins.get_logins():
                 return auth
 
         logger.warning(f'not logged in for {key}')
@@ -560,7 +561,7 @@ def review(from_auth, to_auth):
 
 @app.post('/queue/review')
 @cloud_tasks_only()
-@require_accounts('from', 'to')
+@require_accounts('from', 'to', logged_in=False)
 def review_task(from_auth, to_auth):
     """Review a "from" account's followers and follows."""
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
@@ -856,7 +857,7 @@ def migrate(from_auth, to_auth):
 
 @app.post('/queue/migrate')
 @cloud_tasks_only()
-@require_accounts('from', 'to')
+@require_accounts('from', 'to', logged_in=False)
 def migrate_task(from_auth, to_auth):
     """Handle the migration background task."""
     logger.info(f'Processing migration task for {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')

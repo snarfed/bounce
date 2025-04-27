@@ -139,7 +139,7 @@ class BounceTest(TestCase, Asserts):
                     private_exponent=long_to_base64(key.d)).put()
 
 
-    def make_mastodon(self, sess, name='alice'):
+    def make_mastodon(self, sess, name='alice', login=True):
         app = MastodonApp(instance='http://in.st/', data='{}').put()
         user_json = json.dumps({
             'id': '234',
@@ -149,12 +149,13 @@ class BounceTest(TestCase, Asserts):
         auth = MastodonAuth(id=f'@{name}@in.st', access_token_str='towkin', app=app,
                             user_json=user_json).put()
 
-        sess.setdefault(LOGINS_SESSION_KEY, []).append(
-            ('MastodonAuth', f'@{name}@in.st'))
+        if login:
+            sess.setdefault(LOGINS_SESSION_KEY, []).append(
+                ('MastodonAuth', f'@{name}@in.st'))
 
         return auth
 
-    def make_bluesky(self, sess, did='did:plc:alice'):
+    def make_bluesky(self, sess, did='did:plc:alice', login=True):
         user_json = json.dumps({
             '$type': 'app.bsky.actor.defs#profileView',
             'handle': 'al.ice',
@@ -163,7 +164,8 @@ class BounceTest(TestCase, Asserts):
         auth = BlueskyAuth(id=did, pds_url='https://some.pds/',
                            user_json=user_json, dpop_token=DPOP_TOKEN_STR).put()
 
-        sess.setdefault(LOGINS_SESSION_KEY, []).append(('BlueskyAuth', did))
+        if login:
+            sess.setdefault(LOGINS_SESSION_KEY, []).append(('BlueskyAuth', did))
 
         return auth
 
@@ -271,8 +273,8 @@ class="logo" title="Bluesky" />
         self.assertEqual(302, resp.status_code)
         self.assertEqual('/', resp.headers['Location'])
 
-    def test_review_task_no_auth_param(self):
-        resp = self.post('/queue/review')
+    def test_review_no_auth_param(self):
+        resp = self.get('/review')
         self.assertEqual(400, resp.status_code)
 
     def test_review_to_account_is_bridged(self):
@@ -326,7 +328,7 @@ class="logo" title="Bluesky" />
     @patch.object(tasks_client, 'create_task')
     @patch('requests.get', return_value=requests_response(
         ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE))
-    def test_review_from_bluesky(self, mock_get, mock_create_task):
+    def test_review_creates_task(self, mock_get, mock_create_task):
         self.make_bot_users()
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
@@ -367,11 +369,8 @@ class="logo" title="Bluesky" />
         self.assertNotIn('<meta http-equiv="refresh" content="5">',
                          resp.get_data(as_text=True))
 
-    @patch('oauth_dropins.bluesky.oauth_client_for_pds',
-           return_value=OAuth2Client(token_endpoint='https://un/used',
-                                     client_id='unused', client_secret='unused'))
     @patch('requests.get')
-    def test_review_task_mastodon_to_bluesky(self, mock_get, mock_oauth2client):
+    def test_review_task_mastodon_to_bluesky(self, mock_get):
         alice = {
             'id': '234',
             'uri': 'http://in.st/users/alice',
@@ -425,8 +424,8 @@ class="logo" title="Bluesky" />
             ATProto(id='did:plc:alice', enabled_protocols=['web']).put()
 
         with self.client.session_transaction() as sess:
-            from_auth = self.make_mastodon(sess)
-            to_auth = self.make_bluesky(sess)
+            from_auth = self.make_mastodon(sess, login=False)
+            to_auth = self.make_bluesky(sess, login=False)
 
         Migration.get_or_insert(from_auth.get(), to_auth.get())
         resp = self.post('/queue/review', from_auth, to_auth)
@@ -519,8 +518,8 @@ class="logo" title="Bluesky" />
                 copies=[Target(protocol='atproto', uri='did:plc:eve')]).put()
 
         with self.client.session_transaction() as sess:
-            from_auth = self.make_bluesky(sess)
-            to_auth = self.make_mastodon(sess)
+            from_auth = self.make_bluesky(sess, login=False)
+            to_auth = self.make_mastodon(sess, login=False)
 
         Migration.get_or_insert(from_auth.get(), to_auth.get())
         resp = self.post('/queue/review', from_auth, to_auth)
@@ -704,13 +703,13 @@ class="logo" title="Bluesky" />
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response(status=404),  # http://in.st/@alice/pic
     ])
-    def test_migrate_task_mastodon_to_bluesky_success(
-            self, mock_get, mock_post, mock_oauth2client, _, __):
+    def test_migrate_task_mastodon_to_bluesky(self, mock_get, mock_post,
+                                              mock_oauth2client, _, __):
         self.make_bot_users()
 
         with self.client.session_transaction() as sess:
-            from_auth = self.make_mastodon(sess)
-            to_auth = self.make_bluesky(sess)
+            from_auth = self.make_mastodon(sess, login=False)
+            to_auth = self.make_bluesky(sess, login=False)
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             ActivityPub(id='http://in.st/users/alice').put()
@@ -751,7 +750,7 @@ class="logo" title="Bluesky" />
         self.assertEqual(['did:bob', 'did:eve'], migration.followed)
         self.assertEqual([], migration.to_follow)
 
-    @patch.object(tasks_client, 'create_task')
+    @patch.object(tasks_client, 'create_task')  # for atproto-commit task
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
@@ -781,11 +780,11 @@ class="logo" title="Bluesky" />
         self.make_bot_users()
 
         with self.client.session_transaction() as sess:
-            from_auth = self.make_bluesky(sess, did=SNARFED2_DID)
+            from_auth = self.make_bluesky(sess, did=SNARFED2_DID, login=False)
             from_auth_entity = from_auth.get()
             from_auth_entity.session = {'accessJwt': 'towkin'}
             from_auth_entity.put()
-            to_auth = self.make_mastodon(sess)
+            to_auth = self.make_mastodon(sess, login=False)
 
         migration = Migration.get_or_insert(
             from_auth_entity, to_auth.get(),
