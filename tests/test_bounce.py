@@ -334,10 +334,38 @@ class="logo" title="Bluesky" />
 
         resp = self.get('/review', from_auth, to_auth)
         self.assertEqual(200, resp.status_code)
+        self.assertIn('<meta http-equiv="refresh" content="5">',
+                      resp.get_data(as_text=True))
 
         migration = Migration.get_by_id('did:plc:alice activitypub')
         self.assertEqual(State.review_followers, migration.state)
         self.assert_task(mock_create_task, 'review', from_auth, to_auth)
+
+    def test_review_done(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice').put()
+
+        data = {
+            'followers_preview': [],
+            'follows_preview': [],
+            'total_followers': '2',
+            'total_follows': '3',
+            'total_bridged_follows': 2,
+            'follower_counts': [],
+            'follow_counts': [],
+            'keep_follows_pct': 67,
+        }
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.review_done, review=data)
+
+        resp = self.get('/review', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+        self.assertNotIn('<meta http-equiv="refresh" content="5">',
+                         resp.get_data(as_text=True))
 
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
@@ -593,18 +621,18 @@ class="logo" title="Bluesky" />
                          mock_post.call_args_list[0].kwargs['json'])
         self.assertIsNone(from_auth.get().session)
 
-    def test_migrate_already_done(self):
-        Migration(id='did:plc:alice activitypub', state=State.migrate_done).put()
-
+    def test_migrate_done(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
 
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.migrate_done)
+
         resp = self.post('/migrate', from_auth, to_auth)
-        self.assertEqual(302, resp.status_code)
-        self.assertEqual('/from', resp.headers['Location'])
-        flashed = get_flashed_messages()
-        self.assertEqual(['al.ice has already been migrated.'], flashed)
+        self.assertEqual(200, resp.status_code)
+        self.assertNotIn('<meta http-equiv="refresh" content="5">',
+                         resp.get_data(as_text=True))
 
     def test_migrate_no_from(self):
         with self.client.session_transaction() as sess:
@@ -636,9 +664,27 @@ class="logo" title="Bluesky" />
         resp = self.post('/migrate', from_auth, to_auth)
         self.assertEqual(404, resp.status_code)
 
+    @patch.object(tasks_client, 'create_task')
+    def test_migrate_starts_task(self, mock_create_task):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        migration = Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                            state=State.review_done)
+
+        resp = self.post('/migrate', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+        self.assertIn('<meta http-equiv="refresh" content="5">',
+                      resp.get_data(as_text=True))
+
+        self.assert_task(mock_create_task, 'migrate', from_auth, to_auth)
+
+        migration = migration.key.get()
+        self.assertEqual(State.migrate_follows, migration.state)
+
     @patch.object(ActivityPub, 'migrate_in')  # TODO
     @patch.object(ATProto, 'migrate_out')     # TODO
-    @patch('oauth_dropins.webutil.appengine_config.tasks_client.create_task')
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
@@ -658,8 +704,8 @@ class="logo" title="Bluesky" />
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response(status=404),  # http://in.st/@alice/pic
     ])
-    def test_migrate_mastodon_to_bluesky_success(
-            self, mock_get, mock_post, mock_oauth2client, mock_create_task, _, __):
+    def test_migrate_task_mastodon_to_bluesky_success(
+            self, mock_get, mock_post, mock_oauth2client, _, __):
         self.make_bot_users()
 
         with self.client.session_transaction() as sess:
@@ -670,14 +716,14 @@ class="logo" title="Bluesky" />
             ActivityPub(id='http://in.st/users/alice').put()
             ATProto(id='did:plc:alice').put()
 
-        migration = Migration(id='@alice@in.st atproto', to=to_auth,
+        migration = Migration(id='@alice@in.st atproto', from_=from_auth, to=to_auth,
                               to_follow=['did:bob', 'did:eve'],
-                              state=State.review_done,
+                              state=State.migrate_follows,
                               ).put()
 
-        resp = self.post('/migrate', from_auth, to_auth)
+        resp = self.post('/queue/migrate', from_auth, to_auth)
         self.assertEqual(200, resp.status_code)
-        self.assertIn('Success!', resp.get_data(as_text=True))
+        self.assertEqual('OK', resp.get_data(as_text=True))
 
         mock_post.assert_has_calls([
             call('https://some.pds/xrpc/com.atproto.repo.createRecord', json={
@@ -701,11 +747,11 @@ class="logo" title="Bluesky" />
         ], any_order=True)
 
         migration = migration.get()
-        self.assertEqual(NOW, migration.last_attempt)
+        self.assertEqual(State.migrate_done, migration.state)
         self.assertEqual(['did:bob', 'did:eve'], migration.followed)
         self.assertEqual([], migration.to_follow)
 
-    @patch('oauth_dropins.webutil.appengine_config.tasks_client.create_task')
+    @patch.object(tasks_client, 'create_task')
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
@@ -730,8 +776,8 @@ class="logo" title="Bluesky" />
             'alsoKnownAs': [f'https://bsky.brid.gy/ap/{SNARFED2_DID}'],
         }, content_type=as2.CONTENT_TYPE),
     ])
-    def test_migrate_bluesky_to_mastodon_resume(self, mock_get, mock_post,
-                                                mock_oauth2client, mock_create_task):
+    def test_migrate_task_bluesky_to_mastodon(self, mock_get, mock_post,
+                                              mock_oauth2client, mock_create_task):
         self.make_bot_users()
 
         with self.client.session_transaction() as sess:
@@ -739,18 +785,16 @@ class="logo" title="Bluesky" />
             from_auth_entity = from_auth.get()
             from_auth_entity.session = {'accessJwt': 'towkin'}
             from_auth_entity.put()
-
             to_auth = self.make_mastodon(sess)
 
-        migration = Migration(id=f'{SNARFED2_DID} activitypub', to=to_auth,
-                              to_follow=['http://other/bob', 'http://other/eve'],
-                              followed=['http://other/zed'],
-                              state=State.review_done,
-                              ).put()
+        migration = Migration.get_or_insert(
+            from_auth_entity, to_auth.get(),
+            to_follow=['http://other/bob', 'http://other/eve'],
+            followed=['http://other/zed'], state=State.migrate_follows).put()
 
-        resp = self.post('/migrate', from_auth, to_auth, **{'plc-code': 'kowd'})
+        resp = self.post('/queue/migrate', from_auth, to_auth, **{'plc-code': 'kowd'})
         self.assertEqual(200, resp.status_code)
-        self.assertIn('Success!', resp.get_data(as_text=True))
+        self.assertEqual('OK', resp.get_data(as_text=True))
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             # check the repo import

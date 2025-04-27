@@ -1,4 +1,4 @@
-{% set body_id = 'review-progress' %}
+{% set body_id = 'migration-progress' %}
 {% extends "base.html" %}
 
 {% block content %}
@@ -8,19 +8,25 @@
   {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
 {% endset %}
 
+{% set to_label %}
+  {% with auth = to_auth %}{% include 'account_label.html' %}{% endwith %}
+{% endset %}
+
 <div class="row big">
-<p>Reviewing {{ from_label }}...</p>
+<p>Migrating {{ from_label }} to {{ to_label }}...</p>
 </div>
 
 <div class="row" style="text-align: left">
 <ul class="progress-checklist">
   {% for state, label in [
-       (State.review_followers, 'Analyzing followers'),
-       (State.review_follows, 'Analyzing follows'),
-       (State.review_analyze, 'Processing account'),
-     ] %}
-    <div class="col-md-3 col-md-offset-4 col-sm-4 col-sm-offset-2 col-xs-8">
-      {{ label }}
+    (State.migrate_follows, 'Creating follows...'),
+    (State.migrate_in, 'Migrating account to Bridgy Fed...'),
+    (State.migrate_out, 'Connecting accounts...')
+  ] %}
+    <div class="col-md-3 col-md-offset-4
+                col-sm-4 col-sm-offset-2
+                col-xs-8">
+    {{ label }}
     </div>
 
     <div class="col-xs-2 col-sm-1">

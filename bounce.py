@@ -560,7 +560,7 @@ def review(from_auth, to_auth):
 
 @app.post('/queue/review')
 @cloud_tasks_only()
-@require_accounts(('from', 'state'), ('to', 'auth_entity'))
+@require_accounts('from', 'to')
 def review_task(from_auth, to_auth):
     """Review a "from" account's followers and follows."""
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
@@ -824,24 +824,58 @@ def confirm(from_auth, to_auth):
 @app.post('/migrate')
 @require_accounts('from', 'to')
 def migrate(from_auth, to_auth):
-    """Migration handler."""
+    """Migration handler that starts a background task."""
     logger.info(f'Migrating {from_auth.key.id()} {to_auth.key.id()}')
 
     migration = Migration.get(from_auth, to_auth)
     if not migration:
         error('migration not found', status=404)
-    elif migration.state == State.migrate_done:
-        flash(f'{from_auth.user_display_name()} has already been migrated.')
-        return redirect('/from')
+    elif not migration.state or migration.state < State.review_done:
+        flash(f'Migration can only start after review is completed.')
+        return redirect(url('/review', from_auth, to_auth))
+    elif migration.to != to_auth.key:
+        return redirect(url('/to', from_auth))
+
+    if migration.state == State.review_done:
+        migration.state = State.migrate_follows
+        migration.put()
+
+    if migration.state < State.migrate_done:
+        migration.create_task('migrate')
+
+    return render_template(
+        ('migrated.html' if migration.state == State.migrate_done
+         else 'migration_progress.html'),
+        from_auth=from_auth,
+        to_auth=to_auth,
+        migration=migration,
+        State=State,
+        **template_vars(),
+    )
+
+
+@app.post('/queue/migrate')
+@cloud_tasks_only()
+@require_accounts('from', 'to')
+def migrate_task(from_auth, to_auth):
+    """Handle the migration background task."""
+    logger.info(f'Processing migration task for {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
+    migration = Migration.get(from_auth, to_auth)
+    assert migration, (from_auth, to_auth)
+
+    logger.info(f'  {migration.key} {migration.state}')
+    assert migration.state >= State.migrate_follows
+    if migration.state == State.migrate_done:
+        return 'OK'
 
     migration.last_attempt = util.now()
     migration.put()
 
     from_user = get_from_user(from_auth)
     to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
-    assert from_user.__class__ != to_user.__class__, (from_user, to_user)
 
-    if migration.state in (State.review_done, State.migrate_follows):
+    # Process based on migration state
+    if migration.state == State.migrate_follows:
         migrate_follows(migration, to_auth)
         migration.state = State.migrate_in
         migration.put()
@@ -856,12 +890,7 @@ def migrate(from_auth, to_auth):
         migration.state = State.migrate_done
         migration.put()
 
-    return render_template(
-        'done.html',
-        from_auth=from_auth,
-        to_auth=to_auth,
-        **template_vars(),
-    )
+    return 'OK'
 
 
 def migrate_follows(migration, to_auth):
