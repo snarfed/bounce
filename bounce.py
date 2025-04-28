@@ -520,15 +520,19 @@ def choose_to(from_auth):
 def review(from_auth, to_auth):
     """Reviews a "from" account's followers and follows."""
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
+    force = 'force' in request.args
 
     migration = Migration.get_or_insert(from_auth, to_auth)
     if migration.state and migration.state >= State.migrate_follows:
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
         return redirect(url('/to', from_auth))
-    elif not migration.to or migration.to != to_auth.key:
+    elif not migration.to or migration.to != to_auth.key or force:
         if migration.to:
             logger.info(f'  overwriting existing to {migration.to} with {to_auth.key}')
         # new migration or new (different) to account
+        if force:
+            # restart from the beginning
+            migration.state = None
         if migration.state and migration.state > State.review_follows:
             # reuse followers data, it's independent of the protocol we're migrating to
             migration.state = State.review_follows
