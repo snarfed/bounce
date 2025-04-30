@@ -5,15 +5,19 @@
 
 <div id="front-form" class="row front-dark">
 <div id="front-tagline" class="row bigger">
-  <!-- from https://www.svgbackgrounds.com/elements/animated-svg-preloaders/ -->
-  <svg xmlns="http://www.w3.org/2000/svg" id="ball" viewBox="0 0 50px 200px" width="200">
-    <rect fill="#FFFFFF" stroke="#FFFFFF" stroke-width="15" stroke-linejoin="round" width="30" height="30" x="85" y="85" rx="0" ry="0">
+  <!-- bouncing ball animation. based on https://www.svgbackgrounds.com/elements/animated-svg-preloaders/ -->
+  <svg xmlns="http://www.w3.org/2000/svg" id="ball" viewBox="0 0 50px 200px" width="150" height="160">
+    <!-- shadow -->
+    <rect fill="rgb(96, 96, 96, .5)" stroke="rgb(96, 96, 96, .5)" stroke-width="15" stroke-linejoin="round" width="30" height="2" x="50" y="145" rx="15" ry="5" />
+    <!-- ball -->
+    <rect fill="#FFFFFF" stroke="#FFFFFF" stroke-width="15" stroke-linejoin="round" width="30" height="30" x="50" y="20" rx="15" ry="15">
       <animate attributeName="rx" calcMode="spline" dur="1" values="15;15;5;15;15" keySplines=".5 0 .5 1;.8 0 1 .2;0 .8 .2 1;.5 0 .5 1" repeatCount="5" />
       <animate attributeName="ry" calcMode="spline" dur="1" values="15;15;10;15;15" keySplines=".5 0 .5 1;.8 0 1 .2;0 .8 .2 1;.5 0 .5 1" repeatCount="5" />
       <animate attributeName="height" calcMode="spline" dur="1" values="30;30;1;30;30" keySplines=".5 0 .5 1;.8 0 1 .2;0 .8 .2 1;.5 0 .5 1" repeatCount="5" />
-      <animate attributeName="y" calcMode="spline" dur="1" values="40;170;40" keySplines=".6 0 1 .4;0 .8 .2 1" repeatCount="5" />
+      <animate attributeName="y" calcMode="spline" dur="1" values="20;150;20" keySplines=".6 0 1 .4;0 .8 .2 1" repeatCount="5" />
     </rect>
   </svg>
+
   <em class="front-form-text">
      Switch platforms,<br class="visible-xs-inline"> keep your people
   </em>
