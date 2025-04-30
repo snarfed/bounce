@@ -35,11 +35,16 @@
   <p id="logo">
     <a href="/">
      <img id="logo-img" src="/static/logomark-light-mode.svg" />
-     <span class="big">Bounce</span>
+     <span class="bigger">&nbsp;<em><b>Bounce</b></em></span>
     </a>
   </p>
 
   <div class="header-links">
+    <a href="/docs">Docs</a> &nbsp;
+    <a href="https://www.anew.social/">Blog</a> &nbsp;
+    <a href="https://github.com/snarfed/bounce">Code</a> &nbsp;
+    <a href="https://github.com/snarfed/bounce/issues">Issues</a>
+    &nbsp; | &nbsp;
     {% if auths %}
       <a id="logins" href="/from">
       {% for auth in auths %}  {# oauth-dropins auth entities #}

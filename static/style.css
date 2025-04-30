@@ -1,8 +1,10 @@
 /* color variables */
 :root {
-  --bg: #23527c;
+  --bg: #9A5127;  /* dark orange, from A New Social light mode logomark */
+  --bg-light: #EEDAC0;
+  --bg-med: #DEBAA0;
   --fg: white;
-  --glow: #ffd080;
+  --glow: #80d0ff;
 }
 
 #header {
@@ -85,6 +87,10 @@
   text-align: left;
 }
 
+#logo a {
+  color: var(--bg);
+}
+
 #header .header-links {
   margin-top: .5em;
   margin-bottom: .5em;
@@ -93,6 +99,17 @@
 #logo-img {
   height: 3em;
   margin-right: .5em;
+  vertical-align: top;
+}
+
+#get-started {
+  background-color: var(--bg-light);
+  border-color: var(--bg);
+  color: var(--bg);
+}
+
+#get-started:hover {
+  background-color: var(--bg-med);
 }
 
 #front #footer {
@@ -142,6 +159,7 @@ pre .value, code .value, code.value {
 }
 
 #front #header {
+  margin-bottom: 3em;
   padding-bottom: 0;
   background-color: var(--fg);
   /* see corresponding shadow in .front-dark below */
@@ -187,7 +205,14 @@ pre .value, code .value, code.value {
 
 #front-tagline {
   margin-bottom: 0;
+  margin-left: -100px;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
   text-shadow: 0px 0px .2em var(--glow);
+}
+
+#ball {
+  vertical-align: middle;
 }
 
 .web, .fediverse, .bluesky, .handle {
