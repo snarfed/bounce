@@ -519,7 +519,6 @@ def choose_to(from_auth):
 @require_accounts(('from', 'state'), ('to', 'auth_entity'), failures_to='/from')
 def review(from_auth, to_auth):
     """Reviews a "from" account's followers and follows."""
-    logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
     force = 'force' in request.args
 
     migration = Migration.get_or_insert(from_auth, to_auth)
@@ -550,6 +549,11 @@ def review(from_auth, to_auth):
         migration.state = State.review_followers
         migration.put()
         migration.create_task('review')
+
+    if force:
+        # don't meta refresh reload with the force query param, since that would
+        # create a new task on every refresh
+        return redirect(util.remove_query_param(request.full_path, 'force'))
 
     return render_template(
         ('review.html' if migration.state == State.review_done
