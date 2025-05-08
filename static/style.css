@@ -453,10 +453,6 @@ a img.shadow:hover
 /*
  * Review progress
  */
-.progress-checklist {
-  list-style-type: none;
-}
-
 .progress-spinner {
   width: 1em;
   display: inline-block;

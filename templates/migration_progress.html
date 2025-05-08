@@ -16,26 +16,24 @@
 <p>Migrating {{ from_label }} to {{ to_label }}...</p>
 </div>
 
+{% for state, label in [
+  (State.migrate_follows, 'Creating follows...'),
+  (State.migrate_in, 'Migrating account to Bridgy Fed...'),
+  (State.migrate_out, 'Connecting accounts...')
+] %}
 <div class="row" style="text-align: left">
-<ul class="progress-checklist">
-  {% for state, label in [
-    (State.migrate_follows, 'Creating follows...'),
-    (State.migrate_in, 'Migrating account to Bridgy Fed...'),
-    (State.migrate_out, 'Connecting accounts...')
-  ] %}
-    <div class="col-md-3 col-md-offset-2 col-sm-4 col-sm-offset-1 col-xs-8">
+  <div class="col-md-3 col-md-offset-2 col-sm-4 col-sm-offset-1 col-xs-8">
     {{ label }}
-    </div>
+  </div>
 
-    <div class="col-xs-2 col-sm-1">
-      {% if migration.state == state %}
-        <img class="progress-spinner" src="/static/star.svg" />
-      {% elif migration.state.value > state.value %}
-        <span class="progress-checkbox">✅</span>
-      {% endif %}
-    </div>
-  {% endfor %}
-</ul>
+  <div class="col-xs-2 col-sm-1">
+    {% if migration.state == state %}
+      <img class="progress-spinner" src="/static/star.svg" />
+    {% elif migration.state.value > state.value %}
+      <span class="progress-checkbox">✅</span>
+    {% endif %}
+  </div>
 </div>
+{% endfor %}
 
 {% endblock content %}

@@ -12,27 +12,24 @@
 <p>Reviewing {{ from_label }}...</p>
 </div>
 
+{% for state, label in [
+   (State.review_followers, 'Analyzing followers'),
+   (State.review_follows, 'Analyzing follows'),
+   (State.review_analyze, 'Processing account'),
+] %}
 <div class="row" style="text-align: left">
-<ul class="progress-checklist">
-  {% for state, label in [
-       (State.review_followers, 'Analyzing followers'),
-       (State.review_follows, 'Analyzing follows'),
-       (State.review_analyze, 'Processing account'),
-     ] %}
-    <div class="col-md-3 col-md-offset-2 col-sm-4 col-sm-offset-1 col-xs-8">
-      {{ label }}
-    </div>
-    <br>
+  <div class="col-md-3 col-md-offset-2 col-sm-4 col-sm-offset-1 col-xs-8">
+    {{ label }}
+  </div>
 
-    <div class="col-xs-2 col-sm-1">
-      {% if migration.state == state %}
-        <img class="progress-spinner" src="/static/star.svg" />
-      {% elif migration.state.value > state.value %}
-        <span class="progress-checkbox">✅</span>
-      {% endif %}
-    </div>
-  {% endfor %}
-</ul>
+  <div class="col-xs-2 col-sm-1">
+    {% if migration.state == state %}
+      <img class="progress-spinner" src="/static/star.svg" />
+    {% elif migration.state.value > state.value %}
+      <span class="progress-checkbox">✅</span>
+    {% endif %}
+  </div>
 </div>
+{% endfor %}
 
 {% endblock content %}
