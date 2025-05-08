@@ -795,7 +795,7 @@ When you migrate  al.ice to  @alice@in.st ...
                     'subject': 'did:bob',
                     'createdAt': '2022-01-02T03:04:05.000Z',
                 },
-            }, data=None, headers=ANY, auth=ANY),
+            }, data=None, headers=ANY, auth=ANY, timeout=60),
             call('https://some.pds/xrpc/com.atproto.repo.createRecord', json={
                 'repo': 'did:plc:alice',
                 'collection': 'app.bsky.graph.follow',
@@ -804,7 +804,7 @@ When you migrate  al.ice to  @alice@in.st ...
                     'subject': 'did:eve',
                     'createdAt': '2022-01-02T03:04:05.000Z',
                 },
-            }, data=None, headers=ANY, auth=ANY),
+            }, data=None, headers=ANY, auth=ANY, timeout=60),
         ], any_order=True)
 
         migration = migration.get()
@@ -881,13 +881,13 @@ When you migrate  al.ice to  @alice@in.st ...
             call('http://in.st/api/v2/search', params={
                 'resolve': True,
                 'q': 'http://other/bob',
-            }, headers=ANY, timeout=15, stream=True),
+            }, headers=ANY, timeout=60, stream=True),
             call('http://in.st/api/v2/search', params={
                 'resolve': True,
                 'q': 'http://other/eve',
-            }, headers=ANY, timeout=15, stream=True),
+            }, headers=ANY, timeout=60, stream=True),
             call(f'https://some.pds/xrpc/com.atproto.sync.getRepo?did={quote(SNARFED2_DID)}',
-                 json=None, data=None, headers=ANY, auth=ANY),
+                 json=None, data=None, headers=ANY),
         ], any_order=True)
 
         bsky_headers = {
@@ -897,9 +897,9 @@ When you migrate  al.ice to  @alice@in.st ...
         }
         mock_post.assert_has_calls([
             call('http://in.st/api/v1/accounts/123/follow',
-                 headers=ANY, timeout=15, stream=True),
+                 headers=ANY, timeout=60, stream=True),
             call('http://in.st/api/v1/accounts/456/follow',
-                 headers=ANY, timeout=15, stream=True),
+                 headers=ANY, timeout=60, stream=True),
             call('https://some.pds/xrpc/com.atproto.identity.signPlcOperation', json={
                 'token': 'kowd',
                 'rotationKeys': [did.encode_did_key(repo.rotation_key.public_key())],
@@ -915,11 +915,11 @@ When you migrate  al.ice to  @alice@in.st ...
                         'endpoint': 'https://atproto.brid.gy',
                     },
                 },
-            }, data=None, headers=bsky_headers, auth=None),
+            }, data=None, headers=bsky_headers),
             call(f'https://plc.directory/{SNARFED2_DID}', json={'foo': 'bar'},
                  timeout=15, stream=True, headers=ANY),
             call('https://some.pds/xrpc/com.atproto.server.deactivateAccount',
-                 json=None, data=None, auth=None, headers=bsky_headers),
+                 json=None, data=None, headers=bsky_headers),
         ], any_order=True)
 
         migration = migration.get()

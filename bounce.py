@@ -66,6 +66,10 @@ bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
 
+TASK_REQUESTS_KWARGS = {
+    'timeout': 60,  # seconds
+}
+
 FOLLOWERS_PREVIEW_LEN = 20
 
 AUTH_TO_PROTOCOL = {
@@ -350,12 +354,13 @@ def bluesky_session_callback(auth_entity):
                 auth_entity.put()
 
 
-def granary_source(auth, with_auth=False):
+def granary_source(auth, with_auth=False, **requests_kwargs):
     """Returns a granary source instance for a given auth entity.
 
     Args:
       auth (oauth_dropins.models.BaseAuth)
       with_auth (bool)
+      requests_kwargs (dict): passed to :func:`requests.get`/:func:`requests.post`
 
     Returns:
       granary.source.Source:
@@ -363,20 +368,19 @@ def granary_source(auth, with_auth=False):
     if isinstance(auth, (oauth_dropins.mastodon.MastodonAuth,
                          oauth_dropins.pixelfed.PixelfedAuth)):
         return Mastodon(instance=auth.instance(), access_token=auth.access_token_str,
-                        user_id=auth.user_id())
+                        user_id=auth.user_id(), **requests_kwargs)
 
     elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
-        extra = {}
         if with_auth:
             oauth_client = oauth_dropins.bluesky.oauth_client_for_pds(
                 bluesky_oauth_client_metadata(), auth.pds_url)
             token = DPoPTokenSerializer.default_loader(auth.dpop_token)
             dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
-            extra['auth'] = dpop_auth
+            requests_kwargs['auth'] = dpop_auth
 
         return Bluesky(pds_url=auth.pds_url, handle=auth.user_display_name(),
                        did=auth.key.id(), session_callback=bluesky_session_callback,
-                       **extra)
+                       **requests_kwargs)
 
 
 def _get_user(auth):
@@ -581,7 +585,7 @@ def review_task(from_auth, to_auth):
         migration.state = State.review_followers
     assert migration.state <= State.review_done
 
-    source = granary_source(from_auth, with_auth=True)
+    source = granary_source(from_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
     from_auth.url = source.to_as1_actor(json.loads(from_auth.user_json)).get('url')
 
     # Process based on migration state
@@ -613,7 +617,7 @@ def review_followers(migration, from_auth):
     logger.info(f'Fetching followers for {from_auth.key_id()}')
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
 
-    source = granary_source(from_auth, with_auth=True)
+    source = granary_source(from_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
     followers = source.get_followers()
     ids = [f['id'] for f in followers if f.get('id')]
     for follower in followers:
@@ -657,7 +661,7 @@ def review_follows(migration, from_auth, to_auth):
     to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
     logger.info(f'Fetching follows for {from_auth.key_id()} with to proto {to_proto.LABEL}')
 
-    source = granary_source(from_auth, with_auth=True)
+    source = granary_source(from_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
     follows = source.get_follows()
 
     ids_by_proto = defaultdict(list)
@@ -926,7 +930,7 @@ def migrate_follows(migration, to_auth):
     logging.info(f'Creating follows for {to_auth.key_id()}')
     to_follow = migration.to_follow
     migration.to_follow = []
-    source = granary_source(to_auth, with_auth=True)
+    source = granary_source(to_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
 
     for user_id in to_follow:
         logger.info(f'Folowing {user_id}')
