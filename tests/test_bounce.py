@@ -601,10 +601,10 @@ When you migrate  al.ice to  @alice@in.st ...
 
         self.assertEqual(3, mock_get.call_count)
         self.assertEqual(
-            ('https://some.pds/xrpc/app.bsky.graph.getFollowers?actor=did%3Aplc%3Aalice&limit=100',),
+            ('https://api.bsky.app/xrpc/app.bsky.graph.getFollowers?actor=did%3Aplc%3Aalice&limit=100',),
             mock_get.call_args_list[1].args)
         self.assertEqual(
-            ('https://some.pds/xrpc/app.bsky.graph.getFollows?actor=did%3Aplc%3Aalice&limit=100',),
+            ('https://api.bsky.app/xrpc/app.bsky.graph.getFollows?actor=did%3Aplc%3Aalice&limit=100',),
             mock_get.call_args_list[2].args)
 
         migration = Migration.get_by_id('did:plc:alice activitypub')
