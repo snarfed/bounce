@@ -557,7 +557,8 @@ def review(from_auth, to_auth):
     if force:
         # don't meta refresh reload with the force query param, since that would
         # create a new task on every refresh
-        return redirect(util.remove_query_param(request.full_path, 'force'))
+        path, _ = util.remove_query_param(request.full_path, 'force')
+        return redirect(path)
 
     return render_template(
         ('review.html' if migration.state == State.review_done
