@@ -95,6 +95,9 @@ ALICE_AP_ACTOR = {
     'id': 'http://in.st/users/alice',
     'image': 'http://in.st/@alice/pic',
 }
+ALICE_WEBFINGER = {
+    'subject': '@alice@in.st',
+}
 
 ALICE_AP_HTML = '<span class="logo" title="ActivityPub"><img src="/static/fediverse_logo.svg"></span> <a class="h-card u-author" rel="me" href="http://in.st/users/alice" title="@alice@in.st"><img src="http://in.st/@alice/pic" class="profile"> @alice@in.st</a>'
 ALICE_BS_HTML = '<span class="logo" title="ATProto"><img src="/oauth_dropins_static/bluesky.svg"></span> <a class="h-card u-author" rel="me" href="https://bsky.app/profile/al.ice" title="al.ice">al.ice</a>'
@@ -499,9 +502,11 @@ When you migrate  al.ice to  @alice@in.st ...
             requests_response([alice, bob], content_type='application/json'),
             # follows
             requests_response([alice, bob, eve], content_type='application/json'),
-            # alice AP actor
+            # alice AP actor, webfinger
             requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
             requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
+            requests_response(ALICE_WEBFINGER),
+            requests_response(ALICE_WEBFINGER),
             # bob DID doc
             requests_response({
                 # 'id': 'did:plc:alice',
@@ -828,6 +833,8 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response(SNARFED2_DID_DOC),
         requests_response(ALICE_BSKY_PROFILE),
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(ALICE_WEBFINGER),
         requests_response({'accounts': [{'id': '123', 'uri': 'http://other/bob'}]}),
         requests_response({'accounts': [{'id': '456', 'uri': 'http://other/eve'}]}),
         requests_response(SNARFED2_CAR, content_type='application/vnd.ipld.car'),
