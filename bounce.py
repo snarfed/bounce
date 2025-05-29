@@ -42,6 +42,7 @@ from oauth_dropins.webutil.flask_util import (
     get_required_param,
 )
 from oauth_dropins.webutil.models import EnumProperty, JsonProperty
+from pymemcache.test.utils import MockMemcacheClient
 from requests import RequestException
 from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
 
@@ -51,6 +52,7 @@ from atproto import ATProto
 import common
 import ids
 from ids import translate_user_id
+import memcache
 import models
 from protocol import Protocol
 from web import Web
@@ -60,8 +62,10 @@ logger = logging.getLogger(__name__)
 PROTOCOLS = set(p for p in models.PROTOCOLS.values() if p and p.LABEL != 'ui')
 
 BRIDGY_FED_PROJECT_ID = 'bridgy-federated'
-# TODO: use BF context kwargs. can we connect to memcache, over VPC connector?
+# haven't yet managed to open up Bridgy Fed's memcache VPC connector to allow access
+# from other apps like this one. TODO: figure that out.
 bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
+memcache.memcache.client_class = memcache.pickle_memcache.client_class = MockMemcacheClient
 
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
