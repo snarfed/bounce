@@ -20,6 +20,7 @@ from google.cloud import ndb
 from granary import as2
 from granary.source import html_to_text
 import granary.mastodon
+import oauth_dropins
 from oauth_dropins.bluesky import BlueskyAuth
 from oauth_dropins.mastodon import MastodonApp, MastodonAuth
 from oauth_dropins.views import LOGINS_SESSION_KEY
@@ -257,6 +258,24 @@ class BounceTest(TestCase, Asserts):
     def test_front_page(self):
         got = self.client.get('/')
         self.assert_equals(200, got.status_code)
+
+    def test_front_page_login_missing_app_gets_logged_out(self):
+        with self.client.session_transaction() as sess:
+            bsky = self.make_bluesky(sess)
+            masto = self.make_mastodon(sess)
+
+        self.assertEqual([
+            ('BlueskyAuth', bsky.id()),
+            ('MastodonAuth', masto.id()),
+        ], sess[LOGINS_SESSION_KEY])
+
+        masto.get().app.delete()
+
+        got = self.client.get('/')
+        self.assert_equals(200, got.status_code)
+        self.assertEqual([
+            ('BlueskyAuth', bsky.id()),
+        ], session[LOGINS_SESSION_KEY])
 
     def test_logout(self):
         with self.client.session_transaction() as sess:

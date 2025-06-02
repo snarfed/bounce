@@ -262,7 +262,9 @@ def template_vars(oauth_path_suffix=''):
     for auth in ndb.get_multi(oauth_dropins.get_logins()):
         if auth:
             user_json = json.loads(auth.user_json)
-            auth.url = granary_source(auth).to_as1_actor(user_json).get('url')
+            if not (source := granary_source(auth)):
+                continue
+            auth.url = source.to_as1_actor(user_json).get('url')
             auths.append(auth)
 
     return {
@@ -371,7 +373,14 @@ def granary_source(auth, with_auth=False, **requests_kwargs):
     """
     if isinstance(auth, (oauth_dropins.mastodon.MastodonAuth,
                          oauth_dropins.pixelfed.PixelfedAuth)):
-        return Mastodon(instance=auth.instance(), access_token=auth.access_token_str,
+        try:
+            instance = instance=auth.instance()
+        except RuntimeError as e:
+            # the MastodonApp entity probably got deleted manually. oauth-dropins
+            # will have cleaned this up and logged out the bad login.
+            return None
+
+        return Mastodon(instance, access_token=auth.access_token_str,
                         user_id=auth.user_id(), **requests_kwargs)
 
     elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
