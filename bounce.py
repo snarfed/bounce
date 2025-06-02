@@ -1049,7 +1049,11 @@ def migrate_out(migration, from_user, to_user):
 # OAuth
 #
 class MastodonStart(FlashErrors, oauth_dropins.mastodon.Start):
-    DEFAULT_SCOPE = 'profile read:follows read:search write:follows'
+    DEFAULT_SCOPE = 'read:accounts read:follows read:search write:follows'
+    REDIRECT_PATHS = (
+        '/oauth/mastodon/finish/from',
+        '/oauth/mastodon/finish/to',
+    )
 
 class MastodonCallback(FlashErrors, oauth_dropins.mastodon.Callback):
     pass
@@ -1058,6 +1062,10 @@ class PixelfedStart(FlashErrors, oauth_dropins.pixelfed.Start):
     # no granular scopes yet. afaict the available scopes aren't documented at all :(
     # https://github.com/pixelfed/pixelfed/issues/2102#issuecomment-609474544
     DEFAULT_SCOPE = 'read write'
+    REDIRECT_PATHS = (
+        '/oauth/pixelfed/finish/from',
+        '/oauth/pixelfed/finish/to',
+    )
 
 class PixelfedCallback(FlashErrors, oauth_dropins.pixelfed.Callback):
     pass
