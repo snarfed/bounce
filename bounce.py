@@ -91,6 +91,10 @@ BRIDGE_DOMAIN_TO_PROTOCOL = {
     'web.brid.gy': Web,
 }
 
+# if a Migration hasn't been touched in this long, we'll restart its review or
+# migrate task on the next user request
+STALE_TASK_AGE = timedelta(minutes=5)
+
 
 #
 # Flask app
@@ -539,6 +543,8 @@ def review(from_auth, to_auth):
     force = 'force' in request.args
 
     migration = Migration.get_or_insert(from_auth, to_auth)
+    stale = util.now() - migration.updated >= STALE_TASK_AGE
+
     if migration.state and migration.state >= State.migrate_follows:
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
         return redirect(url('/to', from_auth))
@@ -561,9 +567,10 @@ def review(from_auth, to_auth):
     # check that "to" user is eligible
     get_to_user(to_auth=to_auth, from_auth=from_auth)
 
-    if migration.state is None:
-        # new migration. start review!
-        migration.state = State.review_followers
+    if migration.state is None or force or stale:
+        if migration.state is None:
+            # new migration. start review!
+            migration.state = State.review_followers
         migration.put()
         migration.create_task('review')
 
@@ -855,6 +862,7 @@ def migrate_post(from_auth, to_auth):
     logger.info(f'Migrating {from_auth.key.id()} {to_auth.key.id()}')
 
     migration = Migration.get(from_auth, to_auth)
+
     if not migration:
         error('migration not found', status=404)
     elif not migration.state or migration.state < State.review_done:
@@ -863,11 +871,11 @@ def migrate_post(from_auth, to_auth):
     elif migration.to != to_auth.key:
         return redirect(url('/to', from_auth))
 
-    if migration.state == State.review_done:
-        migration.state = State.migrate_follows
+    stale = util.now() - migration.updated >= STALE_TASK_AGE
+    if migration.state < State.migrate_done or stale:
+        if migration.state == State.review_done:
+            migration.state = State.migrate_follows
         migration.put()
-
-    if migration.state < State.migrate_done:
         migration.create_task('migrate')
 
     return redirect(url('/migrate', from_auth, to_auth))

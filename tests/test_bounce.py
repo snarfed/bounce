@@ -1,5 +1,6 @@
 """Unit tests for bounce.py."""
 import copy
+from datetime import timedelta
 import json
 import os
 from unittest import TestCase
@@ -402,7 +403,7 @@ class="logo" title="Bluesky" />
     @patch.object(tasks_client, 'create_task')
     @patch('requests.get', return_value=requests_response(
         ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE))
-    def test_review_creates_task(self, mock_get, mock_create_task):
+    def test_review_starts_task(self, mock_get, mock_create_task):
         self.make_bot_users()
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
@@ -416,6 +417,30 @@ class="logo" title="Bluesky" />
         migration = Migration.get_by_id('did:plc:alice activitypub')
         self.assertEqual(State.review_followers, migration.state)
         self.assert_task(mock_create_task, 'review', from_auth, to_auth)
+
+    @patch.object(tasks_client, 'create_task')
+    @patch('requests.get', side_effect=[
+        requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(ALICE_WEBFINGER),
+    ])
+    def test_review_with_stale_migration_starts_task(self, mock_get, mock_create_task):
+        self.make_bot_users()
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        yesterday = NOW - timedelta(days=1)
+        with patch('bounce.Migration.updated._now', return_value=yesterday):
+            migration = Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                                state=State.review_analyze)
+
+        self.assertEqual(yesterday, migration.key.get().updated)
+
+        resp = self.get('/review', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+        self.assert_task(mock_create_task, 'review', from_auth, to_auth)
+        self.assertGreater(migration.key.get().updated, yesterday)
 
     @patch('requests.get', side_effect=[
         requests_response(DID_DOC),  # did:plc:alice
@@ -767,6 +792,25 @@ When you migrate  al.ice to  @alice@in.st ...
 
         migration = migration.key.get()
         self.assertEqual(State.migrate_follows, migration.state)
+
+    @patch.object(tasks_client, 'create_task')
+    def test_migrate_with_stale_migration_starts_task(self, mock_create_task):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        yesterday = NOW - timedelta(days=1)
+        with patch('bounce.Migration.updated._now', return_value=yesterday):
+            migration = Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                                state=State.migrate_out)
+
+        self.assertEqual(yesterday, migration.key.get().updated)
+
+        resp = self.post('/migrate', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+
+        self.assert_task(mock_create_task, 'migrate', from_auth, to_auth)
+        self.assertGreater(migration.key.get().updated, yesterday)
 
     @patch.object(ActivityPub, 'migrate_in')  # TODO
     @patch.object(ATProto, 'migrate_out')     # TODO
