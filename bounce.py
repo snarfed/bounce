@@ -561,7 +561,6 @@ def review(from_auth, to_auth):
         migration.to = to_auth.key
         migration.followed = []
         migration.to_follow = []
-        migration.review = {}
         migration.put()
 
     # check that "to" user is eligible
@@ -601,7 +600,7 @@ def review_task(from_auth, to_auth):
     migration = Migration.get(from_auth, to_auth)
     assert migration, (from_auth, to_auth)
 
-    logger.info(f'  {migration.key} {migration.state}')
+    logger.info(f'  {migration.key} {migration.state.name if migration.state else "new"}')
     if migration.state is None:
         migration.state = State.review_followers
     assert migration.state <= State.review_done
@@ -912,7 +911,7 @@ def migrate_task(from_auth, to_auth):
     migration = Migration.get(from_auth, to_auth)
     assert migration, (from_auth, to_auth)
 
-    logger.info(f'  {migration.key} {migration.state}')
+    logger.info(f'  {migration.key} {migration.state.name}')
     assert migration.state >= State.migrate_follows
     if migration.state == State.migrate_done:
         return 'OK'
