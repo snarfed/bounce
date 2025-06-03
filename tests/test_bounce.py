@@ -540,6 +540,8 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual([], migration.to_follow)
         self.assert_equals({'orig': 'data'}, migration.review)
 
+        self.assert_task(mock_create_task, 'review', from_auth, new_to_auth)
+
     @patch('requests.get')
     def test_review_task_mastodon_to_bluesky(self, mock_get):
         alice = {

@@ -543,7 +543,7 @@ def review(from_auth, to_auth):
     force = 'force' in request.args
 
     migration = Migration.get_or_insert(from_auth, to_auth)
-    stale = util.now() - migration.updated >= STALE_TASK_AGE
+    new_task = force or util.now() - migration.updated >= STALE_TASK_AGE
 
     if migration.state and migration.state >= State.migrate_follows:
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
@@ -558,15 +558,17 @@ def review(from_auth, to_auth):
         if migration.state and migration.state > State.review_follows:
             # reuse followers data, it's independent of the protocol we're migrating to
             migration.state = State.review_follows
+            new_task = True
         migration.to = to_auth.key
         migration.followed = []
         migration.to_follow = []
         migration.put()
+        new_task = True
 
     # check that "to" user is eligible
     get_to_user(to_auth=to_auth, from_auth=from_auth)
 
-    if migration.state is None or force or stale:
+    if migration.state is None or new_task:
         if migration.state is None:
             # new migration. start review!
             migration.state = State.review_followers
