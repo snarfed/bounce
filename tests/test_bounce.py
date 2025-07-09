@@ -47,6 +47,7 @@ import activitypub
 from activitypub import ActivityPub
 from atproto import ATProto
 from common import long_to_base64, TASKS_LOCATION
+import config
 import ids
 import memcache
 import models
@@ -853,7 +854,11 @@ When you migrate  al.ice to  @alice@in.st ...
             'uri': 'at://did:plc:eve/fo.ll.ow/456',
             'cid': 'xyzuvtsr',
         }),
-        requests_response({}),  # create new did:plc
+        # memcache evict both accounts
+        requests_response(''),
+        requests_response(''),
+        # create new did:plc
+        requests_response({}),
     ])
     @patch('requests.get', side_effect=[
         requests_response(DID_DOC),
@@ -869,8 +874,8 @@ When you migrate  al.ice to  @alice@in.st ...
             to_auth = self.make_bluesky(sess, login=False)
 
         with ndb.context.Context(bridgy_fed_ndb).use():
-            ActivityPub(id='http://in.st/users/alice').put()
-            ATProto(id='did:plc:alice').put()
+            from_key = ActivityPub(id='http://in.st/users/alice').put()
+            to_key = ATProto(id='did:plc:alice').put()
 
         migration = Migration(id='@alice@in.st atproto', from_=from_auth, to=to_auth,
                               to_follow=['did:bob', 'did:eve'],
@@ -882,6 +887,12 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual('OK', resp.get_data(as_text=True))
 
         mock_post.assert_has_calls([
+            call('https://fed.brid.gy/admin/memcache-evict',
+                 data={'key': from_key.urlsafe()},
+                 headers=ANY, timeout=15, stream=True),
+            call('https://fed.brid.gy/admin/memcache-evict',
+                 data={'key': to_key.urlsafe()},
+                 headers=ANY, timeout=15, stream=True),
             call('https://some.pds/xrpc/com.atproto.repo.createRecord', json={
                 'repo': 'did:plc:alice',
                 'collection': 'app.bsky.graph.follow',
@@ -918,6 +929,9 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response({'operation': {'foo': 'bar'}}),  # signPlcOperation
         requests_response(),    # PLC update
         requests_response({}),  # deactivateAccount
+        # memcache evict both accounts
+        requests_response(''),
+        requests_response(''),
     ])
     @patch('requests.get', side_effect=[
         requests_response(SNARFED2_DID_DOC),

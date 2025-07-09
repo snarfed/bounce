@@ -1020,6 +1020,8 @@ def migrate_in(migration, from_auth, from_user, to_user):
     with ndb.context.Context(bridgy_fed_ndb).use():
          from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
 
+    memcache.remote_evict(from_user.key)
+
 
 def migrate_out(migration, from_user, to_user):
     """Migrates a Bridgy Fed bridged account out to a native account.
@@ -1061,6 +1063,8 @@ def migrate_out(migration, from_user, to_user):
                                                     uri=from_profile_id))
             to_user.obj.put()
             to_proto.receive(obj=to_user.obj, authed_as=to_user.key.id())
+
+    memcache.remote_evict(to_user.key)
 
 
 #
