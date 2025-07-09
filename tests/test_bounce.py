@@ -382,7 +382,7 @@ class="logo" title="Bluesky" />
         self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
                          resp.headers['Location'])
         self.assertTrue(get_flashed_messages()[0].startswith(
-            "Sorry, @alice@in.st isn't eligible yet because you haven't set a profile picture."))
+            "Sorry, @alice@in.st isn't eligible yet because your account doesn't have a profile picture."))
 
     def test_review_migration_in_progress(self):
         with self.client.session_transaction() as sess:
