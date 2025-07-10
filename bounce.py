@@ -9,13 +9,14 @@ import logging
 import os
 from pathlib import Path
 import sys
+from urllib.parse import urljoin
 
 from arroba import xrpc_repo
-from arroba.datastore_storage import DatastoreStorage
+from arroba.datastore_storage import AtpRemoteBlob, DatastoreStorage
 import arroba.server
 from flask import flash, Flask, redirect, render_template, request
 import flask_gae_static
-from google.cloud import ndb
+from google.cloud import ndb, storage
 from granary import as2
 from granary.bluesky import Bluesky
 from granary.mastodon import Mastodon
@@ -94,6 +95,12 @@ BRIDGE_DOMAIN_TO_PROTOCOL = {
 # if a Migration hasn't been touched in this long, we'll restart its review or
 # migrate task on the next user request
 STALE_TASK_AGE = timedelta(minutes=5)
+
+CLOUD_STORAGE_BUCKET = 'bridgy-federated.appspot.com'
+CLOUD_STORAGE_BASE_URL = 'https://storage.googleapis.com/'
+
+USER_AGENT = 'Bounce (https://bounce.anew.social/)'
+util.set_user_agent(USER_AGENT)
 
 
 #
@@ -1022,6 +1029,50 @@ def migrate_in(migration, from_auth, from_user, to_user):
          from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
 
     memcache.remote_evict(from_user.key)
+
+
+def migrate_in_blobs(from_auth):
+    """Migrates a Bluesky user's blobs into Bridgy Fed's Google Cloud Storage.
+
+    https://atproto.com/guides/account-migration#migrating-data
+    https://cloud.google.com/storage/docs/uploading-objects-from-memory#storage-upload-object-from-memory-python
+    https://cloud.google.com/python/docs/reference/storage/latest/google.cloud.storage.blob.Blob.html#google_cloud_storage_blob_Blob_upload_from_string
+
+    Args:
+      from_auth (oauth_dropins.bluesky.BlueskyAuth)
+    """
+    assert isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth), from_auth.__class__
+    source = granary_source(from_auth)
+
+    did = from_auth.key.id()
+    logging.info(f"Migrating Bluesky account {did}'s blobs into GCS")
+
+    client = storage.Client()
+    bucket = client.bucket(CLOUD_STORAGE_BUCKET)
+
+    # TODO: give bounce permission to BF GCS
+
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        for cid in source.client.com.atproto.sync.listBlobs(did=did)['cids']:
+            logger.info(f'importing {cid}')
+            path = f'atproto-blobs/{cid}'
+            url = urljoin(CLOUD_STORAGE_BASE_URL, f'/{CLOUD_STORAGE_BUCKET}/{path}')
+            if blob := AtpRemoteBlob.get_by_id(url):
+                assert blob.cid == cid
+                logger.info('  already exists, skipping')
+                continue
+
+            resp = source.client.com.atproto.sync.getBlob(did=did, cid=cid)
+            type = resp.headers.get('Content-Type')
+
+            obj = bucket.blob(path)
+            obj.upload_from_string(resp.content, content_type=type)
+            obj.make_public()
+
+            blob = AtpRemoteBlob(id=url, cid=cid, mime_type=type,
+                                 size=len(resp.content))
+            # TODO: extract dimensions/duration code out of get_or_create, call here
+            blob.put()
 
 
 def migrate_out(migration, from_user, to_user):

@@ -3,11 +3,14 @@ import copy
 from datetime import timedelta
 import json
 import os
+from pathlib import Path
 from unittest import TestCase
-from unittest.mock import ANY, call, patch
+from unittest.mock import ANY, call, create_autospec, patch
 from urllib.parse import quote
 
+import arroba
 from arroba import did, server
+from arroba.datastore_storage import AtpRemoteBlob
 from arroba.tests.test_xrpc_repo import (
     SNARFED2_CAR,
     SNARFED2_DID,
@@ -17,7 +20,7 @@ from arroba.tests.test_xrpc_repo import (
 )
 from Crypto.PublicKey import RSA
 from flask import get_flashed_messages, session
-from google.cloud import ndb
+from google.cloud import ndb, storage
 from granary import as2
 from granary.source import html_to_text
 import granary.mastodon
@@ -55,7 +58,15 @@ from models import Object, Target
 import protocol
 from web import Web
 
-from bounce import app, bridgy_fed_ndb, Migration, State
+import bounce
+from bounce import (
+    app,
+    CLOUD_STORAGE_BASE_URL,
+    CLOUD_STORAGE_BUCKET,
+    bridgy_fed_ndb,
+    Migration,
+    State,
+)
 
 DPOP_TOKEN = DPoPToken(access_token='towkin', _dpop_key=DPoPKey.generate())
 DPOP_TOKEN_STR = DPoPTokenSerializer.default_dumper(DPOP_TOKEN)
@@ -152,6 +163,10 @@ REVIEW_DATA_BLUESKY_TO_MASTODON = {
     ],
     'keep_follows_pct': 67,
 }
+
+KEYBOARD_PNG_BYTES = \
+    (Path(arroba.__file__).with_name('tests') / 'keyboard.png').read_bytes()
+
 
 class BounceTest(TestCase, Asserts):
 
@@ -1003,7 +1018,7 @@ When you migrate  al.ice to  @alice@in.st ...
 
         bsky_headers = {
             'Authorization': 'Bearer towkin',
-            'User-Agent': 'Bridgy Fed (https://fed.brid.gy/)',
+            'User-Agent': 'Bounce (https://bounce.anew.social/)',
             'Content-Type': 'application/json',
         }
         mock_post.assert_has_calls([
@@ -1037,3 +1052,52 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(NOW, migration.last_attempt)
         self.assertEqual(['http://other/bob'], migration.to_follow)
         self.assertEqual(['http://other/zed', 'http://other/eve'], migration.followed)
+
+    @patch('requests.get', side_effect=[
+        # listBlobs
+        requests_response({'cids': ['abc00000', 'def00000', 'ghi00000']}),
+        # getBlobs
+        requests_response(b'abc00000 contents', headers={'Content-Type': 'foo/bar'}),
+        requests_response(KEYBOARD_PNG_BYTES, headers={'Content-Type': 'image/png'}),
+    ])
+    @patch('google.cloud.storage.Client', autospec=True)
+    def test_migrate_in_blobs(self, mock_client_cls, mock_get):
+        mock_client = mock_client_cls.return_value
+        mock_bucket = mock_client.bucket.return_value
+        mock_abc = create_autospec(storage.Blob)
+        mock_ghi = create_autospec(storage.Blob)
+        mock_bucket.blob.side_effect = [mock_abc, mock_ghi]
+
+        with self.client.session_transaction() as sess:
+            auth = self.make_bluesky(sess).get()
+
+        def gcs_url(cid):
+            return f'{CLOUD_STORAGE_BASE_URL}{CLOUD_STORAGE_BUCKET}/atproto-blobs/{cid}'
+
+        # def00000 already exists
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            def00000 = AtpRemoteBlob(id=gcs_url('def00000'), cid='def00000', size=123)
+            def00000.put()
+
+        bounce.migrate_in_blobs(auth)
+
+        # check GCS uploads
+        mock_client.bucket.assert_called_once_with(CLOUD_STORAGE_BUCKET)
+        mock_bucket.blob.assert_has_calls([call('atproto-blobs/abc00000'),
+                                           call('atproto-blobs/ghi00000')])
+        mock_abc.upload_from_string.assert_called_with(b'abc00000 contents',
+                                                       content_type='foo/bar')
+        mock_abc.make_public.assert_called_with()
+        mock_ghi.upload_from_string.assert_called_with(KEYBOARD_PNG_BYTES,
+                                                       content_type='image/png')
+        mock_ghi.make_public.assert_called_with()
+
+        # check blobs in datastore
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            self.assert_entities_equal([
+                AtpRemoteBlob(id=gcs_url('abc00000'), cid='abc00000',
+                              mime_type='foo/bar', size=17),
+                def00000,
+                AtpRemoteBlob(id=gcs_url('ghi00000'), cid='ghi00000',
+                              mime_type='image/png', size=len(KEYBOARD_PNG_BYTES)),
+            ], AtpRemoteBlob.query().fetch(), ignore=['created', 'updated'])
