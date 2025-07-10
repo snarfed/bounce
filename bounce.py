@@ -1071,7 +1071,7 @@ def migrate_in_blobs(from_auth):
 
             blob = AtpRemoteBlob(id=url, cid=cid, mime_type=type,
                                  size=len(resp.content))
-            # TODO: extract dimensions/duration code out of get_or_create, call here
+            blob.generate_metadata(resp.content)
             blob.put()
 
 

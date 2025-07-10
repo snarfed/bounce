@@ -1099,5 +1099,6 @@ When you migrate  al.ice to  @alice@in.st ...
                               mime_type='foo/bar', size=17),
                 def00000,
                 AtpRemoteBlob(id=gcs_url('ghi00000'), cid='ghi00000',
-                              mime_type='image/png', size=len(KEYBOARD_PNG_BYTES)),
+                              mime_type='image/png', size=len(KEYBOARD_PNG_BYTES),
+                              width=21, height=12),
             ], AtpRemoteBlob.query().fetch(), ignore=['created', 'updated'])
