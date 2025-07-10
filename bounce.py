@@ -1003,7 +1003,8 @@ def migrate_in(migration, from_auth, from_user, to_user):
         # from getRepo, we'd need to modify lexrpc.Client, but that's doable. the
         # harder part might be decoding the CAR streaming, in xrpc_repo.import_repo,
         # which currently uses carbox. maybe still doable though?
-        repo_car = old_pds_client.com.atproto.sync.getRepo({}, did=from_auth.key.id())
+        resp = old_pds_client.com.atproto.sync.getRepo({}, did=from_auth.key.id())
+        repo_car = resp.content
 
         logging.info(f'Importing repo from {from_auth.pds_url}')
         with ndb.context.Context(bridgy_fed_ndb).use(), \
