@@ -533,7 +533,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertIn('<form action="/bluesky-password" method="get">', body)
 
     @patch.object(tasks_client, 'create_task')
-    def test_review_done_with_new_to_bluesky_to(self, mock_create_task):
+    def test_review_done_with_new_to(self, mock_create_task):
         self.make_bot_users()
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
@@ -543,19 +543,42 @@ When you migrate  al.ice to  @alice@in.st ...
         with ndb.context.Context(bridgy_fed_ndb).use():
             ActivityPub(id='http://in.st/users/bob').put()
 
-        Migration.get_or_insert(from_auth.get(), orig_to_auth.get(),
-                                state=State.review_done, review={'orig': 'data'})
+        orig_migration = Migration.get_or_insert(
+            from_auth.get(), orig_to_auth.get(), state=State.review_done,
+            followed=['x'], to_follow=['y'], review=REVIEW_DATA_MASTODON_TO_BLUESKY)
 
         resp = self.get('/review', from_auth, new_to_auth)
         self.assertEqual(200, resp.status_code)
 
-        migration = Migration.get_by_id('did:plc:alice activitypub')
-        self.assertEqual(from_auth, migration.from_)
-        self.assertEqual(new_to_auth, migration.to)
-        self.assertEqual(State.review_follows, migration.state)
-        self.assertEqual([], migration.followed)
-        self.assertEqual([], migration.to_follow)
-        self.assert_equals({'orig': 'data'}, migration.review)
+        orig_migration.to = new_to_auth
+        self.assert_entities_equal(orig_migration,
+                                   Migration.get_by_id('did:plc:alice activitypub'),
+                                   ignore=['updated'])
+
+        mock_create_task.assert_not_called()
+
+    @patch.object(tasks_client, 'create_task')
+    def test_review_in_progress_with_new_to(self, mock_create_task):
+        self.make_bot_users()
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            orig_to_auth = self.make_mastodon(sess)
+            new_to_auth = self.make_mastodon(sess, name='bob')
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/bob').put()
+
+        orig_migration = Migration.get_or_insert(
+            from_auth.get(), orig_to_auth.get(), state=State.review_analyze,
+            followed=['x'], to_follow=['y'], review=REVIEW_DATA_MASTODON_TO_BLUESKY)
+
+        resp = self.get('/review', from_auth, new_to_auth)
+        self.assertEqual(200, resp.status_code)
+
+        orig_migration.to = new_to_auth
+        self.assert_entities_equal(orig_migration,
+                                   Migration.get_by_id('did:plc:alice activitypub'),
+                                   ignore=['updated'])
 
         self.assert_task(mock_create_task, 'review', from_auth, new_to_auth)
 
