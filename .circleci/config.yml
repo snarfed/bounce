@@ -39,7 +39,7 @@ jobs:
             pip uninstall -y arroba carbox granary lexrpc oauth-dropins requests_oauth2client
 
             git clone --depth=1 https://github.com/snarfed/bridgy-fed.git bridgy_fed
-            pip install -U -r bridgy_fed/requirements.txt
+            pip install -r ./requirements.txt
 
             pip install coverage coveralls
             ln -sf `pyenv prefix`/lib/python3.12/site-packages/oauth_dropins/static oauth_dropins_static

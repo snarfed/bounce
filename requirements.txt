@@ -1,1 +1,5 @@
-bridgy_fed/requirements.txt
+-r ./bridgy_fed/requirements.txt
+
+google-cloud-storage==3.2.0
+google-crc32c==1.7.1
+google-resumable-media==2.7.2
