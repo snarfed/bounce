@@ -934,6 +934,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(['did:bob', 'did:eve'], migration.followed)
         self.assertEqual([], migration.to_follow)
 
+    @patch('google.cloud.storage.Client', autospec=True)
     @patch.object(tasks_client, 'create_task')  # for atproto-commit task
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
@@ -959,15 +960,19 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response({'accounts': [{'id': '456', 'uri': 'http://other/eve'}]}),
         requests_response(SNARFED2_CAR, content_type='application/vnd.ipld.car'),
         requests_response(SNARFED2_DID_DOC),
+        requests_response({'cids': ['abc00000']}),  # listBlobs
+        requests_response(b'abc00000 contents', content_type='foo/bar'),  # getBlob
         requests_response({
             **ALICE_AP_ACTOR,
             'alsoKnownAs': [f'https://bsky.brid.gy/ap/{SNARFED2_DID}'],
         }, content_type=as2.CONTENT_TYPE),
     ])
     def test_migrate_task_bluesky_to_mastodon(self, mock_get, mock_post,
-                                              mock_oauth2client, mock_create_task):
+                                              mock_oauth2client, mock_create_task,
+                                              mock_storage_client_cls):
         self.make_bot_users()
 
+        # set up users, GCS mocks
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess, did=SNARFED2_DID, login=False)
             from_auth_entity = from_auth.get()
@@ -980,6 +985,11 @@ When you migrate  al.ice to  @alice@in.st ...
             to_follow=['http://other/bob', 'http://other/eve'],
             followed=['http://other/zed'], state=State.migrate_follows).put()
 
+        mock_storage_client = mock_storage_client_cls.return_value
+        mock_bucket = mock_storage_client.bucket.return_value
+        mock_blob = mock_bucket.blob.return_value
+
+        # run task
         resp = self.post('/queue/migrate', from_auth, to_auth, **{'plc-code': 'kowd'})
         self.assertEqual(200, resp.status_code)
         self.assertEqual('OK', resp.get_data(as_text=True))
@@ -1004,6 +1014,13 @@ When you migrate  al.ice to  @alice@in.st ...
             self.assertEqual([], bsky_user.enabled_protocols)
             self.assertEqual([], bsky_user.copies)
 
+            # check migrated blob
+            self.assert_entities_equal([
+                AtpRemoteBlob(
+                    id=f'{CLOUD_STORAGE_BASE_URL}{CLOUD_STORAGE_BUCKET}/atproto-blobs/abc00000',
+                    cid='abc00000', mime_type='foo/bar', size=17),
+            ], AtpRemoteBlob.query().fetch(), ignore=['created', 'updated'])
+
         mock_get.assert_has_calls([
             call('http://in.st/api/v2/search', params={
                 'resolve': True,
@@ -1015,6 +1032,10 @@ When you migrate  al.ice to  @alice@in.st ...
             }, headers=ANY, timeout=60, stream=True),
             call(f'https://some.pds.bsky.network/xrpc/com.atproto.sync.getRepo?did={quote(SNARFED2_DID)}',
                  json=None, data=None, headers=ANY),
+            call(f'https://some.pds.bsky.network/xrpc/com.atproto.sync.listBlobs?did={quote(SNARFED2_DID)}',
+                 json=None, data=None, auth=None, headers=ANY),
+            call(f'https://some.pds.bsky.network/xrpc/com.atproto.sync.getBlob?did={quote(SNARFED2_DID)}&cid=abc00000',
+                 json=None, data=None, auth=None, headers=ANY),
         ], any_order=True)
 
         bsky_headers = {
@@ -1053,6 +1074,13 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(NOW, migration.last_attempt)
         self.assertEqual(['http://other/bob'], migration.to_follow)
         self.assertEqual(['http://other/zed', 'http://other/eve'], migration.followed)
+
+        # check blob upload
+        mock_storage_client.bucket.assert_called_once_with(CLOUD_STORAGE_BUCKET)
+        mock_bucket.blob.assert_called_once_with('atproto-blobs/abc00000')
+        mock_blob.upload_from_string.assert_called_once_with(b'abc00000 contents',
+                                                             content_type='foo/bar')
+        mock_blob.make_public.assert_called_with()
 
     @patch('requests.get', side_effect=[
         # listBlobs

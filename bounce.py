@@ -169,6 +169,7 @@ class State(IntEnum):
     review_done = auto()
     migrate_follows = auto()
     migrate_in = auto()
+    migrate_in_blobs = auto()
     migrate_out = auto()
     migrate_done = auto()
 
@@ -941,6 +942,11 @@ def migrate_task(from_auth, to_auth):
 
     if migration.state == State.migrate_in:
         migrate_in(migration, from_auth, from_user, to_user)
+        migration.state = State.migrate_in_blobs
+        migration.put()
+
+    if migration.state == State.migrate_in_blobs:
+        migrate_in_blobs(from_auth)
         migration.state = State.migrate_out
         migration.put()
 
@@ -1043,7 +1049,8 @@ def migrate_in_blobs(from_auth):
     Args:
       from_auth (oauth_dropins.bluesky.BlueskyAuth)
     """
-    assert isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth), from_auth.__class__
+    if not isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
+        return
 
     if not util.domain_or_parent_in(util.domain_from_link(from_auth.pds_url),
                                     MAIN_PDS_DOMAINS):
