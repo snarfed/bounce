@@ -83,7 +83,7 @@ DID_DOC = {
     'service': [{
         'id': '#atproto_pds',
         'type': 'AtprotoPersonalDataServer',
-        'serviceEndpoint': 'https://some.pds',
+        'serviceEndpoint': 'https://some.pds.bsky.network',
     }],
 }
 SNARFED2_DID_DOC = {  # add #atproto_pds
@@ -228,14 +228,15 @@ class BounceTest(TestCase, Asserts):
 
         return auth
 
-    def make_bluesky(self, sess, did='did:plc:alice', login=True):
+    def make_bluesky(self, sess, did='did:plc:alice',
+                     pds_url='https://some.pds.bsky.network/', login=True):
         user_json = json.dumps({
             '$type': 'app.bsky.actor.defs#profileView',
             'handle': 'al.ice',
             'avatar': 'http://alice/pic',
         })
-        auth = BlueskyAuth(id=did, pds_url='https://some.pds/',
-                           user_json=user_json, dpop_token=DPOP_TOKEN_STR).put()
+        auth = BlueskyAuth(id=did, pds_url=pds_url, user_json=user_json,
+                           dpop_token=DPOP_TOKEN_STR).put()
 
         if login:
             sess.setdefault(LOGINS_SESSION_KEY, []).append(('BlueskyAuth', did))
@@ -728,13 +729,13 @@ When you migrate  al.ice to  @alice@in.st ...
 
         self.assertEqual(2, mock_post.call_count)
         self.assertEqual(
-            ('https://some.pds/xrpc/com.atproto.server.createSession',),
+            ('https://some.pds.bsky.network/xrpc/com.atproto.server.createSession',),
             mock_post.call_args_list[0].args)
         self.assertEqual(
             {'identifier': 'did:plc:alice', 'password': 'hunter5'},
             mock_post.call_args_list[0].kwargs['json'])
         self.assertEqual(
-            ('https://some.pds/xrpc/com.atproto.identity.requestPlcOperationSignature',),
+            ('https://some.pds.bsky.network/xrpc/com.atproto.identity.requestPlcOperationSignature',),
             mock_post.call_args_list[1].args)
         self.assertEqual('towkin', from_auth.get().session['accessJwt'])
 
@@ -757,7 +758,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertTrue(flashed[0].startswith('Login failed: '), flashed)
 
         self.assertEqual(1, mock_post.call_count)
-        self.assertEqual(('https://some.pds/xrpc/com.atproto.server.createSession',),
+        self.assertEqual(('https://some.pds.bsky.network/xrpc/com.atproto.server.createSession',),
                          mock_post.call_args_list[0].args)
         self.assertEqual({'identifier': 'did:plc:alice', 'password': 'hunter5'},
                          mock_post.call_args_list[0].kwargs['json'])
@@ -908,7 +909,7 @@ When you migrate  al.ice to  @alice@in.st ...
             call('https://fed.brid.gy/admin/memcache-evict',
                  data={'key': to_key.urlsafe()},
                  headers=ANY, timeout=15, stream=True),
-            call('https://some.pds/xrpc/com.atproto.repo.createRecord', json={
+            call('https://some.pds.bsky.network/xrpc/com.atproto.repo.createRecord', json={
                 'repo': 'did:plc:alice',
                 'collection': 'app.bsky.graph.follow',
                 'record': {
@@ -917,7 +918,7 @@ When you migrate  al.ice to  @alice@in.st ...
                     'createdAt': '2022-01-02T03:04:05.000Z',
                 },
             }, data=None, headers=ANY, auth=ANY, timeout=60),
-            call('https://some.pds/xrpc/com.atproto.repo.createRecord', json={
+            call('https://some.pds.bsky.network/xrpc/com.atproto.repo.createRecord', json={
                 'repo': 'did:plc:alice',
                 'collection': 'app.bsky.graph.follow',
                 'record': {
@@ -1012,7 +1013,7 @@ When you migrate  al.ice to  @alice@in.st ...
                 'resolve': True,
                 'q': 'http://other/eve',
             }, headers=ANY, timeout=60, stream=True),
-            call(f'https://some.pds/xrpc/com.atproto.sync.getRepo?did={quote(SNARFED2_DID)}',
+            call(f'https://some.pds.bsky.network/xrpc/com.atproto.sync.getRepo?did={quote(SNARFED2_DID)}',
                  json=None, data=None, headers=ANY),
         ], any_order=True)
 
@@ -1026,7 +1027,7 @@ When you migrate  al.ice to  @alice@in.st ...
                  headers=ANY, timeout=60, stream=True),
             call('http://in.st/api/v1/accounts/456/follow',
                  headers=ANY, timeout=60, stream=True),
-            call('https://some.pds/xrpc/com.atproto.identity.signPlcOperation', json={
+            call('https://some.pds.bsky.network/xrpc/com.atproto.identity.signPlcOperation', json={
                 'token': 'kowd',
                 'rotationKeys': [did.encode_did_key(repo.rotation_key.public_key())],
                 'verificationMethod': [{
@@ -1044,7 +1045,7 @@ When you migrate  al.ice to  @alice@in.st ...
             }, data=None, headers=bsky_headers),
             call(f'https://plc.directory/{SNARFED2_DID}', json={'foo': 'bar'},
                  timeout=15, stream=True, headers=ANY),
-            call('https://some.pds/xrpc/com.atproto.server.deactivateAccount',
+            call('https://some.pds.bsky.network/xrpc/com.atproto.server.deactivateAccount',
                  json=None, data=None, headers=bsky_headers),
         ], any_order=True)
 
@@ -1102,3 +1103,12 @@ When you migrate  al.ice to  @alice@in.st ...
                               mime_type='image/png', size=len(KEYBOARD_PNG_BYTES),
                               width=21, height=12),
             ], AtpRemoteBlob.query().fetch(), ignore=['created', 'updated'])
+
+    @patch('requests.get')
+    def test_migrate_in_blobs_not_main_pds(self, mock_get):
+        with self.client.session_transaction() as sess:
+            auth = self.make_bluesky(sess, pds_url='https://some.pds').get()
+
+        bounce.migrate_in_blobs(auth)
+        mock_get.assert_not_called()
+        self.assertEqual([], AtpRemoteBlob.query().fetch())

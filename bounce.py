@@ -96,6 +96,8 @@ BRIDGE_DOMAIN_TO_PROTOCOL = {
 # migrate task on the next user request
 STALE_TASK_AGE = timedelta(minutes=5)
 
+MAIN_PDS_DOMAINS = ('bsky.app', 'bsky.network', 'bsky.social')
+
 CLOUD_STORAGE_BUCKET = 'bridgy-federated.appspot.com'
 CLOUD_STORAGE_BASE_URL = 'https://storage.googleapis.com/'
 
@@ -1042,6 +1044,12 @@ def migrate_in_blobs(from_auth):
       from_auth (oauth_dropins.bluesky.BlueskyAuth)
     """
     assert isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth), from_auth.__class__
+
+    if not util.domain_or_parent_in(util.domain_from_link(from_auth.pds_url),
+                                    MAIN_PDS_DOMAINS):
+        logger.info(f"Not migrating blobs, PDS {from_auth.pds_url} isn't Bluesky co's")
+        return
+
     source = granary_source(from_auth)
 
     did = from_auth.key.id()
