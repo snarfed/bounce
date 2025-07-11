@@ -553,33 +553,33 @@ def review(from_auth, to_auth):
     force = 'force' in request.args
 
     migration = Migration.get_or_insert(from_auth, to_auth)
-    new_task = force or util.now() - migration.updated >= STALE_TASK_AGE
 
     if migration.state and migration.state >= State.migrate_follows:
         flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
         return redirect(url('/to', from_auth))
 
+    # check that "to" user is eligible
+    get_to_user(to_auth=to_auth, from_auth=from_auth)
+
     if migration.to and migration.to != to_auth.key:
         logger.info(f'  overwriting existing to {migration.to} with {to_auth.key}')
         migration.to = to_auth.key
 
-    # check that "to" user is eligible
-    get_to_user(to_auth=to_auth, from_auth=from_auth)
-
     if force:
         # restart from the beginning
-        migration.state = None
+        migration.state = State.review_followers
         migration.review = {}
         migration.followed = []
         migration.to_follow = []
-        migration.put()
 
-    if migration.state is None:
-        # new migration. start review!
+    new_task = force or util.now() - migration.updated >= STALE_TASK_AGE
+    if not migration.state:
         migration.state = State.review_followers
+        new_task = True
 
     migration.put()
-    if migration.state < State.review_done or force:
+
+    if new_task:
         migration.create_task('review')
 
     if force:
