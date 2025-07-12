@@ -770,7 +770,7 @@ When you migrate  al.ice to  @alice@in.st ...
         Migration.get_or_insert(from_auth.get(), to_auth.get(),
                                 state=State.migrate_done)
 
-        resp = self.post('/migrate', from_auth, to_auth)
+        resp = self.post('/migrate', from_auth, to_auth, plc_code='unused')
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
@@ -826,7 +826,7 @@ When you migrate  al.ice to  @alice@in.st ...
         migration = Migration.get_or_insert(from_auth.get(), to_auth.get(),
                                             state=State.review_done)
 
-        resp = self.post('/migrate', from_auth, to_auth)
+        resp = self.post('/migrate', from_auth, to_auth, plc_code='kowd')
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
@@ -834,6 +834,7 @@ When you migrate  al.ice to  @alice@in.st ...
 
         migration = migration.key.get()
         self.assertEqual(State.migrate_follows, migration.state)
+        self.assertEqual('kowd', migration.plc_code)
 
     @patch.object(tasks_client, 'create_task')
     def test_migrate_with_stale_migration_starts_task(self, mock_create_task):
@@ -844,15 +845,19 @@ When you migrate  al.ice to  @alice@in.st ...
         yesterday = NOW - timedelta(days=1)
         with patch('bounce.Migration.updated._now', return_value=yesterday):
             migration = Migration.get_or_insert(from_auth.get(), to_auth.get(),
-                                                state=State.migrate_out)
+                                                state=State.migrate_out,
+                                                plc_code='old kowd')
 
         self.assertEqual(yesterday, migration.key.get().updated)
 
-        resp = self.post('/migrate', from_auth, to_auth)
+        resp = self.post('/migrate', from_auth, to_auth, plc_code='new kowd')
         self.assertEqual(302, resp.status_code)
 
         self.assert_task(mock_create_task, 'migrate', from_auth, to_auth)
-        self.assertGreater(migration.key.get().updated, yesterday)
+
+        migration = migration.key.get()
+        self.assertGreater(migration.updated, yesterday)
+        self.assertEqual('new kowd', migration.plc_code)
 
     @patch.object(ActivityPub, 'migrate_in')  # TODO
     @patch.object(ATProto, 'migrate_out')     # TODO
@@ -896,7 +901,7 @@ When you migrate  al.ice to  @alice@in.st ...
                               state=State.migrate_follows,
                               ).put()
 
-        resp = self.post('/queue/migrate', from_auth, to_auth)
+        resp = self.post('/queue/migrate', from_auth, to_auth, plc_code='kowd')
         self.assertEqual(200, resp.status_code)
         self.assertEqual('OK', resp.get_data(as_text=True))
 
@@ -979,7 +984,7 @@ When you migrate  al.ice to  @alice@in.st ...
             to_auth = self.make_mastodon(sess, login=False)
 
         migration = Migration.get_or_insert(
-            from_auth_entity, to_auth.get(),
+            from_auth_entity, to_auth.get(), plc_code='kowd',
             to_follow=['http://other/bob', 'http://other/eve'],
             followed=['http://other/zed'], state=State.migrate_follows).put()
 
@@ -988,7 +993,7 @@ When you migrate  al.ice to  @alice@in.st ...
         mock_blob = mock_bucket.blob.return_value
 
         # run task
-        resp = self.post('/queue/migrate', from_auth, to_auth, **{'plc-code': 'kowd'})
+        resp = self.post('/queue/migrate', from_auth, to_auth, plc_code='kowd')
         self.assertEqual(200, resp.status_code)
         self.assertEqual('OK', resp.get_data(as_text=True))
 
@@ -1070,6 +1075,7 @@ When you migrate  al.ice to  @alice@in.st ...
 
         migration = migration.get()
         self.assertEqual(NOW, migration.last_attempt)
+        self.assertEqual('kowd', migration.plc_code)
         self.assertEqual(['http://other/bob'], migration.to_follow)
         self.assertEqual(['http://other/zed', 'http://other/eve'], migration.followed)
 

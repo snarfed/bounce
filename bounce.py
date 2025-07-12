@@ -193,6 +193,8 @@ class Migration(ndb.Model):
     to_follow = ndb.StringProperty(repeated=True)
     followed = ndb.StringProperty(repeated=True)
 
+    plc_code = ndb.StringProperty()
+
     last_attempt = ndb.DateTimeProperty(tzinfo=timezone.utc)
     created = ndb.DateTimeProperty(auto_now_add=True, tzinfo=timezone.utc)
     updated = ndb.DateTimeProperty(auto_now=True, tzinfo=timezone.utc)
@@ -605,6 +607,7 @@ def review(from_auth, to_auth):
 @require_accounts('from', 'to', logged_in=False)
 def review_task(from_auth, to_auth):
     """Review a "from" account's followers and follows."""
+    logger.info(f'Params: {request.values.items()}')
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
     migration = Migration.get(from_auth, to_auth)
     assert migration, (from_auth, to_auth)
@@ -792,7 +795,8 @@ def analyze_review(migration, from_auth):
     # https://humanize.readthedocs.io/en/latest/filesize/
     def humanize_number(num):
         return humanize.naturalsize(num, format='%.0f')\
-                       .upper().removesuffix('BYTES').rstrip('B').replace(' ', '')
+                       .upper().removesuffix('BYTES').removesuffix('BYTE')\
+                       .rstrip('B').replace(' ', '')
 
     # total counts, percentage of follows that will be kept
     follow_counts = migration.review['follow_counts']
@@ -866,7 +870,12 @@ def confirm(from_auth, to_auth):
 @app.post('/migrate')
 @require_accounts('from', 'to')
 def migrate_post(from_auth, to_auth):
-    """Migrate handler that starts a background task."""
+    """Migrate handler that starts a background task.
+
+    Post body args:
+      plc_code (str)
+    """
+    logger.info(f'Params: {request.values.items()}')
     logger.info(f'Migrating {from_auth.key.id()} {to_auth.key.id()}')
 
     migration = Migration.get(from_auth, to_auth)
@@ -878,6 +887,9 @@ def migrate_post(from_auth, to_auth):
         return redirect(url('/review', from_auth, to_auth))
     elif migration.to != to_auth.key:
         return redirect(url('/to', from_auth))
+
+    migration.plc_code = get_required_param('plc_code')
+    migration.put()
 
     stale = util.now() - migration.updated >= STALE_TASK_AGE
     if migration.state < State.migrate_done or stale:
@@ -916,7 +928,8 @@ def migrate_get(from_auth, to_auth):
 @require_accounts('from', 'to', logged_in=False)
 def migrate_task(from_auth, to_auth):
     """Handle the migration background task."""
-    logger.info(f'Processing migration task for {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
+    logger.info(f'Params: {request.values.items()}')
+    logger.info(f'Processing migration task for {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.user_display_name()}')
     migration = Migration.get(from_auth, to_auth)
     assert migration, (from_auth, to_auth)
 
@@ -1025,8 +1038,9 @@ def migrate_in(migration, from_auth, from_user, to_user):
              }):
             xrpc_repo.import_repo(repo_car)
 
+        assert migration.plc_code
         migrate_in_kwargs = {
-            'plc_code': get_required_param('plc-code'),
+            'plc_code': migration.plc_code,
             'pds_client': old_pds_client,
         }
 
