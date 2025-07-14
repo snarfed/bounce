@@ -651,6 +651,15 @@ def review_followers(migration, from_auth):
 
     source = granary_source(from_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
     followers = source.get_followers()
+
+    if not followers:
+        logger.info('no followers!')
+        migration.review.update({
+            'followers_preview_raw': [],
+            'follower_counts': [],
+        })
+
+
     ids = [f['id'] for f in followers if f.get('id')]
     for follower in followers:
         follower['image'] = util.get_first(follower, 'image')
@@ -695,6 +704,14 @@ def review_follows(migration, from_auth, to_auth):
 
     source = granary_source(from_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
     follows = source.get_follows()
+
+    if not follows:
+        logger.info('no follows!')
+        migration.review.update({
+            'follows_preview_raw': [],
+            'follow_counts': [],
+            'total_bridged_follows': 0,
+        })
 
     ids_by_proto = defaultdict(list)
     for followee in follows:

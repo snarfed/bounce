@@ -709,6 +709,35 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assert_equals(REVIEW_DATA_BLUESKY_TO_MASTODON, migration.review,
                            ignore=['follows_preview_raw', 'followers_preview_raw'])
 
+    @patch('requests.get', side_effect=[
+        requests_response([], content_type='application/json'),  # followers
+        requests_response([], content_type='application/json'),  # follows
+
+    ])
+    def test_review_task_no_follows_followers(self, _):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess, login=False)
+            to_auth = self.make_bluesky(sess, login=False)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get())
+
+        resp = self.post('/queue/review', from_auth, to_auth)
+
+        migration = Migration.get_by_id('@alice@in.st atproto')
+        self.assertEqual(State.review_done, migration.state)
+        self.assertEqual({
+            'follower_counts': [['type', 'count']],
+            'follow_counts': [['type', 'count'], ['not bridged', 0]],
+            'followers_preview_raw': [],
+            'follows_preview_raw': [],
+            'followers_preview': [],
+            'follows_preview': [],
+            'total_followers': '0',
+            'total_follows': '0',
+            'total_bridged_follows': 0,
+            'keep_follows_pct': 100,
+        }, migration.review)
+
     @patch('requests.post', side_effect=[
         requests_response({  # createSession
             'handle': 'han.dull',
