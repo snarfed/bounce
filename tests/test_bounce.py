@@ -1028,10 +1028,10 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response(ALICE_WEBFINGER),
         requests_response({'accounts': [{'id': '123', 'uri': 'http://other/bob'}]}),
         requests_response({'accounts': [{'id': '456', 'uri': 'http://other/eve'}]}),
-        requests_response(SNARFED2_CAR, content_type='application/vnd.ipld.car'),
-        requests_response(SNARFED2_DID_DOC),
         requests_response({'cids': ['abc00000']}),  # listBlobs
         requests_response(b'abc00000 contents', content_type='foo/bar'),  # getBlob
+        requests_response(SNARFED2_CAR, content_type='application/vnd.ipld.car'),
+        requests_response(SNARFED2_DID_DOC),
         requests_response({
             **ALICE_AP_ACTOR,
             'alsoKnownAs': [f'https://bsky.brid.gy/ap/{SNARFED2_DID}'],

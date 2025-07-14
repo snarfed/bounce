@@ -965,16 +965,16 @@ def migrate_task(from_auth, to_auth):
     # Process based on migration state
     if migration.state == State.migrate_follows:
         migrate_follows(migration, to_auth)
-        migration.state = State.migrate_in
-        migration.put()
-
-    if migration.state == State.migrate_in:
-        migrate_in(migration, from_auth, from_user, to_user)
         migration.state = State.migrate_in_blobs
         migration.put()
 
     if migration.state == State.migrate_in_blobs:
         migrate_in_blobs(from_auth)
+        migration.state = State.migrate_in
+        migration.put()
+
+    if migration.state == State.migrate_in:
+        migrate_in(migration, from_auth, from_user, to_user)
         migration.state = State.migrate_out
         migration.put()
 
