@@ -607,7 +607,7 @@ def review(from_auth, to_auth):
 @require_accounts('from', 'to', logged_in=False)
 def review_task(from_auth, to_auth):
     """Review a "from" account's followers and follows."""
-    logger.info(f'Params: {request.values.items()}')
+    logger.info(f'Params: {list(request.values.items())}')
     logger.info(f'Reviewing {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.site_name()}')
     migration = Migration.get(from_auth, to_auth)
     assert migration, (from_auth, to_auth)
@@ -893,7 +893,7 @@ def migrate_post(from_auth, to_auth):
     Post body args:
       plc_code (str)
     """
-    logger.info(f'Params: {request.values.items()}')
+    logger.info(f'Params: {list(request.values.items())}')
     logger.info(f'Migrating {from_auth.key.id()} {to_auth.key.id()}')
 
     migration = Migration.get(from_auth, to_auth)
@@ -946,7 +946,7 @@ def migrate_get(from_auth, to_auth):
 @require_accounts('from', 'to', logged_in=False)
 def migrate_task(from_auth, to_auth):
     """Handle the migration background task."""
-    logger.info(f'Params: {request.values.items()}')
+    logger.info(f'Params: {list(request.values.items())}')
     logger.info(f'Processing migration task for {from_auth.key.id()} {from_auth.user_display_name()} => {to_auth.user_display_name()}')
     migration = Migration.get(from_auth, to_auth)
     assert migration, (from_auth, to_auth)
