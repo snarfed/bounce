@@ -34,7 +34,7 @@
 
   <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
   <input type="hidden" name="to" value="{{ to_auth.key.urlsafe().decode() }}" />
-  <input type="submit" class="btn btn-danger" value="Migrate" disabled />
+  <input type="submit" class="btn btn-danger" value="Migrate" />
 
   {% if from_auth.site_name() == 'Bluesky' %}
     <p><a href="/bluesky-password?from_auth={{ from_auth.key.urlsafe().decode() }}&to_auth={{ to_auth.key.urlsafe().decode() }}">Click here to send a new code.</a>
