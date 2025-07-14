@@ -658,7 +658,7 @@ def review_followers(migration, from_auth):
             'followers_preview_raw': [],
             'follower_counts': [],
         })
-
+        return
 
     ids = [f['id'] for f in followers if f.get('id')]
     for follower in followers:
@@ -712,6 +712,7 @@ def review_follows(migration, from_auth, to_auth):
             'follow_counts': [],
             'total_bridged_follows': 0,
         })
+        return
 
     ids_by_proto = defaultdict(list)
     for followee in follows:

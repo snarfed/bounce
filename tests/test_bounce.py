@@ -714,7 +714,7 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response([], content_type='application/json'),  # follows
 
     ])
-    def test_review_task_no_follows_followers(self, _):
+    def test_review_task_from_mastodon_no_follows_followers(self, _):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess, login=False)
             to_auth = self.make_bluesky(sess, login=False)
@@ -727,7 +727,45 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(State.review_done, migration.state)
         self.assertEqual({
             'follower_counts': [['type', 'count']],
-            'follow_counts': [['type', 'count'], ['not bridged', 0]],
+            'follow_counts': [['type', 'count']],
+            'followers_preview_raw': [],
+            'follows_preview_raw': [],
+            'followers_preview': [],
+            'follows_preview': [],
+            'total_followers': '0',
+            'total_follows': '0',
+            'total_bridged_follows': 0,
+            'keep_follows_pct': 100,
+        }, migration.review)
+
+    @patch('oauth_dropins.bluesky.oauth_client_for_pds',
+           return_value=OAuth2Client(token_endpoint='https://un/used',
+                                     client_id='unused', client_secret='unused'))
+    @patch('requests.get', side_effect=[
+            requests_response({
+                'subject': {'did': 'did:plc:alice', 'handle': 'al.ice'},
+                'followers': [],
+            }),
+            requests_response({
+                'subject': {'did': 'did:plc:alice', 'handle': 'al.ice'},
+                'follows': [],
+            }),
+
+    ])
+    def test_review_task_from_bluesky_no_follows_followers(self, _, __):
+        with self.client.session_transaction() as sess:
+            to_auth = self.make_mastodon(sess, login=False)
+            from_auth = self.make_bluesky(sess, login=False)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get())
+
+        resp = self.post('/queue/review', from_auth, to_auth)
+
+        migration = Migration.get_by_id('did:plc:alice activitypub')
+        self.assertEqual(State.review_done, migration.state)
+        self.assertEqual({
+            'follower_counts': [['type', 'count']],
+            'follow_counts': [['type', 'count']],
             'followers_preview_raw': [],
             'follows_preview_raw': [],
             'followers_preview': [],
