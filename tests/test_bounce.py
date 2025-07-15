@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import ANY, call, create_autospec, patch
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote
 
 import arroba
 from arroba import did, server
@@ -54,7 +54,7 @@ import config
 import ids
 import memcache
 import models
-from models import Object, Target
+from models import Follower, Object, Target
 import protocol
 from web import Web
 
@@ -169,6 +169,7 @@ KEYBOARD_PNG_BYTES = \
 
 
 class BounceTest(TestCase, Asserts):
+    maxDiff = None
 
     def setUp(self):
         super().setUp()
@@ -181,8 +182,6 @@ class BounceTest(TestCase, Asserts):
         requests.post(f'http://{ndb_client.host}/reset')
         self.ndb_context = ndb_client.context()
         self.ndb_context.__enter__()
-        self.request_context = app.test_request_context('/')
-        self.request_context.push()
 
         did.resolve_handle.cache.clear()
         did.resolve_plc.cache.clear()
@@ -200,7 +199,6 @@ class BounceTest(TestCase, Asserts):
         util.now = lambda **kwargs: NOW
 
     def tearDown(self):
-        self.request_context.pop()
         self.ndb_context.__exit__(None, None, None)
         self.client.__exit__(None, None, None)
         super().tearDown()
@@ -1141,7 +1139,6 @@ When you migrate  al.ice to  @alice@in.st ...
                  timeout=15, stream=True, headers=ANY),
             call('https://some.pds.bsky.network/xrpc/com.atproto.server.deactivateAccount',
                  json=None, data=None, headers=bsky_headers),
-            # STATE: add a follower and check that we send a Move
         ], any_order=True)
 
         migration = migration.get()
@@ -1174,10 +1171,11 @@ When you migrate  al.ice to  @alice@in.st ...
             to_auth = self.make_mastodon(sess, login=False).get()
 
         with ndb.context.Context(bridgy_fed_ndb).use():
-            profile = Object(id='at://did:plc:alice/app.bsky.actor.profile/self',
-                             bsky=ALICE_BSKY_PROFILE['value'])
+            Object(id='did:plc:alice', raw=DID_DOC).put()
+            from_profile = Object(id='at://did:plc:alice/app.bsky.actor.profile/self',
+                                  bsky=ALICE_BSKY_PROFILE['value'])
             from_user = ATProto(id='did:plc:alice', enabled_protocols=['activitypub'],
-                                obj_key=profile.put())
+                                obj_key=from_profile.put())
             from_user.put()
 
             actor = Object(id='http://in.st/users/alice', as2=ALICE_AP_ACTOR,
@@ -1187,10 +1185,22 @@ When you migrate  al.ice to  @alice@in.st ...
                 copies=[Target(protocol='atproto', uri='did:plc:old')])
             to_user.put()
 
+            # one AP follower of bridged ATProto user so that we test sending Move
+            bob_profile = Object(id='http://in.st/users/bob', as2={
+                'type': 'Person',
+                'id': 'http://in.st/users/bob',
+                'image': 'http://in.st/@bob/pic',
+                'inbox': 'http://in.st/bob/inbox',
+            })
+            bob = ActivityPub(id='http://in.st/users/bob', obj_key=bob_profile.put())
+            bob.put()
+            Follower.get_or_create(from_=bob, to=from_user)
+
         migration = Migration.get_or_insert(from_auth, to_auth,
                                             state=State.migrate_out).put()
 
-        bounce.migrate_out(migration, from_user, to_user)
+        with app.test_request_context('/'):
+            bounce.migrate_out(migration, from_user, to_user)
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             to_user = to_user.key.get()
@@ -1204,6 +1214,23 @@ When you migrate  al.ice to  @alice@in.st ...
 
         mock_create_for.assert_called_with(to_user)
 
+        move_id = 'https://bsky.brid.gy/ap/did:plc:alice#move-http://in.st/users/alice'
+        send_task = mock_create_task.call_args_list[0][1]['task']
+        params = parse_qs(send_task['app_engine_http_request']['body'])
+        self.assert_equals({
+            b'id': [move_id.encode()],
+            b'protocol': [b'activitypub'],
+            b'url': [b'http://in.st/bob/inbox'],
+            b'user': [from_user.key.urlsafe()],
+        }, params, ignore=[b'as2'])
+        self.assert_equals({
+                'type': 'Move',
+                'id': move_id,
+                'actor': 'https://bsky.brid.gy/ap/did:plc:alice',
+                'object': 'https://bsky.brid.gy/ap/did:plc:alice',
+                'target': 'http://in.st/users/alice',
+                'to': ['https://www.w3.org/ns/activitystreams#Public'],
+        }, util.json_loads(params[b'as2'][0]))
     @patch('requests.get', side_effect=[
         # listBlobs
         requests_response({'cids': ['abc00000', 'def00000', 'ghi00000']}),
