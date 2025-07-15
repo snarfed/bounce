@@ -181,6 +181,8 @@ class BounceTest(TestCase, Asserts):
         requests.post(f'http://{ndb_client.host}/reset')
         self.ndb_context = ndb_client.context()
         self.ndb_context.__enter__()
+        self.request_context = app.test_request_context('/')
+        self.request_context.push()
 
         did.resolve_handle.cache.clear()
         did.resolve_plc.cache.clear()
@@ -198,6 +200,7 @@ class BounceTest(TestCase, Asserts):
         util.now = lambda **kwargs: NOW
 
     def tearDown(self):
+        self.request_context.pop()
         self.ndb_context.__exit__(None, None, None)
         self.client.__exit__(None, None, None)
         super().tearDown()
@@ -1079,7 +1082,6 @@ When you migrate  al.ice to  @alice@in.st ...
             profile_uri = f'at://{SNARFED2_DID}/app.bsky.actor.profile/self'
             self.assertEqual([Target(protocol='atproto', uri=profile_uri)],
                              ap_user.obj.copies)
-            # STATE: check movedTo
 
             bsky_user = ATProto.get_by_id(SNARFED2_DID)
             self.assertEqual([], bsky_user.enabled_protocols)
@@ -1162,7 +1164,7 @@ When you migrate  al.ice to  @alice@in.st ...
         **ALICE_AP_ACTOR,
         'alsoKnownAs': ['https://bsky.brid.gy/ap/did:plc:alice'],
     }, content_type=as2.CONTENT_TYPE))
-    def test_migrate_out_bluesky_to_mastodon_overwrite_existing_copy(
+    def test_migrate_out_bluesky_to_mastodon_already_bridged_sends_move_overwrites_copy(
             self, mock_get, mock_post, mock_create_for, mock_create_task):
         self.make_bot_users()
 
@@ -1172,7 +1174,10 @@ When you migrate  al.ice to  @alice@in.st ...
             to_auth = self.make_mastodon(sess, login=False).get()
 
         with ndb.context.Context(bridgy_fed_ndb).use():
-            from_user = ATProto(id='did:plc:alice')
+            profile = Object(id='at://did:plc:alice/app.bsky.actor.profile/self',
+                             bsky=ALICE_BSKY_PROFILE['value'])
+            from_user = ATProto(id='did:plc:alice', enabled_protocols=['activitypub'],
+                                obj_key=profile.put())
             from_user.put()
 
             actor = Object(id='http://in.st/users/alice', as2=ALICE_AP_ACTOR,
@@ -1192,6 +1197,10 @@ When you migrate  al.ice to  @alice@in.st ...
             self.assertEqual(['atproto'], to_user.enabled_protocols)
             self.assertEqual([Target(protocol='atproto', uri='did:plc:alice')],
                              to_user.copies)
+
+            obj_as1 = from_user.obj_key.get().as1
+            self.assertEqual('http://in.st/users/alice', obj_as1['movedTo'])
+            self.assertIn('http://in.st/users/alice', obj_as1['alsoKnownAs'])
 
         mock_create_for.assert_called_with(to_user)
 
