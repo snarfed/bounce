@@ -968,6 +968,8 @@ def migrate_task(from_auth, to_auth):
         migration.state = State.migrate_in_blobs
         migration.put()
 
+    # need to migrate blobs before migrating the account, since after we've
+    # deactivated the account, it no longer serves blobs or any other XRPC calls
     if migration.state == State.migrate_in_blobs:
         migrate_in_blobs(from_auth)
         migration.state = State.migrate_in
@@ -1140,8 +1142,9 @@ def migrate_out(migration, from_user, to_user):
     if from_proto.HAS_COPIES:
         # connect to account to from account
         while existing := to_user.get_copy(from_proto):
-            logger.warning(f'Overwriting {to_user.key.id()} {from_proto.LABEL} copy {existing}')
-            to_user.remove('copies', existing)
+            copy = models.Target(protocol=from_proto.LABEL, uri=existing)
+            logger.warning(f'Overwriting {to_user.key.id()} {copy}')
+            to_user.remove('copies', copy)
 
         # TODO: will probably need to change for migrating from non-ATProto (ie
         # non-portable-identity) protocols

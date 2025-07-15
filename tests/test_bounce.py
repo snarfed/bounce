@@ -1079,6 +1079,7 @@ When you migrate  al.ice to  @alice@in.st ...
             profile_uri = f'at://{SNARFED2_DID}/app.bsky.actor.profile/self'
             self.assertEqual([Target(protocol='atproto', uri=profile_uri)],
                              ap_user.obj.copies)
+            # STATE: check movedTo
 
             bsky_user = ATProto.get_by_id(SNARFED2_DID)
             self.assertEqual([], bsky_user.enabled_protocols)
@@ -1138,6 +1139,7 @@ When you migrate  al.ice to  @alice@in.st ...
                  timeout=15, stream=True, headers=ANY),
             call('https://some.pds.bsky.network/xrpc/com.atproto.server.deactivateAccount',
                  json=None, data=None, headers=bsky_headers),
+            # STATE: add a follower and check that we send a Move
         ], any_order=True)
 
         migration = migration.get()
@@ -1152,6 +1154,46 @@ When you migrate  al.ice to  @alice@in.st ...
         mock_blob.upload_from_string.assert_called_once_with(b'abc00000 contents',
                                                              content_type='foo/bar')
         mock_blob.make_public.assert_called_with()
+
+    @patch.object(tasks_client, 'create_task')
+    @patch.object(ATProto, 'create_for')
+    @patch('requests.post')
+    @patch('requests.get', return_value=requests_response({
+        **ALICE_AP_ACTOR,
+        'alsoKnownAs': ['https://bsky.brid.gy/ap/did:plc:alice'],
+    }, content_type=as2.CONTENT_TYPE))
+    def test_migrate_out_bluesky_to_mastodon_overwrite_existing_copy(
+            self, mock_get, mock_post, mock_create_for, mock_create_task):
+        self.make_bot_users()
+
+        # set up users
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess, login=False).get()
+            to_auth = self.make_mastodon(sess, login=False).get()
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            from_user = ATProto(id='did:plc:alice')
+            from_user.put()
+
+            actor = Object(id='http://in.st/users/alice', as2=ALICE_AP_ACTOR,
+                           source_protocol='activitypub').put()
+            to_user = ActivityPub(
+                id='http://in.st/users/alice', obj_key=actor,
+                copies=[Target(protocol='atproto', uri='did:plc:old')])
+            to_user.put()
+
+        migration = Migration.get_or_insert(from_auth, to_auth,
+                                            state=State.migrate_out).put()
+
+        bounce.migrate_out(migration, from_user, to_user)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            to_user = to_user.key.get()
+            self.assertEqual(['atproto'], to_user.enabled_protocols)
+            self.assertEqual([Target(protocol='atproto', uri='did:plc:alice')],
+                             to_user.copies)
+
+        mock_create_for.assert_called_with(to_user)
 
     @patch('requests.get', side_effect=[
         # listBlobs
