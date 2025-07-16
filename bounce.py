@@ -214,7 +214,7 @@ class Migration(ndb.Model):
           queue: 'review' or 'migrate'
         """
         assert queue in ('review', 'migrate'), queue
-        common.create_task(queue, **{
+        common.create_task(queue, app_id=appengine_info.APP_ID, **{
             'from': self.from_.urlsafe().decode(),
             'to': self.to.urlsafe().decode(),
         })

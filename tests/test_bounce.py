@@ -30,6 +30,7 @@ from oauth_dropins.mastodon import MastodonApp, MastodonAuth
 from oauth_dropins.views import LOGINS_SESSION_KEY
 from oauth_dropins.webutil import flask_util, testutil, util
 from oauth_dropins.webutil.appengine_config import ndb_client, tasks_client
+from oauth_dropins.webutil import appengine_info
 from oauth_dropins.webutil.testutil import (
     Asserts,
     NOW,
@@ -198,6 +199,8 @@ class BounceTest(TestCase, Asserts):
         os.environ.setdefault('REPO_TOKEN', 'reepow-towkin')
         util.now = lambda **kwargs: NOW
 
+        appengine_info.APP_ID = 'my-app'
+
     def tearDown(self):
         self.ndb_context.__exit__(None, None, None)
         self.client.__exit__(None, None, None)
@@ -268,7 +271,7 @@ class BounceTest(TestCase, Asserts):
         self.assertEqual(1, len(calls))
 
         kwargs = calls[0][1]
-        self.assertEqual(f'projects//locations/{TASKS_LOCATION}/queues/{queue}',
+        self.assertEqual(f'projects/my-app/locations/{TASKS_LOCATION}/queues/{queue}',
                          kwargs['parent'])
         self.assertEqual(
             f'from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}'.encode(),
@@ -1214,8 +1217,11 @@ When you migrate  al.ice to  @alice@in.st ...
 
         mock_create_for.assert_called_with(to_user)
 
+        _, task_kwargs = mock_create_task.call_args_list[0]
+        self.assertEqual('projects/bridgy-federated/locations/us-central1/queues/send',
+                         task_kwargs['parent'])
         move_id = 'https://bsky.brid.gy/ap/did:plc:alice#move-http://in.st/users/alice'
-        send_task = mock_create_task.call_args_list[0][1]['task']
+        send_task = task_kwargs['task']
         params = parse_qs(send_task['app_engine_http_request']['body'])
         self.assert_equals({
             b'id': [move_id.encode()],
