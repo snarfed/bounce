@@ -14,7 +14,7 @@ from urllib.parse import urljoin
 from arroba import xrpc_repo
 from arroba.datastore_storage import AtpRemoteBlob, DatastoreStorage
 import arroba.server
-from flask import flash, Flask, redirect, render_template, request
+from flask import Flask, redirect, render_template, request
 import flask_gae_static
 from google.cloud import ndb, storage
 from granary import as2
@@ -38,6 +38,7 @@ from oauth_dropins.webutil import (
 from oauth_dropins.webutil.flask_util import (
     cloud_tasks_only,
     error,
+    flash,
     FlashErrors,
     Found,
     get_required_param,
@@ -591,19 +592,25 @@ def review_task(from_auth, to_auth):
 
     # Process based on migration state
     if migration.state == State.review_followers:
+        logger.info('starting review_followers')
         review_followers(migration, from_auth)
         migration.state = State.review_follows
         migration.put()
+        logger.info('finished, now at review_follows')
 
     if migration.state == State.review_follows:
+        logger.info('starting review_follows')
         review_follows(migration, from_auth, to_auth)
         migration.state = State.review_analyze
         migration.put()
+        logger.info('finished, now at review_analyze')
 
     if migration.state == State.review_analyze:
+        logger.info('starting review_analyze')
         analyze_review(migration, from_auth)
         migration.state = State.review_done
         migration.put()
+        logger.info('finished, now at review_done')
 
     return 'OK'
 
@@ -933,26 +940,34 @@ def migrate_task(from_auth, to_auth):
 
     # Process based on migration state
     if migration.state == State.migrate_follows:
+        logger.info('starting migrate_follows')
         migrate_follows(migration, to_auth)
         migration.state = State.migrate_in_blobs
         migration.put()
+        logger.info('finished, now at migrate_in_blobs')
 
     # need to migrate blobs before migrating the account, since after we've
     # deactivated the account, it no longer serves blobs or any other XRPC calls
     if migration.state == State.migrate_in_blobs:
+        logger.info('starting migrate_in_blobs')
         migrate_in_blobs(from_auth)
         migration.state = State.migrate_in
         migration.put()
+        logger.info('finished, now at migrate_in')
 
     if migration.state == State.migrate_in:
+        logger.info('starting migrate_in')
         migrate_in(migration, from_auth, from_user, to_user)
         migration.state = State.migrate_out
         migration.put()
+        logger.info('finished, now at migrate_out')
 
     if migration.state == State.migrate_out:
+        logger.info('starting migrate_out')
         migrate_out(migration, from_user, to_user)
         migration.state = State.migrate_done
         migration.put()
+        logger.info('finished, now at migrate_done')
 
     return 'OK'
 
