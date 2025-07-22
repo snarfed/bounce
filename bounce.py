@@ -36,6 +36,7 @@ from oauth_dropins.webutil import (
     util,
 )
 from oauth_dropins.webutil.flask_util import (
+    canonicalize_domain,
     cloud_tasks_only,
     error,
     flash,
@@ -105,6 +106,9 @@ CLOUD_STORAGE_BASE_URL = 'https://storage.googleapis.com/'
 USER_AGENT = 'Bounce (https://bounce.anew.social/)'
 util.set_user_agent(USER_AGENT)
 
+DOMAIN = 'bounce.anew.social'
+APPSPOT_DOMAIN = 'bounce-migrate.appspot.com'
+
 
 #
 # Flask app
@@ -114,6 +118,7 @@ app.template_folder = './templates'
 app.json.compact = False
 app.config.from_pyfile(Path(__file__).parent / 'config.py')
 app.url_map.converters['regex'] = flask_util.RegexConverter
+app.before_request(canonicalize_domain([APPSPOT_DOMAIN], DOMAIN))
 app.after_request(flask_util.default_modern_headers)
 app.register_error_handler(Exception, flask_util.handle_exception)
 
