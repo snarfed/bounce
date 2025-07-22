@@ -2,33 +2,102 @@
 
 {% block content %}
 
-<div id="docs">
-
-<p>Bounce is...</p>
-
-<p><a href="/docs#get-started">Click here to get started</a>, or read on for more information and setup details.</p>
-
-<br>
-
 <ul class="docs">
 
-<p><em>About</em></p>
+<li><a href="#what">What is this?</a></li>
 <li><a href="#which-networks">Which networks are supported?</a></li>
+<li><a href="#what-migrated">What gets migrated, exactly?</a></li>
+<li><a href="#how">How does it work?</a></li>
+<li><a href="#use-old">Can I still use my old account?</a></li>
+<!-- <li><a href=""></a></li> -->
+<li><a href="#who">Who are you?</a></li>
+<li><a href="#cost">How much does it cost? Can I donate or support you?</a></li>
+<li><a href="#terms">What are the terms of service?</a></li>
+<li><a href="#bug">I found a bug! I have a feature request!</a></li>
+<li><a href="#vulnerability">I found a security vulnerability!</a></li>
 
 </ul>
 
-<ul class="docs">
-
 <br>
 
-<h3 id="about">About</h3>
+<ul class="docs">
+
+<li id="what" class="question">What is this?</li>
+<li class="answer">
+<p>Bounce is an open social web migration tool. It lets you migrate your account from one decentralized social network to another, and still keep all of your followers, along with some of the people you follow.
+</li>
+
 
 <li id="which-networks" class="question">Which networks are supported?</li>
 <li class="answer">
-<p>Bounce currently supports <a href="https://indieweb.org/">the web</a>, <a href="https://en.wikipedia.org/wiki/Fediverse">fediverse</a>, and <a href="https://bsky.social/">Bluesky</a>.</p>
+<p>Bounce currently supports migrating from <a href="https://bsky.social/">Bluesky</a> to <a href="https://joinmastodon.org/">Mastodon</a> or <a href="https://pixelfed.org/">Pixelfed</a>. We hope to add support for the reverse direction, <a href="https://www.threads.com/">Threads</a>, <a href="https://micro.blog/">micro.blog</a>, and more in the future.
+</li>
+
+
+<li id="what-migrated" class="question">What gets migrated, exactly?</li>
+<li class="answer">
+<p>Right now, only your profile, followers, and some follows. We hope to add support for migrating posts, likes, blocks, and other data eventually!
+</li>
+
+
+<li id="how" class="question">How does it work?</li>
+<li class="answer">
+<p>When Bounce migrates you, it uses <a href="https://fed.brid.gy/">Bridgy Fed</a> to bridge your new account back to your old network so that your followers there can still see you and your posts.
+<p>For your follows, ie the people <em>you</em> follow, Bounce uses Bridgy Fed to detect which of them are already in your new network and following you over the bridge, and which are in your old network but are themselves bridged into the new one. It then reconnects all of those follows so that you still see and follow them after you migrate.
+<p>Under the covers, Bounce uses each network's built in support for account migration, eg <a href="">ActivityPub</a>'s <a href="https://docs.joinmastodon.org/spec/activitypub/#Move"><code>Move</code></a> activity for the fediverse, and <a href="https://atproto.com/">AT Protocol</a>'s <a href="https://atproto.com/guides/account-migration">account migration</a> for Bluesky. Bounce migrates your old account into Bridgy Fed, so that it becomes a bridged version of your new account that's fully owned and managed by Bridgy Fed.
+</li>
+
+
+<li id="use-old" class="question">Can I still use my old account?</li>
+<li class="answer">
+<p>Sorry, no. After you migrate, your old account becomes fully owned and managed by Bridgy Fed. <a href="https://fed.brid.gy/docs#use-like-normal">More details here.</a>
+</li>
+
+
+<li id="who" class="question">Who are you? Why did you make this?</li>
+<li class="answer">
+<p>We're <a href="https://quillmatiq.com/">Anuj Ahooja</a> and <a href="https://snarfed.org/">Ryan Barrett</a>. We make up <a href="https://www.anew.social/">A New Social</a>, the non-profit that builds and runs Bounce. We love the open social web, and we hope that Bounce can help <a href="https://www.anew.social/hello-social-web/">liberate people from their platforms</a> and enable <a href="https://www.augment.ink/bridges-the-last-network-effect/">the last network effect</a>.
+</li>
+
+
+<li id="cost" class="question">How much does it cost? Can I donate or support you?</li>
+<li class="answer">
+<p>Bounce is entirely free to use, but it's not cheap to build, so <a href="https://www.patreon.com/c/ANewSocial">we welcome donations on Patreon</a>!
+<p>If you can't afford to donate, but you still want to contribute, feel free to <a href="https://github.com/snarfed/bounce/issues">file an issue</a>, <a href="https://github.com/snarfed/bounce">send a pull request</a>, or tell your friends to try it.
+</li>
+
+
+<li id="privacy" class="question">What do you do with my data?</li>
+<li class="answer">
+<p>Nothing! Bounce isn't a business, and never will be, so we don't have the same motivations to abuse your data that other services might. More concretely, we don't sell or otherwise expose any of your data to third parties, even in aggregate.
+</li>
+
+
+<li id="terms" class="question">What are the terms of service?</li>
+<li class="answer">
+<p>Bounce's terms of service are simple. You agree not to deliberately attack, breach, or otherwise harm the service. If you manage to access private keys or other sensitive data, you agree to <a href="#vulnerability">report the vulnerability</a> and not use or disclose that data.
+<p>Otherwise, you may use the service for any purpose you see fit. However, we may terminate or block your access for any reason, or no reason at all. (We've never done this, and we expect we never will. Just playing it safe.)
+<p>Do you an administer an instance or other service that Bounce interacts with? If you have any concerns or questions, feel free to <a href="https://github.com/snarfed/bounce/issues">file an issue</a> or <a href="mailto:letsbuild@anew.social">email us</a>.
+</li>
+
+
+<li id="bug" class="question">I found a bug! I have a feature request!</li>
+<li class="answer">
+<p>Great! Please <a href="https://github.com/snarfed/bounce/issues">file it in GitHub</a>. Thank you!
+</li>
+
+
+<li id="vulnerability" class="question">I found a security vulnerability!</li>
+<li class="answer">
+<p>Oof. Thank you for reporting it! Please <a href="https://github.com/snarfed/bounce/security/advisories">file an advisory on GitHub</a>. We may provide monetary awards for reports of significant vulnerabilities, eg reading or modifying users' private keys, <em>if</em> you follow these rules:
+<ul>
+<li>Vulnerabilities must be in the application itself, not unrelated services like email (eg SPF/DKIM/DMARC).</li>
+<li>Public user data is intentionally public. That's not a vulnerability.</li>
+<li>No automated fuzzing, DoSes, or other high volume traffic. We block this traffic, and it will disqualify you from any possible award.</li>
+</ul>
+<p>Otherwise, <a href="https://github.com/snarfed/bounce/">the code is open source</a>, feel free to try to break in, let us know if you succeed!
 </li>
 
 </ul>
-</div>
 
 {% endblock %}

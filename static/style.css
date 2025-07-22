@@ -446,6 +446,10 @@ a img.shadow:hover
   text-align: left;
 }
 
+.row.warning {
+  margin-bottom: 2em;
+}
+
 .docs {
   list-style: none;
 }

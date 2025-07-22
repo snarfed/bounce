@@ -955,7 +955,7 @@ def migrate_get(from_auth, to_auth):
         return redirect(url('/review', from_auth, to_auth))
 
     return render_template(
-        ('migrated.html' if migration.state == State.migrate_done
+        ('done.html' if migration.state == State.migrate_done
          else 'migration_progress.html'),
         from_auth=from_auth,
         to_auth=to_auth,

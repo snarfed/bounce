@@ -69,6 +69,12 @@
   </div>
 </div>
 
+{% if body_id != 'front' %}
+<div class="row warning">
+<p>WARNING: Bounce is still in beta testing. <strong>Migration is irreversible!</strong> Expect bugs and rough edges. Don't use it with any accounts you depend on. (Yet.)</p>
+</div>
+{% endif %}
+
 {% block content %}
 {% endblock %}
 
