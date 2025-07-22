@@ -835,6 +835,22 @@ def bluesky_password(from_auth, to_auth):
 @require_accounts('from', 'to')
 def confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
+    from_user = get_from_user(from_auth)
+    to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
+    if from_user.is_enabled(to_proto):
+        to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
+        try:
+            to_proto.check_can_migrate_out(from_user, to_user.key.id())
+        except ValueError as e:
+            # WARNING: this is brittle! depends on the exact exception message
+            # from ActivityPub.check_can_migrate_out
+            msg = str(e)
+            if "alsoKnownAs doesn't contain" in msg:
+                logger.info(msg)
+                return redirect(url('/set-alsoKnownAs', from_auth, to_auth))
+            else:
+                return redirect(url('/confirm', from_auth, to_auth))
+
     if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
         # ask their PDS to email them a code that we'll need for it to sign the
         # PLC update operation
@@ -1118,8 +1134,6 @@ def migrate_out(migration, from_user, to_user):
     with ndb.context.Context(bridgy_fed_ndb).use():
         to_proto = to_user.__class__
         if from_user.is_enabled(to_proto):
-            # TODO: tell the user to add the bridged Bluesky account to their Mastodon
-            # account's alsoKnownAs aliases
             to_user.migrate_out(from_user, to_user.key.id())
 
     from_proto = from_user.__class__

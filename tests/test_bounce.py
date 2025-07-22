@@ -794,6 +794,10 @@ When you migrate  al.ice to  @alice@in.st ...
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
 
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            Object(id='did:plc:alice', raw=DID_DOC).put()
+            ATProto(id='did:plc:alice').put()
+
         resp = self.post('/confirm', from_auth, to_auth, password='hunter5')
 
         self.assertEqual(2, mock_post.call_count)
@@ -819,6 +823,10 @@ When you migrate  al.ice to  @alice@in.st ...
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
 
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            Object(id='did:plc:alice', raw=DID_DOC).put()
+            ATProto(id='did:plc:alice').put()
+
         resp = self.post('/confirm', from_auth, to_auth, password='hunter5')
 
         self.assertEqual(302, resp.status_code)
@@ -832,6 +840,31 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual({'identifier': 'did:plc:alice', 'password': 'hunter5'},
                          mock_post.call_args_list[0].kwargs['json'])
         self.assertIsNone(from_auth.get().session)
+
+    @patch('requests.get', side_effect=[
+        requests_response(DID_DOC),  # did:plc:alice
+        requests_response(ALICE_AP_ACTOR, content_type='application/activity+json'),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(ALICE_AP_ACTOR, content_type='application/activity+json'),
+    ])
+    def test_confirm_from_bluesky_to_activitypub_alsoKnownAs_not_set(self, mock_get):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        self.make_bot_users()
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            profile = Object(id='at://did:profile', bsky=ALICE_BSKY_PROFILE['value'])
+            ATProto(id='did:plc:alice', enabled_protocols=['activitypub'],
+                    obj_key=profile.put()).put()
+
+        resp = self.post('/confirm', from_auth, to_auth, password='hunter5')
+
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/set-alsoKnownAs?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
+
+        self.assertEqual(('http://in.st/users/alice',), mock_get.call_args[0])
 
     def test_migrate_post_done(self):
         with self.client.session_transaction() as sess:
