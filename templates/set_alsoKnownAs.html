@@ -1,0 +1,29 @@
+{% set body_id = 'migrate-confirm' %}
+{% extends "base.html" %}
+
+{% block content %}
+
+{% set from_label %}
+  {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
+{% endset %}
+{% set to_label %}
+  {% with auth = to_auth %}{% include 'account_label.html' %}{% endwith %}
+{% endset %}
+
+<div class="row big">
+  <p>Migrating {{ from_label }} to {{ to_label }}...
+</div>
+
+<div class="row">
+  <p>{{ from_label }} is already bridged into the fediverse, so you'll need to <a target="_blank" href="{{ settings_url }}"</a>add it to {{ to_label }} as an alias first</a>. Add <code>{{ from_ap_handle }}</code> as the alias.</p>
+</div>
+
+<form action="/confirm" method="post">
+<div class="row">
+  <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
+  <input type="hidden" name="to" value="{{ to_auth.key.urlsafe().decode() }}" />
+  <input type="submit" class="btn" value="Done" />
+</div>
+</form>
+
+{% endblock content %}

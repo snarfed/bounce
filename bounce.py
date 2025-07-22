@@ -849,7 +849,7 @@ def confirm(from_auth, to_auth):
                 logger.info(msg)
                 return redirect(url('/set-alsoKnownAs', from_auth, to_auth))
             else:
-                return redirect(url('/confirm', from_auth, to_auth))
+                return redirect(url('/review', from_auth, to_auth))
 
     if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
         # ask their PDS to email them a code that we'll need for it to sign the
@@ -873,6 +873,33 @@ def confirm(from_auth, to_auth):
         'confirm.html',
         from_auth=from_auth,
         to_auth=to_auth,
+        **template_vars(),
+    )
+
+
+@app.get('/set-alsoKnownAs')
+@require_accounts('from', 'to')
+def set_alsoKnownAs(from_auth, to_auth):
+    """View for entering the user's Bluesky password."""
+    if AUTH_TO_PROTOCOL[to_auth.__class__] != ActivityPub:
+        error(f'{to_auth.key.id()} is not ActivityPub')
+
+    from_ap_handle = get_from_user(from_auth).handle_as(ActivityPub)
+    settings_path = {
+        # https://docs.joinmastodon.org/user/moving/#migration
+        oauth_dropins.mastodon.MastodonAuth: '/settings/aliases',
+        # https://pixelfed.social/site/kb/your-profile#migrate-collapse1
+        oauth_dropins.pixelfed.PixelfedAuth: '/settings/account/aliases/manage',
+        oauth_dropins.threads.ThreadsAuth: 'TODO',
+    }[to_auth.__class__]
+    settings_url = urljoin(to_auth.instance(), settings_path)
+
+    return render_template(
+        'set_alsoKnownAs.html',
+        from_auth=from_auth,
+        to_auth=to_auth,
+        from_ap_handle=from_ap_handle,
+        settings_url=settings_url,
         **template_vars(),
     )
 

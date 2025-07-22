@@ -498,7 +498,7 @@ When you migrate  @alice@in.st to  al.ice ...
 * @alice@in.st
 * Bawb · ba.wb
 * 🌐 e.ve""", text, ignore_blanks=True)
-        self.assertIn('<form action="/confirm" method="get">', body)
+        self.assertIn('<form action="/confirm" method="post">', body)
 
     def test_review_done_bluesky_to_mastodon(self):
         with self.client.session_transaction() as sess:
@@ -865,6 +865,24 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(f'/set-alsoKnownAs?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
         self.assertEqual(('http://in.st/users/alice',), mock_get.call_args[0])
+
+    def test_set_alsoKnownAs(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        self.make_bot_users()
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            profile = Object(id='at://did:profile', bsky=ALICE_BSKY_PROFILE['value'])
+            ATProto(id='did:plc:alice', enabled_protocols=['activitypub'],
+                    obj_key=profile.put()).put()
+
+        resp = self.get('/set-alsoKnownAs', from_auth, to_auth)
+
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+        self.assert_multiline_in(
+            'is already bridged into the fediverse, so you\'ll need to <a target="_blank" href="http://in.st/settings/aliases"</a>add it', body)
 
     def test_migrate_post_done(self):
         with self.client.session_transaction() as sess:
