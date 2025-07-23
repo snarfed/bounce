@@ -67,11 +67,7 @@
 </div>
 
 <div class="row big" style="text-align: center">
-  {% if from_auth.site_name() == 'Bluesky' %}
-    <form action="/bluesky-password" method="get">
-  {% else %}
-    <form action="/confirm" method="post">
-  {% endif %}
+  <form action="/confirm" method="post">
     <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
     <input type="hidden" name="to" value="{{ to_auth.key.urlsafe().decode() }}" />
     <input type="submit" class="btn btn-default" value="Next" />

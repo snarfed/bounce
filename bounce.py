@@ -260,6 +260,8 @@ def template_vars(oauth_path_suffix=''):
 
     return {
         'auths': auths,
+        'request': request,
+        'util': util,
     }
 
 
@@ -418,12 +420,6 @@ def get_to_user(*, to_auth, from_auth):
         if user.status and user.status not in ('nobot', 'private'):
             desc = models.USER_STATUS_DESCRIPTIONS.get(user.status)
             flash(f"Sorry, {to_auth.user_display_name()} isn't eligible yet because your {desc}. <a href='https://fed.brid.gy/docs#troubleshooting'>More details here.</a> Feel free to try again once that's fixed!")
-            oauth_dropins.logout(to_auth)
-            raise Found(location=url('/to', from_auth))
-
-        from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
-        if user.is_enabled(from_proto):
-            flash(f'{to_auth.user_display_name()} is already bridged to {from_proto.PHRASE}. Please <a href="https://fed.brid.gy/docs#opt-out">disable that</a> first or choose another account.')
             oauth_dropins.logout(to_auth)
             raise Found(location=url('/to', from_auth))
 
@@ -840,10 +836,18 @@ def bluesky_password(from_auth, to_auth):
 @require_accounts('from', 'to')
 def confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
-    from_user = get_from_user(from_auth)
+    from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
     to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
+    to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
+
+    # first, do all the checks that don't add request params:
+    # * if to user is already bridged back, need to disable that
+    # * if to AP, and from user is already bridged, need to set alias
+    if to_user.is_enabled(from_proto):
+        return redirect(url('/disable-bridging', from_auth, to_auth))
+
+    from_user = get_from_user(from_auth)
     if from_user.is_enabled(to_proto):
-        to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
         try:
             to_proto.check_can_migrate_out(from_user, to_user.key.id())
         except ValueError as e:
@@ -856,13 +860,16 @@ def confirm(from_auth, to_auth):
             else:
                 return redirect(url('/review', from_auth, to_auth))
 
+    # now, the checks that add request params:
+    # * from Bluesky needs password
     if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
+        if not (password := request.values.get('password')):
+            return redirect(url('/bluesky-password', from_auth, to_auth))
+
         # ask their PDS to email them a code that we'll need for it to sign the
         # PLC update operation
-        bsky = Bluesky(pds_url=from_auth.pds_url,
-                       did=from_auth.key.id(),
-                       handle=from_auth.user_display_name(),
-                       app_password=get_required_param('password'))
+        bsky = Bluesky(pds_url=from_auth.pds_url, did=from_auth.key.id(),
+                       handle=from_auth.user_display_name(), app_password=password)
         try:
             bsky.client.com.atproto.identity.requestPlcOperationSignature()
         except RequestException as e:
@@ -907,6 +914,45 @@ def set_alsoKnownAs(from_auth, to_auth):
         settings_url=settings_url,
         **template_vars(),
     )
+
+
+@app.get('/disable-bridging')
+@require_accounts('from', 'to')
+def disable_bridging_get(from_auth, to_auth):
+    """View for disabling existing bridging."""
+    from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
+    to_user = _get_user(to_auth)
+
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        follower_count = models.Follower.query(
+            models.Follower.to == to_user.key,
+            models.Follower.from_ >= ndb.Key(from_proto, chr(0)),
+            models.Follower.from_ <= ndb.Key(from_proto, chr(255)),
+        ).count()
+
+    return render_template(
+        'disable_bridging.html',
+        from_auth=from_auth,
+        to_auth=to_auth,
+        to_user=to_user,
+        from_proto=from_proto,
+        follower_count=follower_count,
+        url=url,
+        **template_vars(),
+    )
+
+
+@app.post('/disable-bridging')
+@require_accounts('from', 'to')
+def disable_bridging_post(from_auth, to_auth):
+    """Disable bridging for the to account."""
+    from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
+    to_user = _get_user(to_auth)
+
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        to_user.disable_protocol(from_proto)
+
+    return redirect(url('/review', from_auth, to_auth))
 
 
 @app.post('/migrate')

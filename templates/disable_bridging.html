@@ -1,0 +1,33 @@
+{% set body_id = 'disable-bridging' %}
+{% extends "base.html" %}
+
+{% block content %}
+
+{% set from_label %}
+  {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
+{% endset %}
+{% set to_label %}
+  {% with auth = to_auth %}{% include 'account_label.html' %}{% endwith %}
+{% endset %}
+
+<div class="row big">
+  <p>{{ to_label }} is <a href="https://fed.brid.gy{{ to_user.user_page_path() }}">already bridged to {{ from_proto.PHRASE }}</a>.
+</div>
+
+<div class="row">
+  <p>It currently has <a href="https://fed.brid.gy{{ to_user.user_page_path('/followers') }}">{{ humanize_number(follower_count, 'follower') }}</a> on {{ from_proto.PHRASE }}. If you want to migrate it, you'll need to disable that bridge, which will remove those followers. Do you want to do that?
+</div>
+
+<div class="row">
+  <form action="{{ url('/to', from_auth) }}" method="get">
+    <input type="submit" class="btn" value="No" />
+  </form>
+
+  <form action="/disable-bridging" method="post">
+    <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
+    <input type="hidden" name="to" value="{{ to_auth.key.urlsafe().decode() }}" />
+    <input type="submit" class="btn btn-danger" value="Yes" />
+  </form>
+</div>
+
+{% endblock content %}

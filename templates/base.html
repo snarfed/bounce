@@ -16,6 +16,11 @@
 <!-- Not async because they add DOMContentLoaded event listeners, which may
   -- happen before an async script loads. -->
 <script src="/oauth_dropins_static/util.js"></script>
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Bounce" />
+<meta property="og:description" content="Bounce lets you migrate from one decentralized social network to another, keep all of your followers, and keep many of the people you follow." />
+<meta property="og:url" content="{{ util.clean_url(request.url) }}" />
+<meta property="og:image" content="/static/bounce-logotype.png" />
 </head>
 
 <body id="{{ body_id }}">

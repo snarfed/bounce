@@ -373,22 +373,6 @@ class="logo" title="Bluesky" />
         resp = self.get('/review')
         self.assertEqual(400, resp.status_code)
 
-    def test_review_to_account_is_bridged(self):
-        with self.client.session_transaction() as sess:
-            from_auth = self.make_bluesky(sess)
-            to_auth = self.make_mastodon(sess)
-
-        with ndb.context.Context(bridgy_fed_ndb).use():
-            ActivityPub(id='http://in.st/users/alice',
-                        enabled_protocols=['atproto']).put()
-
-        resp = self.get('/review', from_auth, to_auth)
-        self.assertEqual(302, resp.status_code)
-        self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
-                         resp.headers['Location'])
-        flashed = get_flashed_messages()
-        self.assertTrue(flashed[0].startswith('@alice@in.st is already bridged to Bluesky.'), flashed)
-
     def test_review_to_account_ineligible_for_bridging(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
@@ -534,7 +518,7 @@ When you migrate  al.ice to  @alice@in.st ...
 * al.ice
 * bawb
 * 🌐 e.ve""", text, ignore_blanks=True)
-        self.assertIn('<form action="/bluesky-password" method="get">', body)
+        self.assertIn('<form action="/confirm" method="post">', body)
 
     @patch.object(tasks_client, 'create_task')
     def test_review_in_progress_with_new_to(self, mock_create_task):
@@ -797,6 +781,7 @@ When you migrate  al.ice to  @alice@in.st ...
         with ndb.context.Context(bridgy_fed_ndb).use():
             Object(id='did:plc:alice', raw=DID_DOC).put()
             ATProto(id='did:plc:alice').put()
+            ActivityPub(id='http://in.st/users/alice').put()
 
         resp = self.post('/confirm', from_auth, to_auth, password='hunter5')
 
@@ -812,6 +797,35 @@ When you migrate  al.ice to  @alice@in.st ...
             mock_post.call_args_list[1].args)
         self.assertEqual('towkin', from_auth.get().session['accessJwt'])
 
+    def test_confirm_from_bluesky_without_password(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            Object(id='did:plc:alice', raw=DID_DOC).put()
+            ATProto(id='did:plc:alice').put()
+            ActivityPub(id='http://in.st/users/alice').put()
+
+        resp = self.post('/confirm', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/bluesky-password?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
+
+    def test_confirm_to_activitypub_currently_bridged_back(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        enabled_protocols=['atproto']).put()
+
+        resp = self.post('/confirm', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(
+            f'/disable-bridging?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}',
+            resp.headers['Location'])
+
     @patch('requests.post', side_effect=[
         requests_response({  # createSession
             'error': 'AuthenticationRequired',
@@ -826,6 +840,7 @@ When you migrate  al.ice to  @alice@in.st ...
         with ndb.context.Context(bridgy_fed_ndb).use():
             Object(id='did:plc:alice', raw=DID_DOC).put()
             ATProto(id='did:plc:alice').put()
+            ActivityPub(id='http://in.st/users/alice').put()
 
         resp = self.post('/confirm', from_auth, to_auth, password='hunter5')
 
@@ -865,6 +880,17 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(f'/set-alsoKnownAs?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
         self.assertEqual(('http://in.st/users/alice',), mock_get.call_args[0])
+
+    def test_bluesky_password(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        resp = self.get('/bluesky-password', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+        text = html_to_text(resp.get_data(as_text=True))
+        self.assert_multiline_in('Please enter your Bluesky password for  al.ice',
+                                 text)
 
     def test_set_alsoKnownAs(self):
         with self.client.session_transaction() as sess:
@@ -1346,3 +1372,42 @@ When you migrate  al.ice to  @alice@in.st ...
         bounce.migrate_in_blobs(auth)
         mock_get.assert_not_called()
         self.assertEqual([], AtpRemoteBlob.query().fetch())
+
+    def test_disable_bridging_get(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            to_user = ActivityPub(id='http://in.st/users/alice',
+                                  enabled_protocols=['atproto']).put()
+            Follower(from_=ATProto(id='did:plc:bob').key, to=to_user).put()
+            Follower(from_=ATProto(id='did:plc:eve').key, to=to_user).put()
+            Follower(from_=Web(id='fra.nk').key, to=to_user).put()
+
+        resp = self.get('/disable-bridging', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+
+        self.assertIn('is <a href="https://fed.brid.gy/ap/@alice@in.st">already bridged to Bluesky</a>', body)
+        self.assertIn('It currently has <a href="https://fed.brid.gy/ap/@alice@in.st/followers">2 followers</a> on Bluesky', body)
+
+    def test_disable_bridging_post(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            to_user = ActivityPub(id='http://in.st/users/alice',
+                                  enabled_protocols=['atproto'])
+            to_user.put()
+
+        resp = self.post('/disable-bridging', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(
+            f'/review?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}',
+            resp.headers['Location'])
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            to_user = to_user.key.get()
+            self.assertEqual([], to_user.enabled_protocols)
