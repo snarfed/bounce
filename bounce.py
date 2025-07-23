@@ -226,6 +226,30 @@ class Migration(ndb.Model):
         })
 
 
+def humanize_number(num, noun):
+    """Generates a string for a number of objects in a human-friendly form.
+
+    Eg ``12k widgets``, ``2M fluffs``, ``1 foo``.
+
+    Args:
+      num (int)
+      noun (str)
+
+    Returns:
+      str:
+    """
+    # hacky, uses humanize's file size function and then tweaks it
+    # https://humanize.readthedocs.io/en/latest/filesize/
+    number = humanize.naturalsize(num, format='%.0f')\
+                     .upper().removesuffix('BYTES').removesuffix('BYTE')\
+                     .rstrip('B').replace(' ', '')
+    if num != 1:
+        noun += 's'
+
+    return f'{number} {noun}'
+
+
+
 def url(path, from_auth, to_auth=None):
     """Simple helper to create URLs with from and optional to auth entities.
 
@@ -260,6 +284,7 @@ def template_vars(oauth_path_suffix=''):
 
     return {
         'auths': auths,
+        'humanize_number': humanize_number,
         'request': request,
         'util': util,
     }
@@ -785,14 +810,6 @@ def analyze_review(migration, from_auth):
                 if user:
                     preview.append(user.user_link(pictures=True))
 
-    # total counts in human-friendly form, eg 12K, 2M
-    # hacky, uses humanize's file size function and then tweaks it
-    # https://humanize.readthedocs.io/en/latest/filesize/
-    def humanize_number(num):
-        return humanize.naturalsize(num, format='%.0f')\
-                       .upper().removesuffix('BYTES').removesuffix('BYTE')\
-                       .rstrip('B').replace(' ', '')
-
     # total counts, percentage of follows that will be kept
     follow_counts = migration.review['follow_counts']
     total_follows = sum(count for _, count in follow_counts)
@@ -809,8 +826,8 @@ def analyze_review(migration, from_auth):
     migration.review.update({
         'followers_preview': followers_preview,
         'follows_preview': follows_preview,
-        'total_followers': humanize_number(total_followers),
-        'total_follows': humanize_number(total_follows),
+        'total_followers': total_followers,
+        'total_follows': total_follows,
         'follower_counts': [['type', 'count']] + sorted(follower_counts),
         'follow_counts': [['type', 'count']] + sorted(follow_counts),
         'keep_follows_pct': keep_follows_pct,
@@ -900,7 +917,7 @@ def set_alsoKnownAs(from_auth, to_auth):
     settings_path = {
         # https://docs.joinmastodon.org/user/moving/#migration
         oauth_dropins.mastodon.MastodonAuth: '/settings/aliases',
-        # https://pixelfed.social/site/kb/your-profile#migrate-collapse1
+        # https://pixelfed.social/site/kb/your-profile#migration
         oauth_dropins.pixelfed.PixelfedAuth: '/settings/account/aliases/manage',
         oauth_dropins.threads.ThreadsAuth: 'TODO',
     }[to_auth.__class__]

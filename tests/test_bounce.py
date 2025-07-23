@@ -124,8 +124,8 @@ REVIEW_DATA_MASTODON_TO_BLUESKY = {
     'follows_preview': [ALICE_AP_HTML, BOB_BS_HTML, EVE_WEB_HTML],
     # 'followers_preview_raw': [ALICE_AS1, BOB_AS1],
     # 'follows_preview_raw': [ALICE_AS1, BOB_AS1, EVE_AS1],
-    'total_followers': '2',
-    'total_follows': '3',
+    'total_followers': 2,
+    'total_follows': 3,
     'total_bridged_follows': 2,
     'follower_counts': [
         ['type', 'count'],
@@ -146,8 +146,8 @@ REVIEW_DATA_BLUESKY_TO_MASTODON = {
     'follows_preview': [ALICE_BS_HTML, BOB_AP_HTML, EVE_WEB_HTML],
     # 'followers_preview_raw': [ALICE_AS1, BOB_AS1],
     # 'follows_preview_raw': [ALICE_AS1, BOB_AS1, EVE_AS1],
-    'total_followers': '2',
-    'total_follows': '3',
+    'total_followers': 2,
+    'total_follows': 3,
     'total_bridged_follows': 2,
     'follower_counts': [
         ['type', 'count'],
@@ -720,8 +720,8 @@ When you migrate  al.ice to  @alice@in.st ...
             'follows_preview_raw': [],
             'followers_preview': [],
             'follows_preview': [],
-            'total_followers': '0',
-            'total_follows': '0',
+            'total_followers': 0,
+            'total_follows': 0,
             'total_bridged_follows': 0,
             'keep_follows_pct': 100,
         }, migration.review)
@@ -758,8 +758,8 @@ When you migrate  al.ice to  @alice@in.st ...
             'follows_preview_raw': [],
             'followers_preview': [],
             'follows_preview': [],
-            'total_followers': '0',
-            'total_follows': '0',
+            'total_followers': 0,
+            'total_follows': 0,
             'total_bridged_follows': 0,
             'keep_follows_pct': 100,
         }, migration.review)

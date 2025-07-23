@@ -40,7 +40,7 @@
 
 <div class="row">
   <div class="col-md-6 col-sm-12">
-    <h3>You'll keep <em>all</em> of your {{ total_followers }} followers.</h3>
+    <h3>You'll keep <em>all</em> of your {{ humanize_number(total_followers, 'follower') }}.</h3>
     <div id="followers-chart"></div>
     <ul class="actors">
       {% for actor_html in followers_preview %}
@@ -53,7 +53,7 @@
   </div>
 
   <div class="col-md-6 col-sm-12">
-    <h3>You'll keep <em>{{ keep_follows_pct }}%</em> of your {{ total_follows }} follows.</h3>
+    <h3>You'll keep <em>{{ keep_follows_pct }}%</em> of your {{ humanize_number(total_follows, 'follow') }}.</h3>
     <div id="follows-chart"></div>
     <ul class="actors">
       {% for actor_html in follows_preview %}
