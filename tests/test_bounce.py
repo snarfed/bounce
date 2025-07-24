@@ -899,7 +899,9 @@ When you migrate  al.ice to  @alice@in.st ...
 
         self.make_bot_users()
         with ndb.context.Context(bridgy_fed_ndb).use():
-            profile = Object(id='at://did:profile', bsky=ALICE_BSKY_PROFILE['value'])
+            Object(id='did:plc:alice', raw=DID_DOC).put()
+            profile = Object(id='at://did:plc:alice/app.bsky.actor.profile/self',
+                             bsky=ALICE_BSKY_PROFILE['value'])
             ATProto(id='did:plc:alice', enabled_protocols=['activitypub'],
                     obj_key=profile.put()).put()
 
@@ -1392,7 +1394,8 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertIn('is <a href="https://fed.brid.gy/ap/@alice@in.st">already bridged to Bluesky</a>', body)
         self.assertIn('It currently has <a href="https://fed.brid.gy/ap/@alice@in.st/followers">2 followers</a> on Bluesky', body)
 
-    def test_disable_bridging_post(self):
+    @patch('bounce.confirm', return_value='okay')
+    def test_disable_bridging_post(self, mock_confirm):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
@@ -1403,10 +1406,9 @@ When you migrate  al.ice to  @alice@in.st ...
             to_user.put()
 
         resp = self.post('/disable-bridging', from_auth, to_auth)
-        self.assertEqual(302, resp.status_code)
-        self.assertEqual(
-            f'/review?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}',
-            resp.headers['Location'])
+        self.assertEqual(200, resp.status_code)
+        self.assertEqual('okay', resp.get_data(as_text=True))
+        mock_confirm.assert_called_once_with()
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             to_user = to_user.key.get()

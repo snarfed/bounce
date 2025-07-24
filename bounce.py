@@ -267,12 +267,8 @@ def url(path, from_auth, to_auth=None):
     return url
 
 
-def template_vars(oauth_path_suffix=''):
-    """Returns base template vars common to most views.
-
-    Args:
-      oauth_path_suffix: appended to the end of the OAuth start URL paths
-    """
+def template_vars():
+    """Returns base template vars common to most views."""
     auths = []
     for auth in ndb.get_multi(oauth_dropins.get_logins()):
         if auth:
@@ -871,10 +867,11 @@ def confirm(from_auth, to_auth):
             # WARNING: this is brittle! depends on the exact exception message
             # from ActivityPub.check_can_migrate_out
             msg = str(e)
+            logger.info(msg)
             if "alsoKnownAs doesn't contain" in msg:
-                logger.info(msg)
                 return redirect(url('/set-alsoKnownAs', from_auth, to_auth))
             else:
+                flash(f"{from_auth.user_display_name()} isn't ready to migrate: {msg}")
                 return redirect(url('/review', from_auth, to_auth))
 
     # now, the checks that add request params:
@@ -913,7 +910,10 @@ def set_alsoKnownAs(from_auth, to_auth):
     if AUTH_TO_PROTOCOL[to_auth.__class__] != ActivityPub:
         error(f'{to_auth.key.id()} is not ActivityPub')
 
-    from_ap_handle = get_from_user(from_auth).handle_as(ActivityPub)
+    from_user = get_from_user(from_auth)
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        from_ap_handle = from_user.handle_as(ActivityPub)
+
     settings_path = {
         # https://docs.joinmastodon.org/user/moving/#migration
         oauth_dropins.mastodon.MastodonAuth: '/settings/aliases',
@@ -969,7 +969,7 @@ def disable_bridging_post(from_auth, to_auth):
     with ndb.context.Context(bridgy_fed_ndb).use():
         to_user.disable_protocol(from_proto)
 
-    return redirect(url('/review', from_auth, to_auth))
+    return confirm()
 
 
 @app.post('/migrate')
