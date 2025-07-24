@@ -8,7 +8,8 @@
 <li><a href="#which-networks">Which networks are supported?</a></li>
 <li><a href="#what-migrated">What gets migrated, exactly?</a></li>
 <li><a href="#how">How does it work?</a></li>
-<li><a href="#use-old">Can I still use my old account?</a></li>
+<li><a href="#what-break">What will break if I do this?</a></li>
+<li><a href="#use-old">Can I still use my old account after I migrate?</a></li>
 <!-- <li><a href=""></a></li> -->
 <li><a href="#who">Who are you?</a></li>
 <li><a href="#cost">How much does it cost? Can I donate or support you?</a></li>
@@ -36,7 +37,8 @@
 
 <li id="what-migrated" class="question">What gets migrated, exactly?</li>
 <li class="answer">
-<p>Right now, only your profile, followers, and some follows. We hope to add support for migrating posts, likes, blocks, and other data eventually!
+<p>Right now, only your profile, followers, and some follows. The existing posts on the accounts you migrate from and to will stay the same; only new posts going forward will get bridged back to the old account.
+<p>We hope to add support for migrating posts, likes, blocks, and other data eventually!
 </li>
 
 
@@ -48,7 +50,13 @@
 </li>
 
 
-<li id="use-old" class="question">Can I still use my old account?</li>
+<li id="what-break" class="question">What will break if I do this?</li>
+<li class="answer">
+<p>If you're migrating from Bluesky, the images and videos on your Bluesky account will stay visible <em>if</em> your account is on a PDS (server) that Bluesky themselves runs. We currently don't migrate blobs (ie images and videos) from federated third party PDSes, so if you migrate an account from one of those, its images and videos will disappear after a few days.
+</li>
+
+
+<li id="use-old" class="question">Can I still use my old account after I migrate?</li>
 <li class="answer">
 <p>Sorry, no. After you migrate, your old account becomes fully owned and managed by Bridgy Fed. <a href="https://fed.brid.gy/docs#use-like-normal">More details here.</a>
 </li>
