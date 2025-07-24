@@ -954,7 +954,6 @@ def disable_bridging_get(from_auth, to_auth):
         to_user=to_user,
         from_proto=from_proto,
         follower_count=follower_count,
-        url=url,
         **template_vars(),
     )
 
