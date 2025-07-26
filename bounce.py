@@ -1016,9 +1016,14 @@ def migrate_get(from_auth, to_auth):
         flash(f'Migration can only start after review is completed.')
         return redirect(url('/review', from_auth, to_auth))
 
+    template = 'migration_progress.html'
+    if migration.state == State.migrate_done:
+        template = 'done.html'
+        logger.info(f'done! logging out {from_auth.key.id()}')
+        oauth_dropins.logout(from_auth)
+
     return render_template(
-        ('done.html' if migration.state == State.migrate_done
-         else 'migration_progress.html'),
+        template,
         from_auth=from_auth,
         to_auth=to_auth,
         migration=migration,

@@ -936,6 +936,9 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(200, resp.status_code)
         self.assertNotIn('<meta http-equiv="refresh" content="5">',
                          resp.get_data(as_text=True))
+        self.assertEqual([
+            ('MastodonAuth', to_auth.id()),
+        ], session[LOGINS_SESSION_KEY])
 
     def test_migrate_no_from(self):
         with self.client.session_transaction() as sess:
