@@ -440,7 +440,7 @@ def get_to_user(*, to_auth, from_auth):
         # keep in sync with bridgy_fed.models.User.enabled_protocol!
         if user.status and user.status not in ('nobot', 'private'):
             desc = models.USER_STATUS_DESCRIPTIONS.get(user.status)
-            flash(f"Sorry, {to_auth.user_display_name()} isn't eligible yet because your {desc}. <a href='https://fed.brid.gy/docs#troubleshooting'>More details here.</a> Feel free to try again once that's fixed!")
+            flash(f"Sorry, {to_auth.user_display_name()} isn't eligible yet because your {desc}. <a href='https://fed.brid.gy/docs#troubleshooting'>More details here.</a> Feel free to try again once that's fixed!", escape=False)
             oauth_dropins.logout(to_auth)
             raise Found(location=url('/to', from_auth))
 
