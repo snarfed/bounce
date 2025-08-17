@@ -980,7 +980,7 @@ def migrate_post(from_auth, to_auth):
       plc_code (str)
     """
     logger.info(f'Params: {list(request.values.items())}')
-    logger.info(f'Migrating {from_auth.key.id()} {to_auth.key.id()}')
+    logger.info(f'Migrating {from_auth.key.id()} to {to_auth.key.id()}')
 
     migration = Migration.get(from_auth, to_auth)
 
