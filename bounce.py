@@ -1307,8 +1307,15 @@ class MastodonStart(FlashErrors, oauth_dropins.mastodon.Start):
         '/oauth/mastodon/finish/to',
     )
 
+    def app_name(self):
+        return 'Bounce'
+
+    def app_url(self):
+        return 'https://bounce.anew.social/'
+
 class MastodonCallback(FlashErrors, oauth_dropins.mastodon.Callback):
     pass
+
 
 class PixelfedStart(FlashErrors, oauth_dropins.pixelfed.Start):
     # no granular scopes yet. afaict the available scopes aren't documented at all :(
@@ -1319,8 +1326,15 @@ class PixelfedStart(FlashErrors, oauth_dropins.pixelfed.Start):
         '/oauth/pixelfed/finish/to',
     )
 
+    def app_name(self):
+        return 'Bounce'
+
+    def app_url(self):
+        return 'https://bounce.anew.social/'
+
 class PixelfedCallback(FlashErrors, oauth_dropins.pixelfed.Callback):
     pass
+
 
 # class ThreadsStart(FlashErrors, oauth_dropins.threads.Start):
 #     TODO: scopes
