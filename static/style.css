@@ -587,6 +587,13 @@ a img.shadow:hover
 }
 
 @media screen and (max-width: 455px) {
+  #ball {
+    display: none;
+  }
+  #front-tagline {
+    margin-left: auto;
+  }
+
   .half, .half-sidebyside {
     width: 100%;
   }
