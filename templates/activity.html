@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style type="text/css">
+td {
+  padding: .25em;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Activity</h2>
+
+<h3>Logins</h3>
+
+<table>
+  {% for platform, count in login_counts.items() %}
+    {% if count %}
+      <tr><td>{{ platform }}</td><td>{{ count }}</td></tr>
+    {% endif %}
+  {% endfor %}
+</table>
+
+
+<h3>Reviews and migrations</h3>
+
+<table>
+  {% for state, count in migration_counts.items() %}
+    <tr><td>{{ state }}</td><td>{{ count }}</td></tr>
+  {% endfor %}
+</table>
+
+<h3>Recent</h3>
+
+<table>
+  <tr><th>from</th><th>to</th><th>state</th><th>created</th><th>updated</th><tr>
+  {% with PT = pytz.timezone('US/Pacific') %}
+  {% for m in recent_migrations %}
+    <tr>
+      <td>{{ m.from_auth.user_display_name() }}</td>
+      <td>{{ m.to_auth.user_display_name() }}</td>
+      <td>{{ m.state.name }}</td>
+      <td>{{ m.created.astimezone(PT).isoformat(' ', 'seconds')[:-6] }}</td>
+      <td>{{ m.updated.astimezone(PT).isoformat(' ', 'seconds')[:-6] }}</td>
+    </tr>
+  {% endfor %}
+  {% endwith %}
+</table>
+
+</body>
+</html>

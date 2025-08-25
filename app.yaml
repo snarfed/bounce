@@ -47,6 +47,11 @@ handlers:
   upload: static/favicon.ico
   secure: always
 
+- url: /admin/activity
+  script: auto
+  secure: always
+  login: admin
+
 # dynamic
 - url: .*
   script: auto

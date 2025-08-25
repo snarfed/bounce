@@ -46,6 +46,7 @@ from oauth_dropins.webutil.flask_util import (
 )
 from oauth_dropins.webutil.models import EnumProperty, JsonProperty
 from pymemcache.test.utils import MockMemcacheClient
+import pytz
 from requests import RequestException
 from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
 
@@ -1249,6 +1250,39 @@ def migrate_out(migration, from_user, to_user):
             to_proto.receive(obj=to_user.obj, authed_as=to_user.key.id())
 
     memcache.remote_evict(to_user.key)
+
+
+@app.get('/admin/activity')
+def admin_activity():
+    # maps string platform to count
+    login_counts = {
+        cls.__name__.removesuffix('Auth'): cls.query().count()
+        for cls in AUTH_TO_PROTOCOL.keys()
+    }
+
+    # maps string state to count
+    migration_counts = defaultdict(int)
+    for m in Migration.query():
+        migration_counts[m.state.name if m.state else None] += 1
+
+    recent_migrations = Migration.query().order(-Migration.updated).fetch(10)
+
+    auth_keys = sum(([m.from_, m.to] for m in recent_migrations), start=[])
+    auths = ndb.get_multi(auth_keys)
+
+    # list of Migrations with from_auth, to_auth attrs
+    for m in recent_migrations:
+        m.from_auth = auths.pop(0)
+        m.to_auth = auths.pop(0)
+    assert not auths
+
+    return render_template(
+        'activity.html',
+        login_counts=login_counts,
+        migration_counts=migration_counts,
+        recent_migrations=recent_migrations,
+        pytz=pytz,
+    )
 
 
 #
