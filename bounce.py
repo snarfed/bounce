@@ -844,7 +844,8 @@ def confirm(from_auth, to_auth):
     from_user = get_from_user(from_auth)
     if from_user.is_enabled(to_proto):
         try:
-            to_proto.check_can_migrate_out(from_user, to_user.key.id())
+            with ndb.context.Context(bridgy_fed_ndb).use():
+                to_proto.check_can_migrate_out(from_user, to_user.key.id())
         except ValueError as e:
             # WARNING: this is brittle! depends on the exact exception message
             # from ActivityPub.check_can_migrate_out

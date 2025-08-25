@@ -215,7 +215,6 @@ class BounceTest(TestCase, Asserts):
                     public_exponent=long_to_base64(key.e),
                     private_exponent=long_to_base64(key.d)).put()
 
-
     def make_mastodon(self, sess, name='alice', login=True):
         app = MastodonApp(instance='http://in.st/', data='{}').put()
         user_json = json.dumps({
