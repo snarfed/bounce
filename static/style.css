@@ -416,7 +416,7 @@ input[type="submit"], summary.btn {
 
 a img.shadow:hover
 {
-	box-shadow: 3px 3px 3px #06c !important;
+  box-shadow: 3px 3px 3px #06c !important;
 }
 
 .error, .warning {
@@ -563,15 +563,15 @@ a img.shadow:hover
 }
 
 .right {
-	float: right;
-	margin-left: 20px;
-	text-align: center;
+  float: right;
+  margin-left: 20px;
+  text-align: center;
 }
 
 .left {
-	float: left;
-	margin-right: 20px;
-	text-align: center;
+  float: left;
+  margin-right: 20px;
+  text-align: center;
 }
 
 .left img, .right img {
@@ -587,20 +587,20 @@ a img.shadow:hover
 }
 
 @media screen and (max-width: 455px) {
-	.half, .half-sidebyside {
-		width: 100%;
-	}
-	.third, .quarter, .sixth {
-		width: 50%;
-	}
+  .half, .half-sidebyside {
+    width: 100%;
+  }
+  .third, .quarter, .sixth {
+    width: 50%;
+  }
 }
 
 @media screen and (min-width: 456px) {
-	.half { width: 50%; }
-	.half-sidebyside { width: 45%; }
-	.third { width: 32%; }
-	.quarter { width: 25%; }
-	.sixth { width: 17%; }
+  .half { width: 50%; }
+  .half-sidebyside { width: 45%; }
+  .third { width: 32%; }
+  .quarter { width: 25%; }
+  .sixth { width: 17%; }
 }
 
 /* CSS View Transitions
