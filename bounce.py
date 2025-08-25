@@ -425,26 +425,7 @@ def _get_user(auth):
     with ndb.context.Context(bridgy_fed_ndb).use():
         return proto.get_or_create(id, allow_opt_out=True)
 
-get_from_user = _get_user
-
-
-def get_to_user(*, to_auth, from_auth):
-    """Loads a "to" user and checks that it's eligible for migration.
-
-    If it's ineligible, returns ``None``.
-    """
-    user = _get_user(to_auth)
-
-    # eligibility checks
-    with ndb.context.Context(bridgy_fed_ndb).use():
-        # keep in sync with bridgy_fed.models.User.enabled_protocol!
-        if user.status and user.status not in ('nobot', 'private'):
-            desc = models.USER_STATUS_DESCRIPTIONS.get(user.status)
-            flash(f"Sorry, {to_auth.user_display_name()} isn't eligible yet because your {desc}. <a href='https://fed.brid.gy/docs#troubleshooting'>More details here.</a> Feel free to try again once that's fixed!", escape=False)
-            oauth_dropins.logout(to_auth)
-            raise Found(location=url('/to', from_auth))
-
-    return user
+get_to_user = get_from_user = _get_user
 
 
 #
@@ -553,7 +534,7 @@ def review(from_auth, to_auth):
         return redirect(url('/to', from_auth))
 
     # check that "to" user is eligible
-    get_to_user(to_auth=to_auth, from_auth=from_auth)
+    get_to_user(to_auth)
 
     if migration.to and migration.to != to_auth.key:
         logger.info(f'  overwriting existing to {migration.to} with {to_auth.key}')
@@ -851,7 +832,7 @@ def confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
     to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
-    to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
+    to_user = get_to_user(to_auth)
 
     # first, do all the checks that don't add request params:
     # * if to user is already bridged back, need to disable that
@@ -1051,7 +1032,14 @@ def migrate_task(from_auth, to_auth):
     migration.put()
 
     from_user = get_from_user(from_auth)
-    to_user = get_to_user(to_auth=to_auth, from_auth=from_auth)
+    to_user = get_to_user(to_auth)
+
+    # override spam filters
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        for user in from_user, to_user:
+            if user.manual_opt_out is not False:
+                user.manual_opt_out = False
+                user.put()
 
     # Process based on migration state
     if migration.state == State.migrate_follows:

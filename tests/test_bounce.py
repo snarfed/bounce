@@ -373,7 +373,11 @@ class="logo" title="Bluesky" />
         resp = self.get('/review')
         self.assertEqual(400, resp.status_code)
 
-    def test_review_to_account_ineligible_for_bridging(self):
+    @patch.object(tasks_client, 'create_task')
+    @patch('requests.get', return_value=requests_response(
+        ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE))
+    def test_review_to_account_ignore_ineligible_for_bridging(
+            self, mock_get, mock_create_task):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
@@ -383,11 +387,13 @@ class="logo" title="Bluesky" />
             ActivityPub(id='http://in.st/users/alice', obj_key=obj.put()).put()
 
         resp = self.get('/review', from_auth, to_auth)
-        self.assertEqual(302, resp.status_code)
-        self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
-                         resp.headers['Location'])
-        self.assertTrue(get_flashed_messages()[0].startswith(
-            "Sorry, @alice@in.st isn't eligible yet because your account doesn't have a profile picture."))
+        self.assertEqual(200, resp.status_code)
+        self.assertIn('<meta http-equiv="refresh" content="5">',
+                      resp.get_data(as_text=True))
+
+        migration = Migration.get_by_id('did:plc:alice activitypub')
+        self.assertEqual(State.review_followers, migration.state)
+        self.assert_task(mock_create_task, 'review', from_auth, to_auth)
 
     def test_review_migration_in_progress(self):
         with self.client.session_transaction() as sess:
@@ -1058,6 +1064,10 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(200, resp.status_code)
         self.assertEqual('OK', resp.get_data(as_text=True))
 
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            self.assertEqual(False, from_key.get().manual_opt_out)
+            self.assertEqual(False, to_key.get().manual_opt_out)
+
         mock_post.assert_has_calls([
             call('https://fed.brid.gy/admin/memcache-evict',
                  data={'key': from_key.urlsafe()},
@@ -1165,10 +1175,12 @@ When you migrate  al.ice to  @alice@in.st ...
             profile_uri = f'at://{SNARFED2_DID}/app.bsky.actor.profile/self'
             self.assertEqual([Target(protocol='atproto', uri=profile_uri)],
                              ap_user.obj.copies)
+            self.assertEqual(False, ap_user.manual_opt_out)
 
             bsky_user = ATProto.get_by_id(SNARFED2_DID)
             self.assertEqual([], bsky_user.enabled_protocols)
             self.assertEqual([], bsky_user.copies)
+            self.assertEqual(False, bsky_user.manual_opt_out)
 
             # check migrated blob
             self.assert_entities_equal([
