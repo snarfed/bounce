@@ -9,6 +9,7 @@ td {
 </head>
 
 <body>
+{% with PT = pytz.timezone('US/Pacific') %}
 
 <h2>Activity</h2>
 
@@ -22,6 +23,18 @@ td {
   {% endfor %}
 </table>
 
+<h4>Recent (8/25 onward)</h4>
+
+<table>
+  {% for login in recent_logins %}
+    <tr>
+      <td>{{ login.site_name() }}</td>
+      <td>{{ login.user_display_name() }}</td>
+      <td>{{ login.updated.astimezone(PT).isoformat(' ', 'seconds')[:-6] }}</td>
+    </tr>
+  {% endfor %}
+</table>
+
 
 <h3>Reviews and migrations</h3>
 
@@ -31,11 +44,10 @@ td {
   {% endfor %}
 </table>
 
-<h3>Recent</h3>
+<h4>Recent</h4>
 
 <table>
   <tr><th>from</th><th>to</th><th>state</th><th>created</th><th>updated</th><tr>
-  {% with PT = pytz.timezone('US/Pacific') %}
   {% for m in recent_migrations %}
     <tr>
       <td>{{ m.from_auth.user_display_name() }}</td>
@@ -45,8 +57,8 @@ td {
       <td>{{ m.updated.astimezone(PT).isoformat(' ', 'seconds')[:-6] }}</td>
     </tr>
   {% endfor %}
-  {% endwith %}
 </table>
 
+{% endwith %}
 </body>
 </html>

@@ -1260,11 +1260,22 @@ def admin_activity():
         for cls in AUTH_TO_PROTOCOL.keys()
     }
 
+    # list of auth entities
+    MastodonAuth = oauth_dropins.mastodon.MastodonAuth
+    PixelfedAuth = oauth_dropins.pixelfed.PixelfedAuth
+    BlueskyAuth = oauth_dropins.bluesky.BlueskyAuth
+    recent_logins = sorted(
+        MastodonAuth.query().order(-MastodonAuth.updated).fetch(10)
+          + PixelfedAuth.query().order(-PixelfedAuth.updated).fetch(10)
+          + BlueskyAuth.query().order(-BlueskyAuth.updated).fetch(10),
+        key=lambda auth: auth.updated, reverse=True)[:10]
+
     # maps string state to count
     migration_counts = defaultdict(int)
     for m in Migration.query():
-        migration_counts[m.state.name if m.state else None] += 1
+        migration_counts[m.state.name if m.state else 'not started'] += 1
 
+    # list of Migrations
     recent_migrations = Migration.query().order(-Migration.updated).fetch(10)
 
     auth_keys = sum(([m.from_, m.to] for m in recent_migrations), start=[])
@@ -1279,6 +1290,7 @@ def admin_activity():
     return render_template(
         'activity.html',
         login_counts=login_counts,
+        recent_logins=recent_logins,
         migration_counts=migration_counts,
         recent_migrations=recent_migrations,
         pytz=pytz,
