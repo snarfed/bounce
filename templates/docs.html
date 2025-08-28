@@ -50,9 +50,13 @@
 </li>
 
 
-<li id="what-break" class="question">What will break if I do this?</li>
+<li id="what-break" class="question">What could break if I do this?</li>
 <li class="answer">
-<p>If you're migrating from Bluesky, the images and videos on your Bluesky account will stay visible <em>if</em> your account is on a PDS (server) that Bluesky themselves run. We currently don't migrate blobs (ie images and videos) from federated third party PDSes, so if you migrate an account from one of those, its images and videos will disappear after a few days.
+If you're migrating from Bluesky to the fediverse:
+<ul>
+<li>If your Mastodon or Pixelfed account is already bridged, we will need to replace its bridged Bluesky account with the Bluesky account that you're migrating from. Unlike ActivityPub, AT Protocol can't "merge" two different account's followers. We're considering options to notify your old Bluesky followers about the change; stay tuned for more details.
+<li>The images and videos on your Bluesky account will stay visible <em>if</em> your account is on a PDS (server) that Bluesky themselves run. We currently don't migrate blobs (ie images and videos) from federated third party PDSes, so if you migrate an account from one of those, its images and videos will disappear after a few days.
+</ul>
 </li>
 
 
