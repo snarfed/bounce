@@ -114,11 +114,11 @@ ALICE_WEBFINGER = {
     'subject': '@alice@in.st',
 }
 
-ALICE_AP_HTML = '<span class="logo" title="ActivityPub"><img src="/static/fediverse_logo.svg"></span> <a class="h-card u-author" rel="me" href="http://in.st/users/alice" title="@alice@in.st"><img src="http://in.st/@alice/pic" class="profile"> @alice@in.st</a>'
-ALICE_BS_HTML = '<span class="logo" title="ATProto"><img src="/oauth_dropins_static/bluesky.svg"></span> <a class="h-card u-author" rel="me" href="https://bsky.app/profile/al.ice" title="al.ice">al.ice</a>'
-BOB_AP_HTML = '<span class="logo" title="ActivityPub"><img src="/static/fediverse_logo.svg"></span> <a class="h-card u-author" rel="me" href="http://inst/bob" title="bawb"><span style="unicode-bidi: isolate">bawb</span></a>'
-BOB_BS_HTML = '<span class="logo" title="ATProto"><img src="/oauth_dropins_static/bluesky.svg"></span> <a class="h-card u-author" rel="me" href="https://bsky.app/profile/ba.wb" title="Bawb &middot; ba.wb"><span style="unicode-bidi: isolate">Bawb</span> &middot; ba.wb</a>'
-EVE_WEB_HTML = '<span class="logo" title="Web">🌐</span> <a class="h-card u-author" rel="me" href="https://e.ve/" title="e.ve">e.ve</a>'
+ALICE_AP_HTML = '<span class="logo" title="ActivityPub"><img src="/static/fediverse_logo.svg"></span> <a class="h-card u-author mention" rel="me" href="http://in.st/users/alice" title="@alice@in.st"><img src="http://in.st/@alice/pic" class="profile"> @alice@in.st</a>'
+ALICE_BS_HTML = '<span class="logo" title="ATProto"><img src="/oauth_dropins_static/bluesky.svg"></span> <a class="h-card u-author mention" rel="me" href="https://bsky.app/profile/al.ice" title="al.ice">al.ice</a>'
+BOB_AP_HTML = '<span class="logo" title="ActivityPub"><img src="/static/fediverse_logo.svg"></span> <a class="h-card u-author mention" rel="me" href="http://inst/bob" title="bawb"><span style="unicode-bidi: isolate">bawb</span></a>'
+BOB_BS_HTML = '<span class="logo" title="ATProto"><img src="/oauth_dropins_static/bluesky.svg"></span> <a class="h-card u-author mention" rel="me" href="https://bsky.app/profile/ba.wb" title="Bawb &middot; ba.wb"><span style="unicode-bidi: isolate">Bawb</span> &middot; ba.wb</a>'
+EVE_WEB_HTML = '<span class="logo" title="Web">🌐</span> <a class="h-card u-author mention" rel="me" href="https://e.ve/" title="e.ve">e.ve</a>'
 REVIEW_DATA_MASTODON_TO_BLUESKY = {
     'followers_preview': [ALICE_AP_HTML, BOB_BS_HTML],
     'follows_preview': [ALICE_AP_HTML, BOB_BS_HTML, EVE_WEB_HTML],
