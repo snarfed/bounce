@@ -1002,7 +1002,7 @@ def migrate_get(from_auth, to_auth):
     template = 'migration_progress.html'
     if migration.state == State.migrate_done:
         template = 'done.html'
-        logger.info(f'done! logging out {from_auth.key.id()}')
+        logger.info(f'logging out {from_auth.key.id()}')
         oauth_dropins.logout(from_auth)
 
     return render_template(
