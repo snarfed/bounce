@@ -10,11 +10,6 @@
   {% with auth = to_auth %}{% include 'account_label.html' %}{% endwith %}
 {% endset %}
 
-<div class="row warning">
-<p>Migration is temporarily disabled. We're waiting for the Bluesky team to <a href="https://github.com/snarfed/bounce/issues/45">debug an issue in their AppView with us</a>. Sorry for the downtime!</p>
-</div>
-
-<!--
 <div class="row big">
   <p>{{ to_label }} is <a href="https://fed.brid.gy{{ to_user.user_page_path() }}">already bridged to {{ from_proto.PHRASE }}</a>.
 </div>
@@ -35,6 +30,5 @@
     <input type="submit" class="btn btn-danger" value="Yes" />
   </form>
 </div>
--->
 
 {% endblock content %}

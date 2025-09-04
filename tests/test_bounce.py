@@ -4,7 +4,7 @@ from datetime import timedelta
 import json
 import os
 from pathlib import Path
-from unittest import skip, TestCase
+from unittest import TestCase
 from unittest.mock import ANY, call, create_autospec, patch
 from urllib.parse import parse_qs, quote
 
@@ -886,9 +886,6 @@ When you migrate  al.ice to  @alice@in.st ...
 
         self.assertEqual(('http://in.st/users/alice',), mock_get.call_args[0])
 
-    # TODO: re-enable
-    # https://github.com/snarfed/bounce/issues/45
-    @skip
     def test_bluesky_password(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
