@@ -1240,15 +1240,10 @@ def migrate_out(migration, from_user, to_user):
             to_user.add('copies', models.Target(protocol=from_proto.LABEL,
                                                 uri=from_user.key.id()))
             to_user.put()
-            to_user.enable_protocol(from_proto)
-            from_proto.bot_follow(to_user)
 
-            # update profile from to account
-            from_profile_id = ids.profile_id(id=from_user.key.id(), proto=from_proto)
-            to_user.obj.add('copies', models.Target(protocol=from_proto.LABEL,
-                                                    uri=from_profile_id))
-            to_user.obj.put()
-            to_proto.receive(obj=to_user.obj, authed_as=to_user.key.id())
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        to_user.enable_protocol(from_proto)
+        from_proto.bot_follow(to_user)
 
     memcache.remote_evict(to_user.key)
 

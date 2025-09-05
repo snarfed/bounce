@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import ANY, call, create_autospec, patch
-from urllib.parse import parse_qs, quote
+from urllib.parse import parse_qs, quote, urlencode
 
 import arroba
 from arroba import did, server
@@ -263,18 +263,23 @@ class BounceTest(TestCase, Asserts):
     def post(self, path, *args, **kwargs):
         return self._req(self.client.post, path, *args, **kwargs)
 
-    def assert_task(self, mock_create_task, queue, from_auth, to_auth):
+    def assert_task(self, mock_create_task, queue, app='my-app', only=True, **params):
         # somewhat duplicated from bridgy-fed.tests.testutil.TestCase. if it gets any
         # more complicated, switch to reusing that
         calls = mock_create_task.call_args_list
-        self.assertEqual(1, len(calls))
+        if only:
+            self.assertEqual(1, len(calls))
+
+        if from_ := params.pop('from_', None):
+            params['from'] = from_.urlsafe().decode()
+        if to := params.pop('to', None):
+            params['to'] = to.urlsafe().decode()
 
         kwargs = calls[0][1]
-        self.assertEqual(f'projects/my-app/locations/{TASKS_LOCATION}/queues/{queue}',
+        self.assertEqual(f'projects/{app}/locations/{TASKS_LOCATION}/queues/{queue}',
                          kwargs['parent'])
-        self.assertEqual(
-            f'from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}'.encode(),
-            kwargs['task']['app_engine_http_request']['body'])
+        self.assertEqual(urlencode(sorted(params.items())).encode(),
+                         kwargs['task']['app_engine_http_request']['body'])
 
     def test_front_page(self):
         got = self.client.get('/')
@@ -392,7 +397,7 @@ class="logo" title="Bluesky" />
 
         migration = Migration.get_by_id('did:plc:alice activitypub')
         self.assertEqual(State.review_followers, migration.state)
-        self.assert_task(mock_create_task, 'review', from_auth, to_auth)
+        self.assert_task(mock_create_task, 'review', from_=from_auth, to=to_auth)
 
     def test_review_migration_in_progress(self):
         with self.client.session_transaction() as sess:
@@ -426,7 +431,7 @@ class="logo" title="Bluesky" />
 
         migration = Migration.get_by_id('did:plc:alice activitypub')
         self.assertEqual(State.review_followers, migration.state)
-        self.assert_task(mock_create_task, 'review', from_auth, to_auth)
+        self.assert_task(mock_create_task, 'review', from_=from_auth, to=to_auth)
 
     @patch.object(tasks_client, 'create_task')
     @patch('requests.get', side_effect=[
@@ -449,7 +454,7 @@ class="logo" title="Bluesky" />
 
         resp = self.get('/review', from_auth, to_auth)
         self.assertEqual(200, resp.status_code)
-        self.assert_task(mock_create_task, 'review', from_auth, to_auth)
+        self.assert_task(mock_create_task, 'review', from_=from_auth, to=to_auth)
         self.assertGreater(migration.key.get().updated, yesterday)
 
     @patch('requests.get', side_effect=[
@@ -988,7 +993,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
-        self.assert_task(mock_create_task, 'migrate', from_auth, to_auth)
+        self.assert_task(mock_create_task, 'migrate', from_=from_auth, to=to_auth)
 
         migration = migration.key.get()
         self.assertEqual(State.migrate_follows, migration.state)
@@ -1011,7 +1016,7 @@ When you migrate  al.ice to  @alice@in.st ...
         resp = self.post('/migrate', from_auth, to_auth, plc_code='new kowd')
         self.assertEqual(302, resp.status_code)
 
-        self.assert_task(mock_create_task, 'migrate', from_auth, to_auth)
+        self.assert_task(mock_create_task, 'migrate', from_=from_auth, to=to_auth)
 
         migration = migration.key.get()
         self.assertGreater(migration.updated, yesterday)
@@ -1100,7 +1105,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual([], migration.to_follow)
 
     @patch('google.cloud.storage.Client', autospec=True)
-    @patch.object(tasks_client, 'create_task')  # for atproto-commit task
+    @patch.object(tasks_client, 'create_task')
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
@@ -1121,16 +1126,20 @@ When you migrate  al.ice to  @alice@in.st ...
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response(ALICE_WEBFINGER),
         requests_response(ALICE_WEBFINGER),
+        # http://in.st/api/v2/search for each follow
         requests_response({'accounts': [{'id': '123', 'uri': 'http://other/bob'}]}),
         requests_response({'accounts': [{'id': '456', 'uri': 'http://other/eve'}]}),
         requests_response({'cids': ['abc00000']}),  # listBlobs
         requests_response(b'abc00000 contents', content_type='foo/bar'),  # getBlob
+        # getRepo
         requests_response(SNARFED2_CAR, content_type='application/vnd.ipld.car'),
         requests_response(SNARFED2_DID_DOC),
         requests_response({
             **ALICE_AP_ACTOR,
             'alsoKnownAs': [f'https://bsky.brid.gy/ap/{SNARFED2_DID}'],
         }, content_type=as2.CONTENT_TYPE),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(ALICE_WEBFINGER),
     ])
     def test_migrate_task_bluesky_to_mastodon(self, mock_get, mock_post,
                                               mock_oauth2client, mock_create_task,
@@ -1249,6 +1258,11 @@ When you migrate  al.ice to  @alice@in.st ...
         mock_blob.upload_from_string.assert_called_once_with(b'abc00000 contents',
                                                              content_type='foo/bar')
         mock_blob.make_public.assert_called_with()
+
+        # check tasks
+        self.assert_task(
+            mock_create_task, 'receive', only=False, app='bridgy-federated',
+            obj_id='http://in.st/users/alice', authed_as='http://in.st/users/alice')
 
     @patch.object(tasks_client, 'create_task')
     @patch.object(ATProto, 'create_for')
