@@ -4,14 +4,22 @@
 
 <ul class="docs">
 
+<p><em>About</em></p>
 <li><a href="#what">What is this?</a></li>
 <li><a href="#which-networks">Which networks are supported?</a></li>
 <li><a href="#what-migrated">What gets migrated, exactly?</a></li>
 <li><a href="#how">How does it work?</a></li>
-<li><a href="#what-break">What will break if I do this?</a></li>
+
+<br>
+<p><em>Using</em></p>
 <li><a href="#use-old">Can I still use my old account after I migrate?</a></li>
 <li><a href="#multiple">Can I migrate to or from an account more than once?</a></li>
+<li><a href="#see-followers">After I migrate, why don't I see the new followers on my account?</a></li>
+<li><a href="#what-break">What will break if I do this?</a></li>
 <!-- <li><a href=""></a></li> -->
+
+<br>
+<p><em>Background</em></p>
 <li><a href="#who">Who are you?</a></li>
 <li><a href="#cost">How much does it cost? Can I donate or support you?</a></li>
 <li><a href="#terms">What are the terms of service?</a></li>
@@ -23,6 +31,8 @@
 <br>
 
 <ul class="docs">
+
+<h3 id="about">About</h3>
 
 <li id="what" class="question">What is this?</li>
 <li class="answer">
@@ -51,15 +61,8 @@
 </li>
 
 
-<li id="what-break" class="question">What could break if I do this?</li>
-<li class="answer">
-If you're migrating from Bluesky to the fediverse:
-<ul>
-<li>If your Mastodon or Pixelfed account is already bridged, we will need to replace its bridged Bluesky account with the Bluesky account that you're migrating from. Unlike ActivityPub, AT Protocol can't "merge" two different account's followers. We're considering options to notify your old Bluesky followers about the change; stay tuned for more details.
-<li>The images and videos on your Bluesky account will stay visible <em>if</em> your account is on a PDS (server) that Bluesky themselves run. We currently don't migrate blobs (ie images and videos) from federated third party PDSes, so if you migrate an account from one of those, its images and videos will disappear after a few days.
-</ul>
-</li>
-
+<br>
+<h3 id="using">Using</h3>
 
 <li id="multiple" class="question">Can I migrate to or from an account more than once?</li>
 <li class="answer">
@@ -73,6 +76,25 @@ If you're migrating from Bluesky to the fediverse:
 <p>We're <a href="https://quillmatiq.com/">Anuj Ahooja</a> and <a href="https://snarfed.org/">Ryan Barrett</a>. We make up <a href="https://www.anew.social/">A New Social</a>, the non-profit that builds and runs Bounce. We love the open social web, and we hope that Bounce can help <a href="https://www.anew.social/hello-social-web/">liberate people from their platforms</a> and enable <a href="https://www.augment.ink/bridges-the-last-network-effect/">the last network effect</a>.
 </li>
 
+
+<li><a href="#"></a></li>
+<li id="see-followers" class="question">After I migrate, why don't I see the new followers on my account?</li>
+<p>Don't worry, your old followers still see all of your posts!
+<p>If you're migrating to the fediverse, we don't currently send <code>Move</code> activities for your old followers, so they won't appear in your fediverse followers list. <a href="https://github.com/snarfed/bounce/issues/49">We hope to add this in the future!</a> It would only include followers who are bridged to the fediverse, and it would be a bit of a notification flood, but it's still a good idea.
+</li>
+
+<li id="what-break" class="question">What could break if I do this?</li>
+<li class="answer">
+<p>If you're migrating from Bluesky to the fediverse:
+<ul>
+<li>If your Mastodon or Pixelfed account is already bridged, we will need to replace its bridged Bluesky account with the Bluesky account that you're migrating from. Unlike ActivityPub, AT Protocol can't "merge" two different account's followers. We're considering options to notify your old Bluesky followers about the change; stay tuned for more details.
+<li>The images and videos on your Bluesky account will stay visible <em>if</em> your account is on a PDS (server) that Bluesky themselves run. We currently don't migrate blobs (ie images and videos) from federated third party PDSes, so if you migrate an account from one of those, its images and videos will disappear after a few days.
+</ul>
+</li>
+
+
+<br>
+<h3 id="background">Background</h3>
 
 <li id="cost" class="question">How much does it cost? Can I donate or support you?</li>
 <li class="answer">
