@@ -37,6 +37,7 @@ from oauth_dropins.webutil.testutil import (
     requests_response,
     suppress_warnings,
 )
+from oauth_dropins.webutil.util import json_dumps, json_loads
 import requests
 from requests_oauth2client import (
   DPoPKey,
@@ -217,7 +218,7 @@ class BounceTest(TestCase, Asserts):
 
     def make_mastodon(self, sess, name='alice', login=True):
         app = MastodonApp(instance='http://in.st/', data='{}').put()
-        user_json = json.dumps({
+        user_json = json_dumps({
             'id': '234',
             'uri':f'http://in.st/users/{name}',
             'avatar_static': f'http://in.st/@{name}/pic',
@@ -233,7 +234,7 @@ class BounceTest(TestCase, Asserts):
 
     def make_bluesky(self, sess, did='did:plc:alice',
                      pds_url='https://some.pds.bsky.network/', login=True):
-        user_json = json.dumps({
+        user_json = json_dumps({
             '$type': 'app.bsky.actor.defs#profileView',
             'handle': 'al.ice',
             'avatar': 'http://alice/pic',
@@ -1422,16 +1423,32 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertIn('is <a href="https://fed.brid.gy/ap/@alice@in.st">already bridged to Bluesky</a>', body)
         self.assertIn('It currently has <a href="https://fed.brid.gy/ap/@alice@in.st/followers">2 followers</a> on Bluesky', body)
 
+    @patch.object(tasks_client, 'create_task')
     @patch('bounce.confirm', return_value='okay')
-    def test_disable_bridging_post(self, mock_confirm):
+    @patch('requests.get', side_effect=[
+        requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
+        requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
+    ])
+    def test_disable_bridging_post(self, mock_get, mock_confirm, mock_create_task):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
 
         with ndb.context.Context(bridgy_fed_ndb).use():
-            to_user = ActivityPub(id='http://in.st/users/alice',
-                                  enabled_protocols=['atproto'])
+            to_profile = Object(
+                id='http://in.st/users/alice', as2={'displayName': 'alice'},
+                copies=[Target(protocol='atproto', uri='at://did:plc:existing/app.bsky.actor.profile/self')],
+                source_protocol='activitypub',
+            ).put()
+
+            to_user = ActivityPub(
+                id='http://in.st/users/alice', enabled_protocols=['atproto'],
+                copies=[Target(protocol='atproto', uri='did:plc:existing')],
+                obj_key=to_profile)
             to_user.put()
+            activitypub.instance_actor()
+
+        mock_create_task.reset_mock()
 
         resp = self.post('/disable-bridging', from_auth, to_auth)
         self.assertEqual(200, resp.status_code)
@@ -1441,3 +1458,20 @@ When you migrate  al.ice to  @alice@in.st ...
         with ndb.context.Context(bridgy_fed_ndb).use():
             to_user = to_user.key.get()
             self.assertEqual([], to_user.enabled_protocols)
+
+        id = 'http://in.st/users/alice#bridgy-fed-delete-user-atproto-2022-01-02T03:04:05+00:00'
+        self.assert_task(
+            mock_create_task, 'send', only=False, app='bridgy-federated',
+            id=id,
+            our_as1=json_dumps({
+                'objectType': 'activity',
+                'verb': 'delete',
+                'id': id,
+                'actor': 'http://in.st/users/alice',
+                'object': 'http://in.st/users/alice',
+            }, sort_keys=True),
+            protocol='atproto',
+            source_protocol='activitypub',
+            url='https://atproto.brid.gy',
+            user=to_user.key.urlsafe(),
+        )
