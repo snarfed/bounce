@@ -1228,12 +1228,9 @@ When you migrate  al.ice to  @alice@in.st ...
             call('https://some.pds.bsky.network/xrpc/com.atproto.identity.signPlcOperation', json={
                 'token': 'kowd',
                 'rotationKeys': [did.encode_did_key(repo.rotation_key.public_key())],
-                'verificationMethods': [{
-                    'id': f'{SNARFED2_DID}#atproto',
-                    'type': 'Multikey',
-                    'controller': SNARFED2_DID,
-                    'publicKeyMultibase': did.encode_did_key(repo.signing_key.public_key()),
-                }],
+                'verificationMethods': {
+                    'atproto': did.encode_did_key(repo.signing_key.public_key()),
+                },
                 'services': {
                     'atproto_pds': {
                         'type': 'AtprotoPersonalDataServer',
