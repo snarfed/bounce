@@ -1037,7 +1037,8 @@ When you migrate  al.ice to  @alice@in.st ...
             'uri': 'at://did:plc:eve/fo.ll.ow/456',
             'cid': 'xyzuvtsr',
         }),
-        # memcache evict both accounts
+        # memcache evict both accounts, to account's profile object
+        requests_response(''),
         requests_response(''),
         requests_response(''),
         # create new did:plc
@@ -1114,10 +1115,13 @@ When you migrate  al.ice to  @alice@in.st ...
         # createRecords for follows
         requests_response(status=400),
         requests_response({'id': '456', 'following': True}),
+        # memcache evict to user and its profile object
+        requests_response(''),
+        requests_response(''),
         requests_response({'operation': {'foo': 'bar'}}),  # signPlcOperation
         requests_response(),    # PLC update
         requests_response({}),  # deactivateAccount
-        # memcache evict both accounts
+        # memcache evict from, to accounts
         requests_response(''),
         requests_response(''),
     ])
@@ -1462,19 +1466,20 @@ When you migrate  al.ice to  @alice@in.st ...
                                      data={'key': to_user.key.urlsafe()},
                                      headers=ANY, timeout=15, stream=True)
 
-        id = 'http://in.st/users/alice#bridgy-fed-delete-user-atproto-2022-01-02T03:04:05+00:00'
-        self.assert_task(
-            mock_create_task, 'send', only=False, app='bridgy-federated',
-            id=id,
-            our_as1=json_dumps({
-                'objectType': 'activity',
-                'verb': 'delete',
-                'id': id,
-                'actor': 'http://in.st/users/alice',
-                'object': 'http://in.st/users/alice',
-            }, sort_keys=True),
-            protocol='atproto',
-            source_protocol='activitypub',
-            url='https://atproto.brid.gy',
-            user=to_user.key.urlsafe(),
-        )
+        # TODO? for #50
+        # id = 'http://in.st/users/alice#bridgy-fed-delete-user-atproto-2022-01-02T03:04:05+00:00'
+        # self.assert_task(
+        #     mock_create_task, 'send', only=False, app='bridgy-federated',
+        #     id=id,
+        #     our_as1=json_dumps({
+        #         'objectType': 'activity',
+        #         'verb': 'delete',
+        #         'id': id,
+        #         'actor': 'http://in.st/users/alice',
+        #         'object': 'http://in.st/users/alice',
+        #     }, sort_keys=True),
+        #     protocol='atproto',
+        #     source_protocol='activitypub',
+        #     url='https://atproto.brid.gy',
+        #     user=to_user.key.urlsafe(),
+        # )

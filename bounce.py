@@ -949,7 +949,8 @@ def disable_bridging_post(from_auth, to_auth):
     to_user = _get_user(to_auth)
 
     with ndb.context.Context(bridgy_fed_ndb).use():
-        to_user.delete(from_proto)
+        # TODO? for #50
+        # to_user.delete(from_proto)
         to_user.disable_protocol(from_proto)
         memcache.remote_evict(to_user.key)
 
@@ -1155,8 +1156,12 @@ def migrate_in(migration, from_auth, from_user, to_user):
             'pds_client': old_pds_client,
         }
 
+    memcache.remote_evict(to_user.key)
+    if from_user.obj_key:
+        memcache.remote_evict(to_user.obj_key)
+
     with ndb.context.Context(bridgy_fed_ndb).use():
-         from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
+        from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
 
     memcache.remote_evict(from_user.key)
 
