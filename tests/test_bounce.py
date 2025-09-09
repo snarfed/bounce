@@ -1422,11 +1422,13 @@ When you migrate  al.ice to  @alice@in.st ...
 
     @patch.object(tasks_client, 'create_task')
     @patch('bounce.confirm', return_value='okay')
+    @patch('requests.post', return_value=requests_response())  # memcache evict alice
     @patch('requests.get', side_effect=[
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
     ])
-    def test_disable_bridging_post(self, mock_get, mock_confirm, mock_create_task):
+    def test_disable_bridging_post(self, mock_get, mock_post, mock_confirm,
+                                   mock_create_task):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
@@ -1455,6 +1457,10 @@ When you migrate  al.ice to  @alice@in.st ...
         with ndb.context.Context(bridgy_fed_ndb).use():
             to_user = to_user.key.get()
             self.assertEqual([], to_user.enabled_protocols)
+
+        mock_post.assert_called_with('https://fed.brid.gy/admin/memcache-evict',
+                                     data={'key': to_user.key.urlsafe()},
+                                     headers=ANY, timeout=15, stream=True)
 
         id = 'http://in.st/users/alice#bridgy-fed-delete-user-atproto-2022-01-02T03:04:05+00:00'
         self.assert_task(

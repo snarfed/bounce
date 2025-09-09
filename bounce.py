@@ -951,6 +951,7 @@ def disable_bridging_post(from_auth, to_auth):
     with ndb.context.Context(bridgy_fed_ndb).use():
         to_user.delete(from_proto)
         to_user.disable_protocol(from_proto)
+        memcache.remote_evict(to_user.key)
 
     return confirm()
 
