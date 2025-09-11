@@ -459,7 +459,7 @@ def choose_from():
     """Choose account to migrate from."""
     vars = template_vars()
 
-    accounts = [a for a in vars['auths'] if isinstance(a, oauth_dropins.bluesky.BlueskyAuth)]
+    accounts = vars['auths']
     for acct in accounts:
         acct.url = url('/to', acct)
 
@@ -470,12 +470,12 @@ def choose_from():
         bluesky_button=oauth_dropins.bluesky.Start.button_html(
             '/oauth/bluesky/start/from',
             image_prefix='/oauth_dropins_static/'),
-        # mastodon_button=oauth_dropins.mastodon.Start.button_html(
-        #     '/oauth/mastodon/start/from',
-        #     image_prefix='/oauth_dropins_static/'),
-        # pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
-        #     '/oauth/pixelfed/start/from',
-        #     image_prefix='/oauth_dropins_static/'),
+        mastodon_button=oauth_dropins.mastodon.Start.button_html(
+            '/oauth/mastodon/start/from',
+            image_prefix='/oauth_dropins_static/'),
+        pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
+            '/oauth/pixelfed/start/from',
+            image_prefix='/oauth_dropins_static/'),
         # threads_button=oauth_dropins.threads.Start.button_html(
         #     '/oauth/threads/start/from',
         #     image_prefix='/oauth_dropins_static/'),
@@ -500,24 +500,29 @@ def choose_to(from_auth):
         acct.url = url('/review', from_auth, acct)
 
     state = f'<input type="hidden" name="state" value="{from_auth.key.urlsafe().decode()}" />'
+    if from_proto != ATProto:
+        vars['bluesky_button'] = oauth_dropins.bluesky.Start.button_html(
+            '/oauth/bluesky/start/to',
+            image_prefix='/oauth_dropins_static/', form_extra=state)
+    if from_proto != ActivityPub:
+        vars.update({
+            'mastodon_button': oauth_dropins.mastodon.Start.button_html(
+                '/oauth/mastodon/start/to',
+                image_prefix='/oauth_dropins_static/', form_extra=state),
+            'pixelfed_button': oauth_dropins.pixelfed.Start.button_html(
+                '/oauth/pixelfed/start/to',
+                image_prefix='/oauth_dropins_static/', form_extra=state),
+            # 'threads_button': oauth_dropins.threads.Start.button_html(
+            #     '/oauth/threads/start/to',
+            #     image_prefix='/oauth_dropins_static/', form_extra=state),
+        })
+
     return render_template(
         'accounts.html',
         body_id='to',
         from_auth=from_auth,
         from_proto=from_proto,
         accounts=accounts,
-        # bluesky_button=oauth_dropins.bluesky.Start.button_html(
-        #     '/oauth/bluesky/start/to',
-        #     image_prefix='/oauth_dropins_static/', form_extra=state),
-        mastodon_button=oauth_dropins.mastodon.Start.button_html(
-            '/oauth/mastodon/start/to',
-            image_prefix='/oauth_dropins_static/', form_extra=state),
-        pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
-            '/oauth/pixelfed/start/to',
-            image_prefix='/oauth_dropins_static/', form_extra=state),
-        # threads_button=oauth_dropins.threads.Start.button_html(
-        #     '/oauth/threads/start/to',
-        #     image_prefix='/oauth_dropins_static/', form_extra=state),
         **vars,
     )
 
