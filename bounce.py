@@ -1198,7 +1198,7 @@ def migrate_in(migration, from_auth, from_user, to_user):
         }
 
     memcache.remote_evict(to_user.key)
-    if from_user.obj_key:
+    if to_user.obj_key:
         memcache.remote_evict(to_user.obj_key)
 
     with ndb.context.Context(bridgy_fed_ndb).use():
