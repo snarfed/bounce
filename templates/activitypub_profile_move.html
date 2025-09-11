@@ -1,0 +1,23 @@
+{% set body_id = 'activitypub_profile_move' %}
+{% extends "base.html" %}
+
+{% block content %}
+
+{% with docs_url = {
+  'Mastodon': 'https://docs.joinmastodon.org/user/moving/#migration',
+  'Pixelfed': from_auth.instance() + 'site/kb/your-profile#migration',
+}[from_auth.site_name()]
+%}
+<div class="row big">
+<p>You're almost done! Just one more step.
+<p>Start a profile move on <a href="{{ from_auth.instance() }}">{{ util.domain_from_link(from_auth.instance()) }}</a>. <a href="{{ docs_url }}">Follow these instructions.</a> The handle of the new account to move to is <code>{{ to_user.handle_as(ActivityPub) }}</code>.
+</div>
+{% endwith %}
+
+<div class="row">
+  <form action="/activitypub-profile-moved" method="post">
+  <input type="submit" class="btn btn-default" value="Done" />
+  </form>
+</div>
+
+{% endblock content %}

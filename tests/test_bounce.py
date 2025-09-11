@@ -1483,3 +1483,52 @@ When you migrate  al.ice to  @alice@in.st ...
         #     url='https://atproto.brid.gy',
         #     user=to_user.key.urlsafe(),
         # )
+
+    @patch('requests.get', side_effect=[
+        requests_response({
+            **ALICE_AP_ACTOR,
+            'movedTo': 'https://bsky.brid.gy/ap/did:plc:alice',
+        }, content_type=as2.CONTENT_TYPE),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(DID_DOC),  # did:plc:alice
+        requests_response(ALICE_BSKY_PROFILE),
+    ])
+    def test_activitypub_profile_moved(self, mock_get):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+            to_auth = self.make_bluesky(sess)
+
+        Migration(id='@alice@in.st atproto', from_=from_auth, to=to_auth,
+                  state=State.migrate_done).put()
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice').put()
+
+        resp = self.post('/activitypub-profile-moved', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+        self.assertIn('Success!', resp.get_data(as_text=True))
+        self.assertEqual([], get_flashed_messages())
+
+    @patch('requests.get', side_effect=[
+        requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(DID_DOC),  # did:plc:alice
+        requests_response(ALICE_BSKY_PROFILE),
+    ])
+    def test_activitypub_profile_not_moved(self, mock_get):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+            to_auth = self.make_bluesky(sess)
+
+        Migration(id='@alice@in.st atproto', from_=from_auth, to=to_auth,
+                  state=State.migrate_done).put()
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice').put()
+
+        resp = self.post('/activitypub-profile-moved', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+        self.assertIn("doesn't show that you've started the profile move",
+                      get_flashed_messages()[0])

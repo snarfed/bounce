@@ -1004,16 +1004,57 @@ def migrate_get(from_auth, to_auth):
 
     template = 'migration_progress.html'
     if migration.state == State.migrate_done:
-        template = 'done.html'
+        template = ('activitypub_profile_move.html'
+                    if AUTH_TO_PROTOCOL[from_auth.__class__] == ActivityPub
+                    else 'done.html')
         logger.info(f'logging out {from_auth.key.id()}')
         oauth_dropins.logout(from_auth)
 
     return render_template(
         template,
+        ActivityPub=ActivityPub,
         from_auth=from_auth,
         to_auth=to_auth,
+        to_user=get_to_user(to_auth),
         migration=migration,
         State=State,
+        **template_vars(),
+    )
+
+
+@app.post('/activitypub-profile-moved')
+@require_accounts('from', 'to')
+def activitypub_profile_moved(from_auth, to_auth):
+    """Checks that a migration from ActivityPub started the profile move."""
+    migration = Migration.get(from_auth, to_auth)
+    if not migration:
+        error('migration not found', status=404)
+    elif not migration.state or migration.state < State.migrate_done:
+        flash(f'Migration not done yet.')
+        return redirect(url('/migrate', from_auth, to_auth))
+
+    from_user = get_from_user(from_auth)
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        from_user.reload_profile()
+
+    moved_to = from_user.obj.as2.get('movedTo')
+    to_user = get_to_user(to_auth)
+    if moved_to == to_user.id_as(ActivityPub):
+        template = 'done.html'
+    else:
+        template = 'activitypub_profile_move.html'
+        if moved_to:
+            flash(f"It looks like you moved to {moved_to}. You'll need to undo that and try again.")
+        else:
+            flash(f"{util.domain_from_link(from_auth.instance())} doesn't show that you've started the profile move yet. Try again?")
+
+    return render_template(
+        template,
+        ActivityPub=ActivityPub,
+        from_auth=from_auth,
+        to_auth=to_auth,
+        to_user=get_to_user(to_auth),
+        migration=migration,
         **template_vars(),
     )
 
