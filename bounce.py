@@ -221,7 +221,7 @@ class Migration(ndb.Model):
           queue: 'review' or 'migrate'
         """
         assert queue in ('review', 'migrate'), queue
-        common.create_task(queue, app_id=appengine_info.APP_ID, **{
+        common.create_task(queue, app_id=appengine_info.APP_ID, app=app, **{
             'from': self.from_.urlsafe().decode(),
             'to': self.to.urlsafe().decode(),
         })
@@ -635,7 +635,11 @@ def review_followers(migration, from_auth):
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
 
     source = granary_source(from_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
-    followers = source.get_followers()
+
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        bot_user_ids = common.bot_user_ids()
+    followers = [f for f in source.get_followers()
+                 if f.get('id') and f['id'] not in bot_user_ids]
 
     if not followers:
         logger.info('no followers!')
@@ -645,7 +649,8 @@ def review_followers(migration, from_auth):
         })
         return
 
-    ids = [f['id'] for f in followers if f.get('id')]
+    ids = [f['id'] for f in followers]
+
     for follower in followers:
         follower['image'] = util.get_first(follower, 'image')
 
@@ -688,7 +693,10 @@ def review_follows(migration, from_auth, to_auth):
     logger.info(f'Fetching follows for {from_auth.key_id()} with to proto {to_proto.LABEL}')
 
     source = granary_source(from_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
-    follows = source.get_follows()
+
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        bot_user_ids = common.bot_user_ids()
+    follows = [f for f in source.get_follows() if f.get('id') not in bot_user_ids]
 
     if not follows:
         logger.info('no follows!')
@@ -783,7 +791,6 @@ def analyze_review(migration, from_auth):
                         user = key.get()
                     else:
                         user = from_proto.get_or_create(id, allow_opt_out=True)
-
                 else:
                     if proto := Protocol.for_id(id):
                         if proto != from_proto:

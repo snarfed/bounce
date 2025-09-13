@@ -51,6 +51,7 @@ from requests_oauth2client import (
 import activitypub
 from activitypub import ActivityPub
 from atproto import ATProto
+import common
 from common import long_to_base64, TASKS_LOCATION
 import config
 import ids
@@ -185,6 +186,7 @@ class BounceTest(TestCase, Asserts):
         self.ndb_context = ndb_client.context()
         self.ndb_context.__enter__()
 
+        common.bot_user_ids.cache_clear()
         did.resolve_handle.cache.clear()
         did.resolve_plc.cache.clear()
         did.resolve_web.cache.clear()
@@ -211,10 +213,15 @@ class BounceTest(TestCase, Asserts):
     def make_bot_users():
         key = RSA.generate(1024)
         with ndb.context.Context(bridgy_fed_ndb).use():
-            for domain in 'ap.brid.gy', 'bsky.brid.gy', 'fed.brid.gy':
-                Web(id=domain, mod=long_to_base64(key.n),
-                    public_exponent=long_to_base64(key.e),
-                    private_exponent=long_to_base64(key.d)).put()
+            for subdomain in 'ap', 'bsky', 'fed':
+                bot = Web(id=f'{subdomain}{common.SUPERDOMAIN}',
+                          ap_subdomain=subdomain,
+                          mod=long_to_base64(key.n),
+                          public_exponent=long_to_base64(key.e),
+                          private_exponent=long_to_base64(key.d))
+                if subdomain == 'ap':
+                    bot.copies = [Target(protocol='atproto', uri='did:plc:ap')]
+                bot.put()
 
     def make_mastodon(self, sess, name='alice', login=True):
         app = MastodonApp(instance='http://in.st/', data='{}').put()
@@ -558,6 +565,7 @@ When you migrate  al.ice to  @alice@in.st ...
 
     @patch('requests.get')
     def test_review_task_mastodon_to_bluesky(self, mock_get):
+        self.make_bot_users()
         alice = {
             'id': '234',
             'uri': 'http://in.st/users/alice',
@@ -571,7 +579,7 @@ When you migrate  al.ice to  @alice@in.st ...
             'uri': 'http://bsky.brid.gy/ap/did:plc:bob',
             'username': 'bo.b',
             'acct': 'bo.b@bsky.brid.gy',
-            'url': 'http://bsky.brid.gy/r/https://bsky.app/profile/bo.b',
+            'url': 'https://bsky.brid.gy/r/https://bsky.app/profile/bo.b',
             'avatar': 'http://bsky.app/bo.b/pic',
         }
         eve = {
@@ -581,12 +589,17 @@ When you migrate  al.ice to  @alice@in.st ...
             'url': 'http://e.ve/',
             'avatar': 'http://e.ve/pic',
         }
+        bot = {  # should be ignored
+            'uri': 'https://bsky.brid.gy/bsky.brid.gy',
+            'username': 'bsky.brid.gy',
+            'acct': 'bsky.brid.gy@bsky.brid.gy',
+        }
 
         mock_get.side_effect = [
             # followers
             requests_response([alice, bob], content_type='application/json'),
             # follows
-            requests_response([alice, bob, eve], content_type='application/json'),
+            requests_response([alice, bob, eve, bot], content_type='application/json'),
             # alice AP actor, webfinger
             requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
             requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
@@ -641,6 +654,7 @@ When you migrate  al.ice to  @alice@in.st ...
                                      client_id='unused', client_secret='unused'))
     @patch('requests.get')
     def test_review_task_bluesky_to_mastodon(self, mock_get, mock_oauth2client):
+        self.make_bot_users()
         alice = {
             '$type': 'app.bsky.actor.defs#profileView',
             'did': 'did:plc:alice',
@@ -659,6 +673,11 @@ When you migrate  al.ice to  @alice@in.st ...
             'did': 'did:plc:eve',
             'handle': 'e.ve',
             'avatar': 'http://eve/pic',
+        }
+        bot = {  # should be ignored
+            '$type': 'app.bsky.actor.defs#profileView',
+            'did': 'did:plc:ap',
+            'handle': 'ap.brid.gy',
         }
         mock_get.side_effect = [
             requests_response(DID_DOC),  # did:plc:alice
