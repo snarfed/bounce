@@ -3,20 +3,21 @@
 
 {% block content %}
 
-{% with docs_url = {
-  'Mastodon': 'https://docs.joinmastodon.org/user/moving/#migration',
-  'Pixelfed': from_auth.instance() + 'site/kb/your-profile#migration',
-}[from_auth.site_name()]
-%}
-<div class="row big">
-<p>You're almost done! Just one more step.
-<p>Start a profile move on <a href="{{ from_auth.instance() }}">{{ util.domain_from_link(from_auth.instance()) }}</a>. <a href="{{ docs_url }}">Follow these instructions.</a> The handle of the new account to move to is <code>{{ to_user.handle_as(ActivityPub) }}</code>.
+{% with to_ap_id = to_user.handle_as(ActivityPub) %}
+<div class="row">
+<p>You're almost done! Now, <a href="{{ settings_url }}" target="_blank">start a profile move on {{ util.domain_from_link(from_auth.instance()) }}</a> (<a href="{{ docs_url }}" target="_blank">docs</a>). The handle of the new account to move to is:
+<code>{{ to_ap_id }}</code>
+<button class="btn btn-default btn-copy glyphicon glyphicon-duplicate"
+        onclick="navigator.clipboard.writeText('{{ to_ap_id }}')"
+        title="Copy {{ to_ap_id }} to clipboard"> </button>
 </div>
 {% endwith %}
 
 <div class="row">
   <form action="/activitypub-profile-moved" method="post">
-  <input type="submit" class="btn btn-default" value="Done" />
+    <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
+    <input type="hidden" name="to" value="{{ to_auth.key.urlsafe().decode() }}" />
+    <input type="submit" class="btn btn-default" value="Done" />
   </form>
 </div>
 

@@ -98,6 +98,18 @@ BRIDGE_DOMAIN_TO_PROTOCOL = {
     'fed.brid.gy': Web,
     'web.brid.gy': Web,
 }
+SETTINGS_PATH_ALIAS = {
+    MastodonAuth: '/settings/aliases',
+    PixelfedAuth: '/settings/account/aliases/manage',
+}
+SETTINGS_PATH_MIGRATE = {
+    MastodonAuth: '/settings/migration',
+    PixelfedAuth: '/settings/account/migration/manage',
+}
+DOCS_URL_MIGRATE = {
+    MastodonAuth: 'https://docs.joinmastodon.org/user/moving/#migration',
+    PixelfedAuth: '/site/kb/your-profile#migration',
+}
 
 # if a Migration hasn't been touched in this long, we'll restart its review or
 # migrate task on the next user request
@@ -897,7 +909,9 @@ def confirm(from_auth, to_auth):
     return render_template(
         'confirm.html',
         from_auth=from_auth,
+        from_user=from_user,
         to_auth=to_auth,
+        to_user=to_user,
         **template_vars(),
     )
 
@@ -913,14 +927,7 @@ def set_alsoKnownAs(from_auth, to_auth):
     with ndb.context.Context(bridgy_fed_ndb).use():
         from_ap_handle = from_user.handle_as(ActivityPub)
 
-    settings_path = {
-        # https://docs.joinmastodon.org/user/moving/#migration
-        MastodonAuth: '/settings/aliases',
-        # https://pixelfed.social/site/kb/your-profile#migration
-        PixelfedAuth: '/settings/account/aliases/manage',
-        ThreadsAuth: 'TODO',
-    }[to_auth.__class__]
-    settings_url = urljoin(to_auth.instance(), settings_path)
+    settings_url = urljoin(to_auth.instance(), SETTINGS_PATH_ALIAS[to_auth.__class__])
 
     return render_template(
         'set_alsoKnownAs.html',
@@ -1066,12 +1073,18 @@ def activitypub_profile_moved(from_auth, to_auth):
         else:
             flash(f"{util.domain_from_link(from_auth.instance())} doesn't show that you've started the profile move yet. Try again?")
 
+    settings_url = urljoin(from_auth.instance(),
+                           SETTINGS_PATH_MIGRATE[from_auth.__class__])
+    docs_url = urljoin(from_auth.instance(), DOCS_URL_MIGRATE[from_auth.__class__])
+
     return render_template(
         template,
         ActivityPub=ActivityPub,
         from_auth=from_auth,
         to_auth=to_auth,
         to_user=get_to_user(to_auth),
+        docs_url=docs_url,
+        settings_url=settings_url,
         migration=migration,
         **template_vars(),
     )
