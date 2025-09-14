@@ -11,11 +11,11 @@
 {% endset %}
 
 <div class="row big">
-  <p>{{ to_label }} is <a href="https://fed.brid.gy{{ to_user.user_page_path() }}">already bridged to {{ from_proto.PHRASE }}</a>.
+  <p>{{ to_label }} is <a href="https://fed.brid.gy{{ to_user.user_page_path() }}" target="_blank">already bridged to {{ from_proto.PHRASE }}</a>.
 </div>
 
 <div class="row">
-  <p>It currently has <a href="https://fed.brid.gy{{ to_user.user_page_path('/followers') }}">{{ humanize_number(follower_count, 'follower') }}</a> on {{ from_proto.PHRASE }}. If you want to migrate it, you'll need to disable that bridge, which will remove those followers. Do you want to do that?
+  <p>It currently has <a href="https://fed.brid.gy{{ to_user.user_page_path('/followers') }}" target="_blank">{{ humanize_number(follower_count, 'follower') }}</a> on {{ from_proto.PHRASE }}. If you want to migrate it, you'll need to disable that bridge, which will remove those followers. Do you want to do that?
 </div>
 
 <div class="row">

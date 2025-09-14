@@ -1492,8 +1492,8 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(200, resp.status_code)
         body = resp.get_data(as_text=True)
 
-        self.assertIn('is <a href="https://fed.brid.gy/ap/@alice@in.st">already bridged to Bluesky</a>', body)
-        self.assertIn('It currently has <a href="https://fed.brid.gy/ap/@alice@in.st/followers">2 followers</a> on Bluesky', body)
+        self.assertIn('is <a href="https://fed.brid.gy/ap/@alice@in.st" target="_blank">already bridged to Bluesky</a>', body)
+        self.assertIn('It currently has <a href="https://fed.brid.gy/ap/@alice@in.st/followers" target="_blank">2 followers</a> on Bluesky', body)
 
     @patch.object(tasks_client, 'create_task')
     @patch('bounce.confirm', return_value='okay')
