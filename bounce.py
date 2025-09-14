@@ -169,6 +169,7 @@ class Migration(ndb.Model):
     to_follow = ndb.StringProperty(repeated=True)
     followed = ndb.StringProperty(repeated=True)
 
+    # required for migrating from Bluesky; unused for others
     plc_code = ndb.StringProperty()
 
     last_attempt = ndb.DateTimeProperty(tzinfo=timezone.utc)
@@ -975,7 +976,7 @@ def migrate_post(from_auth, to_auth):
     """Migrate handler that starts a background task.
 
     Post body args:
-      plc_code (str)
+      plc_code (str, optional)
     """
     logger.info(f'Params: {list(request.values.items())}')
     logger.info(f'Migrating {from_auth.key.id()} to {to_auth.key.id()}')
@@ -990,8 +991,9 @@ def migrate_post(from_auth, to_auth):
     elif migration.to != to_auth.key:
         return redirect(url('/to', from_auth))
 
-    migration.plc_code = get_required_param('plc_code')
-    migration.put()
+    migration.plc_code = request.values.get('plc_code')
+    if migration.plc_code:
+        migration.put()
 
     stale = util.now() - migration.updated >= STALE_TASK_AGE
     if migration.state < State.migrate_done or stale:
