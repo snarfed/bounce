@@ -552,8 +552,13 @@ def review(from_auth, to_auth):
     migration = Migration.get_or_insert(from_auth, to_auth)
 
     if migration.state and migration.state >= State.migrate_follows:
-        flash(f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.')
-        return redirect(url('/to', from_auth))
+        msg = f'{from_auth.user_display_name()} has already begun migrating to {migration.to.get().user_display_name()}.'
+        if migration.to == to_auth.key:
+            logger.info(msg)
+            return redirect(url('/migrate', from_auth, to_auth))
+        else:
+            flash(msg)
+            return redirect(url('/to', from_auth))
 
     # check that "to" user is eligible
     get_to_user(to_auth)
@@ -855,10 +860,16 @@ def bluesky_password(from_auth, to_auth):
     )
 
 
-@app.post('/confirm')
+@app.route('/confirm', methods=['GET', 'POST'])
 @require_accounts('from', 'to')
 def confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
+    migration = Migration.get(from_auth, to_auth)
+    if not migration:
+        return redirect(url('/to', from_auth))
+    if migration.state and migration.state > State.review_done:
+        return redirect(url('/migrate', from_auth, to_auth))
+
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
     to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
     to_user = get_to_user(to_auth)

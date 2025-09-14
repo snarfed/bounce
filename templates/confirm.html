@@ -6,10 +6,12 @@
 {% set from_label %}
   {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
 {% endset %}
-
 {% set to_label %}
   {% with auth = to_auth %}{% include 'account_label.html' %}{% endwith %}
 {% endset %}
+{% set bridged_to_label =
+     from_label if from_user.HAS_COPIES
+     else ('<code>' + to_user.handle_as(from_user) + '</code>')|safe %}
 
 <div class="row big">
 <p>Migrate {{ from_label }} to {{ to_label }}?</p>
@@ -17,8 +19,8 @@
 
 <div class="row" style="text-align: left">
 <ul>
-<li>{{ to_label }} will be <a href="https://fed.brid.gy/docs">bridged</a> back into {{ from_auth.site_name() }} as {{ from_label }}.
-<li>Your followers on {{ from_auth.site_name() }} will all continue to follow {{ from_label }} and see your posts.
+<li>{{ to_label }} will be <a href="https://fed.brid.gy/docs">bridged</a> back into {{ from_auth.site_name() }} as {{ bridged_to_label }}.
+<li>Your followers on {{ from_auth.site_name() }} will all {% if from_user.HAS_COPIES %}continue to{% endif %} follow {{ bridged_to_label }} and continue to see your posts.
 <li>{{ to_label }} will follow the accounts {{ from_label }} follows that are bridged.
 <ul>
 </div>

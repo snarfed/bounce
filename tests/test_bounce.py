@@ -407,7 +407,7 @@ class="logo" title="Bluesky" />
         self.assertEqual(State.review_followers, migration.state)
         self.assert_task(mock_create_task, 'review', from_=from_auth, to=to_auth)
 
-    def test_review_migration_in_progress(self):
+    def test_review_migration_in_progress_other_to(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             existing_to_auth = self.make_mastodon(sess, name='bob')
@@ -422,6 +422,19 @@ class="logo" title="Bluesky" />
                          resp.headers['Location'])
         self.assertEqual(['al.ice has already begun migrating to @bob@in.st.'],
                          get_flashed_messages())
+
+    def test_review_migration_in_progress(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        Migration(id='did:plc:alice activitypub', state=State.migrate_out,
+                  to=to_auth).put()
+
+        resp = self.get('/review', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}',
+                         resp.headers['Location'])
 
     @patch.object(tasks_client, 'create_task')
     @patch('requests.get', return_value=requests_response(
@@ -562,6 +575,18 @@ When you migrate  al.ice to  @alice@in.st ...
                                    ignore=['updated'])
 
         mock_create_task.assert_not_called()
+
+    def test_review_migration_done_redirects_to_migration_progress(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.migrate_done)
+
+        resp = self.get('/review', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
     @patch('requests.get')
     def test_review_task_mastodon_to_bluesky(self, mock_get):
@@ -794,6 +819,18 @@ When you migrate  al.ice to  @alice@in.st ...
             'keep_follows_pct': 100,
         }, migration.review)
 
+    def test_confirm_migration_done_redirects_to_migration_progress(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.migrate_done)
+
+        resp = self.post('/confirm', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
+
     @patch('requests.post', side_effect=[
         requests_response({  # createSession
             'handle': 'han.dull',
@@ -807,6 +844,9 @@ When you migrate  al.ice to  @alice@in.st ...
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.review_done)
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             Object(id='did:plc:alice', raw=DID_DOC).put()
@@ -832,6 +872,9 @@ When you migrate  al.ice to  @alice@in.st ...
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
 
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.review_done)
+
         with ndb.context.Context(bridgy_fed_ndb).use():
             Object(id='did:plc:alice', raw=DID_DOC).put()
             ATProto(id='did:plc:alice').put()
@@ -845,6 +888,9 @@ When you migrate  al.ice to  @alice@in.st ...
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.review_done)
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             ActivityPub(id='http://in.st/users/alice',
@@ -866,6 +912,9 @@ When you migrate  al.ice to  @alice@in.st ...
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.review_done)
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             Object(id='did:plc:alice', raw=DID_DOC).put()
@@ -897,6 +946,9 @@ When you migrate  al.ice to  @alice@in.st ...
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.review_done)
 
         self.make_bot_users()
         with ndb.context.Context(bridgy_fed_ndb).use():
