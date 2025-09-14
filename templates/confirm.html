@@ -19,9 +19,9 @@
 
 <div class="row" style="text-align: left">
 <ul>
-<li>{{ to_label }} will be <a href="https://fed.brid.gy/docs">bridged</a> back into {{ from_auth.site_name() }} as {{ bridged_to_label }}.
-<li>Your followers on {{ from_auth.site_name() }} will all {% if from_user.HAS_COPIES %}continue to{% endif %} follow {{ bridged_to_label }} and continue to see your posts.
-<li>{{ to_label }} will follow the accounts {{ from_label }} follows that are bridged.
+<li>{{ to_label }} will be <a href="https://fed.brid.gy/docs">bridged</a> back to {{ from_user.PHRASE }} as {{ bridged_to_label }}.
+<li>Your followers on {{ from_user.PHRASE }} will all {% if from_user.HAS_COPIES %}continue to{% endif %} follow {{ bridged_to_label }} and continue to see your posts.
+<li>{{ to_label }} will follow any accounts {{ from_label }} follows that are bridged to {{ to_user.PHRASE }}.
 <ul>
 </div>
 
