@@ -475,7 +475,12 @@ def choose_from():
     """Choose account to migrate from."""
     vars = template_vars()
 
-    accounts = vars['auths']
+    if 'beta' in request.args:
+        accounts = vars['auths']
+    else:
+        accounts = [a for a in vars['auths']
+                    if isinstance(a, oauth_dropins.bluesky.BlueskyAuth)]
+
     for acct in accounts:
         acct.url = url('/to', acct)
 
