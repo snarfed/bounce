@@ -25,10 +25,14 @@ import humanize
 import lexrpc
 import oauth_dropins
 import oauth_dropins.bluesky
-import oauth_dropins.indieauth
+from oauth_dropins.bluesky import BlueskyAuth
+from oauth_dropins.indieauth import IndieAuth
 import oauth_dropins.mastodon
+from oauth_dropins.mastodon import MastodonAuth
 import oauth_dropins.pixelfed
+from oauth_dropins.pixelfed import PixelfedAuth
 import oauth_dropins.threads
+from oauth_dropins.threads import ThreadsAuth
 from oauth_dropins.webutil import (
     appengine_info,
     appengine_config,
@@ -81,11 +85,11 @@ TASK_REQUESTS_KWARGS = {
 FOLLOWERS_PREVIEW_LEN = 20
 
 AUTH_TO_PROTOCOL = {
-    oauth_dropins.bluesky.BlueskyAuth: ATProto,
-    oauth_dropins.indieauth.IndieAuth: Web,
-    oauth_dropins.mastodon.MastodonAuth: ActivityPub,
-    oauth_dropins.pixelfed.PixelfedAuth: ActivityPub,
-    oauth_dropins.threads.ThreadsAuth: ActivityPub,
+    BlueskyAuth: ATProto,
+    IndieAuth: Web,
+    MastodonAuth: ActivityPub,
+    PixelfedAuth: ActivityPub,
+    ThreadsAuth: ActivityPub,
 }
 BRIDGE_DOMAIN_TO_PROTOCOL = {
     'atproto.brid.gy': ATProto,
@@ -347,7 +351,7 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
 
             # Check for did:web in Bluesky accounts
             for auth in (from_auth, to_auth):
-                if (isinstance(auth, oauth_dropins.bluesky.BlueskyAuth)
+                if (isinstance(auth, BlueskyAuth)
                         and auth.key.id().startswith('did:web:')):
                     flash('Sorry, did:webs are not currently supported.')
                     return redirect('/')
@@ -387,8 +391,7 @@ def granary_source(auth, with_auth=False, **requests_kwargs):
     Returns:
       granary.source.Source:
     """
-    if isinstance(auth, (oauth_dropins.mastodon.MastodonAuth,
-                         oauth_dropins.pixelfed.PixelfedAuth)):
+    if isinstance(auth, (MastodonAuth, PixelfedAuth)):
         try:
             instance = instance=auth.instance()
         except RuntimeError as e:
@@ -399,7 +402,7 @@ def granary_source(auth, with_auth=False, **requests_kwargs):
         return Mastodon(instance, access_token=auth.access_token_str,
                         user_id=auth.user_id(), **requests_kwargs)
 
-    elif isinstance(auth, oauth_dropins.bluesky.BlueskyAuth):
+    elif isinstance(auth, BlueskyAuth):
         if with_auth:
             oauth_client = oauth_dropins.bluesky.oauth_client_for_pds(
                 bluesky_oauth_client_metadata(), auth.pds_url)
@@ -829,7 +832,7 @@ def analyze_review(migration, from_auth):
 @require_accounts('from', 'to')
 def bluesky_password(from_auth, to_auth):
     """View for entering the user's Bluesky password."""
-    if not isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
+    if not isinstance(from_auth, BlueskyAuth):
         error(f'{from_auth.key.id()} is not Bluesky')
 
     return render_template(
@@ -872,7 +875,7 @@ def confirm(from_auth, to_auth):
 
     # now, the checks that add request params:
     # * from Bluesky needs password
-    if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
+    if isinstance(from_auth, BlueskyAuth):
         if not (password := request.values.get('password')):
             return redirect(url('/bluesky-password', from_auth, to_auth))
 
@@ -912,10 +915,10 @@ def set_alsoKnownAs(from_auth, to_auth):
 
     settings_path = {
         # https://docs.joinmastodon.org/user/moving/#migration
-        oauth_dropins.mastodon.MastodonAuth: '/settings/aliases',
+        MastodonAuth: '/settings/aliases',
         # https://pixelfed.social/site/kb/your-profile#migration
-        oauth_dropins.pixelfed.PixelfedAuth: '/settings/account/aliases/manage',
-        oauth_dropins.threads.ThreadsAuth: 'TODO',
+        PixelfedAuth: '/settings/account/aliases/manage',
+        ThreadsAuth: 'TODO',
     }[to_auth.__class__]
     settings_url = urljoin(to_auth.instance(), settings_path)
 
@@ -1185,7 +1188,7 @@ def migrate_in(migration, from_auth, from_user, to_user):
 
     migrate_in_kwargs = {}
 
-    if isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
+    if isinstance(from_auth, BlueskyAuth):
         # use the password-based session stored earlier in /confirm, since
         # signPlcOperation (below) doesn't support OAuth DPoP tokens
         old_pds_client = from_auth._api(session_callback=bluesky_session_callback)
@@ -1230,9 +1233,9 @@ def migrate_in_blobs(from_auth):
     https://cloud.google.com/python/docs/reference/storage/latest/google.cloud.storage.blob.Blob.html#google_cloud_storage_blob_Blob_upload_from_string
 
     Args:
-      from_auth (oauth_dropins.bluesky.BlueskyAuth)
+      from_auth (BlueskyAuth)
     """
-    if not isinstance(from_auth, oauth_dropins.bluesky.BlueskyAuth):
+    if not isinstance(from_auth, BlueskyAuth):
         return
 
     if not util.domain_or_parent_in(util.domain_from_link(from_auth.pds_url),
@@ -1320,9 +1323,9 @@ def admin_activity():
     }
 
     # list of auth entities
-    MastodonAuth = oauth_dropins.mastodon.MastodonAuth
-    PixelfedAuth = oauth_dropins.pixelfed.PixelfedAuth
-    BlueskyAuth = oauth_dropins.bluesky.BlueskyAuth
+    MastodonAuth = MastodonAuth
+    PixelfedAuth = PixelfedAuth
+    BlueskyAuth = BlueskyAuth
     recent_logins = sorted(
         MastodonAuth.query().order(-MastodonAuth.updated).fetch(10)
           + PixelfedAuth.query().order(-PixelfedAuth.updated).fetch(10)
