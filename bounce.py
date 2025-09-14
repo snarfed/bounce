@@ -477,6 +477,14 @@ def choose_from():
 
     if 'beta' in request.args:
         accounts = vars['auths']
+        vars.update({
+            'mastodon_button': oauth_dropins.mastodon.Start.button_html(
+                '/oauth/mastodon/start/from',
+                image_prefix='/oauth_dropins_static/'),
+            'pixelfed_button': oauth_dropins.pixelfed.Start.button_html(
+                '/oauth/pixelfed/start/from',
+                image_prefix='/oauth_dropins_static/'),
+        })
     else:
         accounts = [a for a in vars['auths']
                     if isinstance(a, oauth_dropins.bluesky.BlueskyAuth)]
@@ -490,12 +498,6 @@ def choose_from():
         accounts=accounts,
         bluesky_button=oauth_dropins.bluesky.Start.button_html(
             '/oauth/bluesky/start/from',
-            image_prefix='/oauth_dropins_static/'),
-        mastodon_button=oauth_dropins.mastodon.Start.button_html(
-            '/oauth/mastodon/start/from',
-            image_prefix='/oauth_dropins_static/'),
-        pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
-            '/oauth/pixelfed/start/from',
             image_prefix='/oauth_dropins_static/'),
         # threads_button=oauth_dropins.threads.Start.button_html(
         #     '/oauth/threads/start/from',
