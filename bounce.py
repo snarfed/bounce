@@ -1018,11 +1018,12 @@ def migrate_get(from_auth, to_auth):
 
     template = 'migration_progress.html'
     if migration.state == State.migrate_done:
-        template = ('activitypub_profile_move.html'
-                    if AUTH_TO_PROTOCOL[from_auth.__class__] == ActivityPub
-                    else 'done.html')
-        logger.info(f'logging out {from_auth.key.id()}')
-        oauth_dropins.logout(from_auth)
+        if AUTH_TO_PROTOCOL[from_auth.__class__] == ActivityPub:
+            template = 'activitypub_profile_move.html'
+        else:
+            template = 'done.html'
+            oauth_dropins.logout(from_auth)
+            logger.info(f'logging out {from_auth.key.id()}')
 
     return render_template(
         template,
