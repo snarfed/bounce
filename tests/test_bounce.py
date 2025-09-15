@@ -1113,11 +1113,10 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertGreater(migration.updated, yesterday)
         self.assertEqual('new kowd', migration.plc_code)
 
-    @patch.object(ActivityPub, 'migrate_in')  # TODO
-    @patch.object(ATProto, 'migrate_out')     # TODO
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
+    @patch.object(tasks_client, 'create_task')
     @patch('requests.post', side_effect=[
         requests_response({
             'uri': 'at://did:plc:bob/fo.ll.ow/123',
@@ -1127,20 +1126,18 @@ When you migrate  al.ice to  @alice@in.st ...
             'uri': 'at://did:plc:eve/fo.ll.ow/456',
             'cid': 'xyzuvtsr',
         }),
-        # memcache evict both accounts, to account's profile object
+        # memcache evict both accounts, twice
         requests_response(''),
         requests_response(''),
         requests_response(''),
-        # create new did:plc
-        requests_response({}),
+        requests_response(''),
     ])
     @patch('requests.get', side_effect=[
         requests_response(DID_DOC),
-        requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
-        requests_response(status=404),  # http://in.st/@alice/pic
+        requests_response(ALICE_BSKY_PROFILE),
     ])
-    def test_migrate_task_mastodon_to_bluesky(self, mock_get, mock_post,
-                                              mock_oauth2client, _, __):
+    def test_migrate_task_mastodon_to_bluesky(
+            self, mock_get, mock_post, mock_create_task, mock_oauth2client):
         self.make_bot_users()
 
         with self.client.session_transaction() as sess:
@@ -1149,7 +1146,11 @@ When you migrate  al.ice to  @alice@in.st ...
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             from_key = ActivityPub(id='http://in.st/users/alice').put()
-            to_key = ATProto(id='did:plc:alice').put()
+            # ok if the Bluesky user is already bridged back
+            obj_key = Object(id='at://did:plc:alice/app.bsky.actor.profile/self',
+                             bsky=ALICE_BSKY_PROFILE['value']).put()
+            to_key = ATProto(id='did:plc:alice', enabled_protocols=['activitypub'],
+                             obj_key=obj_key).put()
 
         migration = Migration(id='@alice@in.st atproto', from_=from_auth, to=to_auth,
                               to_follow=['did:bob', 'did:eve'],
