@@ -1049,9 +1049,17 @@ def migrate_get(from_auth, to_auth):
         return redirect(url('/review', from_auth, to_auth))
 
     template = 'migration_progress.html'
+    vars = template_vars()
+
     if migration.state == State.migrate_done:
         if AUTH_TO_PROTOCOL[from_auth.__class__] == ActivityPub:
             template = 'activitypub_profile_move.html'
+            vars.update({
+                'settings_url': urljoin(from_auth.instance(),
+                                        SETTINGS_PATH_MIGRATE[from_auth.__class__]),
+                'docs_url': urljoin(from_auth.instance(),
+                                    DOCS_URL_MIGRATE[from_auth.__class__]),
+            })
         else:
             template = 'done.html'
             oauth_dropins.logout(from_auth)
@@ -1065,7 +1073,7 @@ def migrate_get(from_auth, to_auth):
         to_user=get_to_user(to_auth),
         migration=migration,
         State=State,
-        **template_vars(),
+        **vars,
     )
 
 
@@ -1073,6 +1081,8 @@ def migrate_get(from_auth, to_auth):
 @require_accounts('from', 'to')
 def activitypub_profile_moved(from_auth, to_auth):
     """Checks that a migration from ActivityPub started the profile move."""
+    assert AUTH_TO_PROTOCOL[from_auth.__class__] == ActivityPub
+
     migration = Migration.get(from_auth, to_auth)
     if not migration:
         error('migration not found', status=404)
@@ -1095,20 +1105,21 @@ def activitypub_profile_moved(from_auth, to_auth):
         else:
             flash(f"{util.domain_from_link(from_auth.instance())} doesn't show that you've started the profile move yet. Try again?")
 
-    settings_url = urljoin(from_auth.instance(),
-                           SETTINGS_PATH_MIGRATE[from_auth.__class__])
-    docs_url = urljoin(from_auth.instance(), DOCS_URL_MIGRATE[from_auth.__class__])
-
+    vars = {
+        **template_vars(),
+        'settings_url': urljoin(from_auth.instance(),
+                                SETTINGS_PATH_MIGRATE[from_auth.__class__]),
+        'docs_url': urljoin(from_auth.instance(),
+                            DOCS_URL_MIGRATE[from_auth.__class__]),
+    }
     return render_template(
         template,
         ActivityPub=ActivityPub,
         from_auth=from_auth,
         to_auth=to_auth,
         to_user=get_to_user(to_auth),
-        docs_url=docs_url,
-        settings_url=settings_url,
         migration=migration,
-        **template_vars(),
+        **vars,
     )
 
 

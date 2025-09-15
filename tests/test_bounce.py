@@ -1030,6 +1030,9 @@ When you migrate  al.ice to  @alice@in.st ...
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
 
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice').put()
+
         Migration.get_or_insert(from_auth.get(), to_auth.get(),
                                 state=State.migrate_done)
 
