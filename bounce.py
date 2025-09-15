@@ -1478,14 +1478,16 @@ app.add_url_rule('/oauth/pixelfed/finish/to', view_func=PixelfedCallback.as_view
 # Bluesky OAuth
 #
 def bluesky_oauth_client_metadata():
+    base_url = (f'https://{DOMAIN}/' if request.host.endswith('.appspot.com')
+                else request.host_url)
     return {
         **oauth_dropins.bluesky.CLIENT_METADATA_TEMPLATE,
-        'client_id': f'{request.host_url}oauth/bluesky/client-metadata.json',
+        'client_id': urljoin(base_url, '/oauth/bluesky/client-metadata.json'),
         'client_name': 'Bounce',
-        'client_uri': request.host_url,
+        'client_uri': base_url,
         'redirect_uris': [
-            f'{request.host_url}oauth/bluesky/finish/from',
-            f'{request.host_url}oauth/bluesky/finish/to',
+            urljoin(base_url, '/oauth/bluesky/finish/from'),
+            urljoin(base_url, 'oauth/bluesky/finish/to'),
         ],
     }
 
