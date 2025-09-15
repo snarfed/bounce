@@ -884,7 +884,7 @@ def confirm(from_auth, to_auth):
     # first, do all the checks that don't add request params:
     # * if to user is already bridged back, need to disable that
     # * if to AP, and from user is already bridged, need to set alias
-    if to_user.is_enabled(from_proto):
+    if from_proto.HAS_COPIES and to_user.is_enabled(from_proto):
         return redirect(url('/disable-bridging', from_auth, to_auth))
 
     from_user = get_from_user(from_auth)
@@ -924,13 +924,17 @@ def confirm(from_auth, to_auth):
         from_auth.session = bsky.client.session
         from_auth.put()
 
+    vars = template_vars()
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        vars['to_user_bridged_handle'] = to_user.handle_as(from_proto)
+
     return render_template(
         'confirm.html',
         from_auth=from_auth,
         from_user=from_user,
         to_auth=to_auth,
         to_user=to_user,
-        **template_vars(),
+        **vars,
     )
 
 

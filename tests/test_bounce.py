@@ -884,7 +884,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/bluesky-password?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
-    def test_confirm_to_activitypub_currently_bridged_back(self):
+    def test_confirm_from_bluesky_currently_bridged_back_needs_disable(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
@@ -901,6 +901,25 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(
             f'/disable-bridging?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}',
             resp.headers['Location'])
+
+    def test_confirm_from_mastodon_currently_bridged_back_ignore(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+            to_auth = self.make_bluesky(sess)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.review_done)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            Object(id='did:plc:alice', raw=DID_DOC).put()
+            ATProto(id='did:plc:alice', enabled_protocols=['activitypub']).put()
+            obj_key = Object(id='profile', as2={'displayName': 'alice'}).put()
+            ActivityPub(id='http://in.st/users/alice', obj_key=obj_key).put()
+
+        resp = self.post('/confirm', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+        self.assertIn('<form action="/migrate" method="post">', body)
 
     @patch('requests.post', side_effect=[
         requests_response({  # createSession
