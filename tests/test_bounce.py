@@ -23,10 +23,10 @@ from flask import get_flashed_messages, session
 from google.cloud import ndb, storage
 from granary import as2
 from granary.source import html_to_text
-import granary.mastodon
 import oauth_dropins
 from oauth_dropins.bluesky import BlueskyAuth
 from oauth_dropins.mastodon import MastodonApp, MastodonAuth
+from oauth_dropins.pixelfed import PixelfedApp, PixelfedAuth
 from oauth_dropins.views import LOGINS_SESSION_KEY
 from oauth_dropins.webutil import flask_util, testutil, util
 from oauth_dropins.webutil.appengine_config import ndb_client, tasks_client
@@ -227,7 +227,7 @@ class BounceTest(TestCase, Asserts):
         app = MastodonApp(instance='http://in.st/', data='{}').put()
         user_json = json_dumps({
             'id': '234',
-            'uri':f'http://in.st/users/{name}',
+            'uri': f'http://in.st/users/{name}',
             'avatar_static': f'http://in.st/@{name}/pic',
         })
         auth = MastodonAuth(id=f'@{name}@in.st', access_token_str='towkin', app=app,
@@ -236,6 +236,24 @@ class BounceTest(TestCase, Asserts):
         if login:
             sess.setdefault(LOGINS_SESSION_KEY, []).append(
                 ('MastodonAuth', f'@{name}@in.st'))
+
+        return auth
+
+    def make_pixelfed(self, sess, name='alice', login=True):
+        app = PixelfedApp(instance='http://in.st/', data='{}').put()
+        # https://github.com/pixelfed/pixelfed/discussions/6182
+        user_json = json_dumps({
+            'id': '234',
+            'url': f'http://in.st/{name}',
+            'acct': name,
+            'avatar_static': f'http://in.st/@{name}/pic',
+        })
+        auth = PixelfedAuth(id=f'@{name}@in.st', access_token_str='towkin', app=app,
+                            user_json=user_json).put()
+
+        if login:
+            sess.setdefault(LOGINS_SESSION_KEY, []).append(
+                ('PixelfedAuth', f'@{name}@in.st'))
 
         return auth
 
@@ -588,9 +606,83 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
-    @patch('requests.get')
-    def test_review_task_mastodon_to_bluesky(self, mock_get):
-        self.make_bot_users()
+    def test_review_task_pixelfed_to_bluesky(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_pixelfed(sess, login=False)
+
+        # background: https://github.com/pixelfed/pixelfed/discussions/6182
+        alice = {  # local
+            'id': '234',
+            'url': 'http://in.st/alice',
+            'username': 'alice',
+            'acct': 'alice',
+        }
+        alan = {  # remote
+            'id': '567',
+            'url': 'http://oth.er/users/alan',
+            'username': 'alan',
+            'acct': 'alan@oth.er',
+        }
+        bob = {
+            'url': 'http://bsky.brid.gy/ap/did:plc:bob',
+            'username': 'bo.b',
+            'acct': 'bo.b@bsky.brid.gy',
+        }
+        eve = {
+            'url': 'http://web.brid.gy/e.ve',
+            'username': 'e.ve',
+            'acct': 'e.ve@web.brid.gy',
+        }
+        bot = {  # should be ignored
+            'url': 'https://bsky.brid.gy/bsky.brid.gy',
+            'username': 'bsky.brid.gy',
+            'acct': 'bsky.brid.gy@bsky.brid.gy',
+        }
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://oth.er/users/alan', enabled_protocols=['atproto'],
+                copies=[Target(protocol='atproto', uri='did:plc:alan')]).put()
+
+        alan_ap_html = '<span class="logo" title="ActivityPub"><img src="/static/fediverse_logo.svg"></span> <a class="h-card u-author mention" rel="me" href="http://oth.er/users/alan" title="@alan@oth.er"><img src="http://oth.er/@alan/pic" class="profile"> @alan@oth.er</a>'
+        alan_ap_actor = requests_response({
+            'type': 'Person',
+            'id': 'http://oth.er/users/alan',
+            'image': 'http://oth.er/@alice/alan',
+        })
+        alan_webfinger = requests_response({
+            'subject': '@alan@oth.er',
+        })
+
+        migration = self._test_review_task_activitypub_to_bluesky(
+            from_auth=from_auth, followers=[alice, bob],
+            follows=[alice, alan, bob, eve, bot],
+            extra_gets=[
+                alan_ap_actor,
+                alan_ap_actor,
+                alan_webfinger,
+                alan_webfinger,
+            ])
+
+        self.assert_equals({
+            **REVIEW_DATA_MASTODON_TO_BLUESKY,
+            'total_follows': 4,
+            'total_bridged_follows': 3,
+            'keep_follows_pct': 75,
+            'follow_counts': [
+                ['type', 'count'],
+                ['ATProto', 1],
+                ['ActivityPub', 1],
+                ['Web', 1],
+                ['not bridged', 1],
+            ],
+        }, migration.review, ignore=['follows_preview_raw', 'followers_preview_raw'])
+        self.assertEqual(['did:plc:bob', 'did:plc:alan', 'did:plc:eve'],
+                         migration.to_follow)
+
+    def test_review_task_mastodon_to_bluesky(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess, login=False)
+
         alice = {
             'id': '234',
             'uri': 'http://in.st/users/alice',
@@ -620,11 +712,23 @@ When you migrate  al.ice to  @alice@in.st ...
             'acct': 'bsky.brid.gy@bsky.brid.gy',
         }
 
+        migration = self._test_review_task_activitypub_to_bluesky(
+            from_auth=from_auth, followers=[alice, bob],
+            follows=[alice, bob, eve, bot])
+        self.assertEqual(['did:plc:bob', 'did:plc:eve'], migration.to_follow)
+        self.assert_equals(REVIEW_DATA_MASTODON_TO_BLUESKY, migration.review,
+                           ignore=['follows_preview_raw', 'followers_preview_raw'])
+
+    @patch('requests.get')
+    def _test_review_task_activitypub_to_bluesky(self, mock_get, from_auth,
+                                                 followers, follows, extra_gets=()):
+        self.make_bot_users()
+
         mock_get.side_effect = [
             # followers
-            requests_response([alice, bob], content_type='application/json'),
+            requests_response(followers, content_type='application/json'),
             # follows
-            requests_response([alice, bob, eve, bot], content_type='application/json'),
+            requests_response(follows, content_type='application/json'),
             # alice AP actor, webfinger
             requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
             requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
@@ -637,9 +741,8 @@ When you migrate  al.ice to  @alice@in.st ...
             }),
             # bob bsky profile
             requests_response(BOB_BSKY_PROFILE),
-        ]
+        ] + list(extra_gets)
 
-        self.make_bot_users()
         with ndb.context.Context(bridgy_fed_ndb).use():
             Web(id='e.ve', enabled_protocols=['atproto'],
                 copies=[Target(protocol='atproto', uri='did:plc:eve')]).put()
@@ -648,7 +751,6 @@ When you migrate  al.ice to  @alice@in.st ...
             ATProto(id='did:plc:alice', enabled_protocols=['web']).put()
 
         with self.client.session_transaction() as sess:
-            from_auth = self.make_mastodon(sess, login=False)
             to_auth = self.make_bluesky(sess, login=False)
 
         Migration.get_or_insert(from_auth.get(), to_auth.get())
@@ -670,9 +772,7 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(to_auth, migration.to)
         self.assertEqual(State.review_done, migration.state)
         self.assertEqual([], migration.followed)
-        self.assertEqual(['did:plc:bob', 'did:plc:eve'], migration.to_follow)
-        self.assert_equals(REVIEW_DATA_MASTODON_TO_BLUESKY, migration.review,
-                           ignore=['follows_preview_raw', 'followers_preview_raw'])
+        return migration
 
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',

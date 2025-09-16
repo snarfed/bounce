@@ -411,8 +411,12 @@ def granary_source(auth, with_auth=False, **requests_kwargs):
             # will have cleaned this up and logged out the bad login.
             return None
 
-        return Mastodon(instance, access_token=auth.access_token_str,
-                        user_id=auth.user_id(), **requests_kwargs)
+        cls = {
+            MastodonAuth: Mastodon,
+            PixelfedAuth: Pixelfed,
+        }[auth.__class__]
+        return cls(instance, access_token=auth.access_token_str,
+                   user_id=auth.user_id(), **requests_kwargs)
 
     elif isinstance(auth, BlueskyAuth):
         if with_auth:
