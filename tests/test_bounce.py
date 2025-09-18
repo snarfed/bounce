@@ -1425,6 +1425,10 @@ When you migrate  al.ice to  @alice@in.st ...
                  headers=ANY, timeout=60, stream=True),
             call('https://some.pds.bsky.network/xrpc/com.atproto.identity.signPlcOperation', json={
                 'token': 'kowd',
+                'alsoKnownAs': [
+                    'at://snarfed2.bsky.social',
+                    'http://in.st/users/alice',
+                ],
                 'rotationKeys': [did.encode_did_key(repo.rotation_key.public_key())],
                 'verificationMethods': {
                     'atproto': did.encode_did_key(repo.signing_key.public_key()),
