@@ -1054,6 +1054,40 @@ When you migrate  al.ice to  @alice@in.st ...
                          mock_post.call_args_list[0].kwargs['json'])
         self.assertIsNone(from_auth.get().session)
 
+    @patch('requests.post', side_effect=[
+        requests_response({  # createSession
+            'error': 'AuthFactorTokenRequired',
+            'message': 'A sign in code has been sent to your email address',
+        }, status=401),
+    ])
+    def test_confirm_from_bluesky_2fa(self, mock_post):
+        # https://github.com/bluesky-social/atproto/discussions/2435
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.review_done)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            Object(id='did:plc:alice', raw=DID_DOC).put()
+            ATProto(id='did:plc:alice').put()
+            ActivityPub(id='http://in.st/users/alice').put()
+
+        resp = self.post('/confirm', from_auth, to_auth, password='hunter5')
+
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/bluesky-password?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
+        flashed = get_flashed_messages()
+        self.assertTrue(flashed[0].startswith("Sorry, we don't support Bluesky accounts with 2FA enabled yet."), flashed)
+
+        self.assertEqual(1, mock_post.call_count)
+        self.assertEqual(('https://some.pds.bsky.network/xrpc/com.atproto.server.createSession',),
+                         mock_post.call_args_list[0].args)
+        self.assertEqual({'identifier': 'did:plc:alice', 'password': 'hunter5'},
+                         mock_post.call_args_list[0].kwargs['json'])
+        self.assertIsNone(from_auth.get().session)
+
     @patch('requests.get', side_effect=[
         requests_response(DID_DOC),  # did:plc:alice
         requests_response(ALICE_AP_ACTOR, content_type='application/activity+json'),

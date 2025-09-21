@@ -49,6 +49,7 @@ from oauth_dropins.webutil.flask_util import (
     get_required_param,
 )
 from oauth_dropins.webutil.models import EnumProperty, JsonProperty
+from oauth_dropins.webutil.util import json_dumps, json_loads
 from pymemcache.test.utils import MockMemcacheClient
 import pytz
 from requests import RequestException
@@ -921,6 +922,13 @@ def confirm(from_auth, to_auth):
             bsky.client.com.atproto.identity.requestPlcOperationSignature()
         except RequestException as e:
             _, body = util.interpret_http_exception(e)
+            try:
+                if json_loads(body).get('error') == 'AuthFactorTokenRequired':
+                    flash("Sorry, we don't support Bluesky accounts with 2FA enabled yet. <a href='https://github.com/snarfed/bounce/issues/54'>Details here.</a> Feel free to disable 2FA on your account and try again!", escape=False)
+                    return redirect(url('/bluesky-password', from_auth, to_auth))
+            except ValueError:
+                pass
+
             flash(f'Login failed: {body}')
             return redirect(url('/bluesky-password', from_auth, to_auth))
 
