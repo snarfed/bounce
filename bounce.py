@@ -1381,9 +1381,6 @@ def admin_activity():
     }
 
     # list of auth entities
-    MastodonAuth = MastodonAuth
-    PixelfedAuth = PixelfedAuth
-    BlueskyAuth = BlueskyAuth
     recent_logins = sorted(
         MastodonAuth.query().order(-MastodonAuth.updated).fetch(10)
           + PixelfedAuth.query().order(-PixelfedAuth.updated).fetch(10)

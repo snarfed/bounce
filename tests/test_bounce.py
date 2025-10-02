@@ -338,6 +338,11 @@ class BounceTest(TestCase, Asserts):
         self.assertEqual('/', resp.headers['Location'])
         self.assertNotIn(LOGINS_SESSION_KEY, session)
 
+    def test_admin_activity(self):
+        # just check that we don't crash
+        got = self.client.get('/admin/activity')
+        self.assert_equals(200, got.status_code)
+
     def test_from(self):
         with self.client.session_transaction() as sess:
             self.make_bluesky(sess)
