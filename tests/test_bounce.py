@@ -155,12 +155,14 @@ REVIEW_DATA_BLUESKY_TO_MASTODON = {
         ['type', 'count'],
         ['ATProto', 1],
         ['ActivityPub', 1],
+        ['Nostr', 0],
         ['Web', 0],
     ],
     'follow_counts': [
         ['type', 'count'],
         ['ATProto', 1],
         ['ActivityPub', 1],
+        ['Nostr', 0],
         ['Web', 0],
         ['not bridged', 1],
     ],
@@ -557,10 +559,10 @@ When you migrate  @alice@in.st to  al.ice ...
         self.assertNotIn('<meta http-equiv="refresh" content="5">', body)
         self.assert_multiline_in("""
 document.getElementById('followers-chart'));
-chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Web", 0]])""", body)
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Nostr", 0], ["Web", 0]])""", body)
         self.assert_multiline_in("""
 document.getElementById('follows-chart'));
-chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Web", 0], ["not bridged", 1]])""", body)
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Nostr", 0], ["Web", 0], ["not bridged", 1]])""", body)
 
         text = html_to_text(body)
         self.assert_multiline_in("""
