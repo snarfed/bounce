@@ -504,6 +504,14 @@ def choose_from():
         bluesky_button=oauth_dropins.bluesky.Start.button_html(
             '/oauth/bluesky/start/from',
             image_prefix='/oauth_dropins_static/'),
+        mastodon_button=oauth_dropins.mastodon.Start.button_html(
+            '/oauth/mastodon/start/from',
+            image_prefix='/oauth_dropins_static/'),
+        # https://github.com/snarfed/bounce/issues/53
+        # pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
+        #     '/oauth/pixelfed/start/from',
+        #     image_prefix='/oauth_dropins_static/'),
+        # https://github.com/snarfed/bounce/issues/57
         # threads_button=oauth_dropins.threads.Start.button_html(
         #     '/oauth/threads/start/from',
         #     image_prefix='/oauth_dropins_static/'),
@@ -540,6 +548,7 @@ def choose_to(from_auth):
             'pixelfed_button': oauth_dropins.pixelfed.Start.button_html(
                 '/oauth/pixelfed/start/to',
                 image_prefix='/oauth_dropins_static/', form_extra=state),
+            # https://github.com/snarfed/bounce/issues/57
             # 'threads_button': oauth_dropins.threads.Start.button_html(
             #     '/oauth/threads/start/to',
             #     image_prefix='/oauth_dropins_static/', form_extra=state),
