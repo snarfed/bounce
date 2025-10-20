@@ -480,20 +480,7 @@ def choose_from():
     """Choose account to migrate from."""
     vars = template_vars()
 
-    if 'beta' in request.args:
-        accounts = vars['auths']
-        vars.update({
-            'mastodon_button': oauth_dropins.mastodon.Start.button_html(
-                '/oauth/mastodon/start/from',
-                image_prefix='/oauth_dropins_static/'),
-            'pixelfed_button': oauth_dropins.pixelfed.Start.button_html(
-                '/oauth/pixelfed/start/from',
-                image_prefix='/oauth_dropins_static/'),
-        })
-    else:
-        accounts = [a for a in vars['auths']
-                    if isinstance(a, oauth_dropins.bluesky.BlueskyAuth)]
-
+    accounts = vars['auths']
     for acct in accounts:
         acct.url = url('/to', acct)
 
