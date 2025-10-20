@@ -1367,7 +1367,7 @@ def migrate_out(migration, from_user, to_user):
 
     with ndb.context.Context(bridgy_fed_ndb).use():
         to_user.enable_protocol(from_proto)
-        from_proto.bot_follow(to_user)
+        from_proto.bot_maybe_follow_back(to_user)
 
     memcache.remote_evict(to_user.key)
 
