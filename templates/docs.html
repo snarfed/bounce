@@ -16,6 +16,7 @@
 <li><a href="#multiple">Can I migrate to or from an account more than once?</a></li>
 <li><a href="#see-followers">After I migrate, why don't I see the new followers on my account?</a></li>
 <li><a href="#what-break">What could break if I do this?</a></li>
+<li><a href="#not-from-pixelfed">Why can't I migrate from Pixelfed?</a></li>
 <!-- <li><a href=""></a></li> -->
 
 <br>
@@ -96,6 +97,11 @@
 <li>If your Mastodon or Pixelfed account is already bridged, we will need to replace its bridged Bluesky account with the Bluesky account that you're migrating from. Unlike ActivityPub, AT Protocol can't "merge" two different account's followers. We're considering options to notify your old Bluesky followers about the change; stay tuned for more details.
 <li>The images and videos on your Bluesky account will stay visible <em>if</em> your account is on a PDS (server) that Bluesky themselves run. We currently don't migrate blobs (ie images and videos) from federated third party PDSes, so if you migrate an account from one of those, its images and videos will disappear after a few days.
 </ul>
+</li>
+
+<li id="not-from-pixelfed" class="question">Why can't I migrate from Pixelfed?</li>
+<li class="answer">
+<p><a href="https://github.com/pixelfed/pixelfed/issues/4858">Pixelfed's account migration support has evidently been broken for years.</a> We're excited to support migrating from Pixelfed as soon as it works on their end!
 </li>
 
 
