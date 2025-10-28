@@ -13,7 +13,6 @@ entrypoint: gunicorn --pythonpath bridgy_fed --workers 1 --threads 30 --timeout 
 # background: https://github.com/snarfed/bridgy/issues/578
 # https://github.com/snarfed/bridgy/issues/1051
 automatic_scaling:
-  min_instances: 1
   max_idle_instances: 1
   target_cpu_utilization: .9
   min_pending_latency: 500ms
