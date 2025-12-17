@@ -827,7 +827,7 @@ def analyze_review(migration, from_auth):
                         user = proto.get_or_create(id, allow_opt_out=True)
 
                 if user:
-                    preview.append(user.user_link(pictures=True))
+                    preview.append(user.html_link(pictures=True))
 
     # total counts, percentage of follows that will be kept
     follow_counts = migration.review['follow_counts']
