@@ -53,7 +53,7 @@ from oauth_dropins.webutil.util import json_dumps, json_loads
 from pymemcache.test.utils import MockMemcacheClient
 import pytz
 from requests import RequestException
-from requests_oauth2client import DPoPTokenSerializer, OAuth2AccessTokenAuth
+from requests_oauth2client import TokenSerializer, OAuth2AccessTokenAuth
 
 # from Bridgy Fed
 from activitypub import ActivityPub
@@ -387,7 +387,7 @@ def bluesky_session_callback(auth_entity):
                 auth_entity.put()
 
         elif isinstance(session_or_auth, OAuth2AccessTokenAuth):
-            serialized = DPoPTokenSerializer.default_dumper(auth.dpop_token)
+            serialized = TokenSerializer.dumps(auth.dpop_token)
             if session_or_auth.token != serialized:
                 auth_entity.dpop_token = serialized
                 auth_entity.put()
