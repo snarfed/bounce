@@ -17,6 +17,7 @@ import arroba.server
 from flask import Flask, redirect, render_template, request
 import flask_gae_static
 from google.cloud import ndb, storage
+from google.cloud.ndb.key import Key
 from granary import as2
 from granary.bluesky import Bluesky
 from granary.mastodon import Mastodon
@@ -71,9 +72,9 @@ logger = logging.getLogger(__name__)
 PROTOCOLS = set(p for p in models.PROTOCOLS.values() if p and p.LABEL != 'ui')
 
 BRIDGY_FED_PROJECT_ID = 'bridgy-federated'
-# haven't yet managed to open up Bridgy Fed's memcache VPC connector to allow access
-# from other apps like this one. TODO: figure that out.
 bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
+# haven't yet managed to get Bounce to access Bridgy Fed's memcache. See section
+# at end of README.md. To test, remove memcache.memcache.client_class here.
 memcache.memcache.client_class = memcache.pickle_memcache.client_class = MockMemcacheClient
 
 # Cache-Control header for static files
@@ -1366,6 +1367,25 @@ def migrate_out(migration, from_user, to_user):
         from_proto.bot_maybe_follow_back(to_user)
 
     memcache.remote_evict(to_user.key)
+
+
+# Used for testing access to Bridgy Fed's memcache. Doesn't currently work.
+# See section at end of README.md.
+#
+# @app.get('/admin/memcache-get')
+# def memcache_get():
+#     logger.info(f'memcache get {memcache.memcache.server}')
+#     print(f'memcache get {memcache.memcache.server}', file=sys.stderr)
+#     if request.headers.get('Authorization') != app.config['SECRET_KEY']:
+#         return '', 401
+
+#     if key := request.values.get('key'):
+#         return repr(Key(urlsafe=key).get(use_cache=False, use_datastore=False,
+#                                          use_global_cache=True))
+#     elif raw := request.values.get('raw'):
+#         return repr(memcache.memcache.get(raw))
+#     else:
+#         error('either key or raw are required')
 
 
 @app.get('/admin/activity')
