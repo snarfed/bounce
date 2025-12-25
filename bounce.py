@@ -388,7 +388,7 @@ def bluesky_session_callback(auth_entity):
                 auth_entity.put()
 
         elif isinstance(session_or_auth, OAuth2AccessTokenAuth):
-            serialized = TokenSerializer.dumps(auth.dpop_token)
+            serialized = TokenSerializer().dumps(auth.dpop_token)
             if session_or_auth.token != serialized:
                 auth_entity.dpop_token = serialized
                 auth_entity.put()
@@ -424,7 +424,7 @@ def granary_source(auth, with_auth=False, **requests_kwargs):
         if with_auth:
             oauth_client = oauth_dropins.bluesky.oauth_client_for_pds(
                 bluesky_oauth_client_metadata(), auth.pds_url)
-            token = DPoPTokenSerializer.default_loader(auth.dpop_token)
+            token = TokenSerializer().loads(auth.dpop_token)
             dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
             requests_kwargs['auth'] = dpop_auth
 

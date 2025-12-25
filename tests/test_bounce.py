@@ -42,7 +42,7 @@ import requests
 from requests_oauth2client import (
   DPoPKey,
   DPoPToken,
-  DPoPTokenSerializer,
+  TokenSerializer,
   OAuth2AccessTokenAuth,
   OAuth2Client,
 )
@@ -72,7 +72,7 @@ from bounce import (
 )
 
 DPOP_TOKEN = DPoPToken(access_token='towkin', _dpop_key=DPoPKey.generate())
-DPOP_TOKEN_STR = DPoPTokenSerializer.default_dumper(DPOP_TOKEN)
+DPOP_TOKEN_STR = TokenSerializer().dumps(DPOP_TOKEN)
 
 DID_DOC = {
     'id': 'did:plc:alice',
