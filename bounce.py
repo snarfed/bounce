@@ -73,9 +73,12 @@ PROTOCOLS = set(p for p in models.PROTOCOLS.values() if p and p.LABEL != 'ui')
 
 BRIDGY_FED_PROJECT_ID = 'bridgy-federated'
 bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
-# haven't yet managed to get Bounce to access Bridgy Fed's memcache. See section
-# at end of README.md. To test, remove memcache.memcache.client_class here.
-memcache.memcache.client_class = memcache.pickle_memcache.client_class = MockMemcacheClient
+
+# point Google Cloud APIs to bounce-migrate project
+BOUNCE_PROJECT_ID = 'bounce-migrate'
+appengine_info.PROJECT = appengine_info.APP_ID = BOUNCE_PROJECT_ID
+bounce_ndb = appengine_config.ndb_client = \
+    appengine_config.thread_local.ndb_client = ndb.Client(project=BOUNCE_PROJECT_ID)
 
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
@@ -1306,8 +1309,6 @@ def migrate_in_blobs(from_auth):
     client = storage.Client()
     bucket = client.bucket(CLOUD_STORAGE_BUCKET)
 
-    # TODO: give bounce permission to BF GCS
-
     with ndb.context.Context(bridgy_fed_ndb).use():
         for cid in source.client.com.atproto.sync.listBlobs(did=did)['cids']:
             logger.info(f'importing {cid}')
@@ -1369,23 +1370,19 @@ def migrate_out(migration, from_user, to_user):
     memcache.remote_evict(to_user.key)
 
 
-# Used for testing access to Bridgy Fed's memcache. Doesn't currently work.
-# See section at end of README.md.
-#
-# @app.get('/admin/memcache-get')
-# def memcache_get():
-#     logger.info(f'memcache get {memcache.memcache.server}')
-#     print(f'memcache get {memcache.memcache.server}', file=sys.stderr)
-#     if request.headers.get('Authorization') != app.config['SECRET_KEY']:
-#         return '', 401
+@app.get('/admin/memcache-get')
+def memcache_get():
+    logger.info(f'memcache get {memcache.memcache.server}')
+    if request.headers.get('Authorization') != app.config['SECRET_KEY']:
+        return '', 401
 
-#     if key := request.values.get('key'):
-#         return repr(Key(urlsafe=key).get(use_cache=False, use_datastore=False,
-#                                          use_global_cache=True))
-#     elif raw := request.values.get('raw'):
-#         return repr(memcache.memcache.get(raw))
-#     else:
-#         error('either key or raw are required')
+    if key := request.values.get('key'):
+        return repr(Key(urlsafe=key).get(use_cache=False, use_datastore=False,
+                                         use_global_cache=True))
+    elif raw := request.values.get('raw'):
+        return repr(memcache.memcache.get(raw))
+    else:
+        error('either key or raw are required')
 
 
 @app.get('/admin/activity')
@@ -1514,16 +1511,14 @@ app.add_url_rule('/oauth/pixelfed/finish/to', view_func=PixelfedCallback.as_view
 # Bluesky OAuth
 #
 def bluesky_oauth_client_metadata():
-    base_url = (f'https://{DOMAIN}/' if request.host.endswith('.appspot.com')
-                else request.host_url)
     return {
         **oauth_dropins.bluesky.CLIENT_METADATA_TEMPLATE,
-        'client_id': urljoin(base_url, '/oauth/bluesky/client-metadata.json'),
+        'client_id': urljoin(request.host_url, '/oauth/bluesky/client-metadata.json'),
         'client_name': 'Bounce',
-        'client_uri': base_url,
+        'client_uri': request.host_url,
         'redirect_uris': [
-            urljoin(base_url, '/oauth/bluesky/finish/from'),
-            urljoin(base_url, 'oauth/bluesky/finish/to'),
+            urljoin(request.host_url, '/oauth/bluesky/finish/from'),
+            urljoin(request.host_url, 'oauth/bluesky/finish/to'),
         ],
     }
 

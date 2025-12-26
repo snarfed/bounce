@@ -54,12 +54,21 @@ gcloud -q beta app deploy --no-cache --project bounce-migrate *.yaml
 ```
 
 
-Sharing Bridgy Fed's memcache
+Production architecture
 ---
-Bounce modifies data in Bridgy Fed's datastore directly, but right now it can't access Bridgy Fed's MemoryStore memcache instance. It'd be a huge help if it could! That would let it [use memcache for ATProto sequence allocation](https://github.com/snarfed/arroba/issues/69) directly, and also share Bridgy Fed's ndb memcache caching natively, without having to hit Bridgy Fed's `/admin/memcache-evict` endpoint to manually evict stale cached datastore entities.
+Bounce's current architecture and deployment is a bit unusual. It's an App Engine Standard app that runs _in Bridgy Fed's Google Cloud project_, `bridgy-federated`, so that it can access Bridgy Fed's Memorystore memcache instance.
 
-Theoretically, it _should_ be possible to set Bounce up to access Bridgy Fed's memcache with [Shared VPC](https://docs.cloud.google.com/vpc/docs/shared-vpc). I spent a lot of time trying to get that to work, but never succeeded. Grr. Here's what I did:
+Bounce originally ran in its own project, `bounce-migrate`, but I never managed to get it access to Bridgy Fed's memcache. That was tolerable for a while - I used Bridgy Fed's `/admin/memcache-evict` endpoint to manually evict stale cached datastore entities there when I modified them in Bounce - but [eventually we needed to switch ATProto sequence number allocation to memcache](https://github.com/snarfed/arroba/issues/69), which meant Bounce _needed_access.
 
+One awkward part of this is that Bounce still uses the datastore, task queues, etc in the old `bounce-migrate` project. The code is set up to point there.
+
+Another awkward part is that Bounce now runs as the `bridgy-federated` App Engine service account, `bridgy-federated@appspot.gserviceaccount.com`. I had to give that account access to Datastore, Tasks, etc in `bounce-migrate`'s IAM.
+
+
+Shared VPC (historical only)
+---
+
+Originally, I tried to get memcache access via a [Shared VPC](https://docs.cloud.google.com/vpc/docs/shared-vpc). Here's what I tried.
 * Set up a Shared VPC on `bridgy-federated` as the host project, for its `default` VPC` and `bounce-migrate` as the service project.
 * Added a `shared-serverless-vpc-connector-bounce` subnet to `bridgy-federated`'s VPC with IP range `10.9.0.0/28`.
 * Added a [Serverless VPC Access connector](https://cloud.google.com/vpc/docs/serverless-vpc-access) `to-bridgy-fed-shared` to `bounce-migrate` on that subnet.

@@ -1,7 +1,9 @@
 # https://cloud.google.com/appengine/docs/standard/reference/app-yaml?tab=python
 
-# application: bounce-migrate
+# application: bridgy-federated
 
+service: bounce
+env: standard
 runtime: python312
 
 # default_expiration: 1h
@@ -22,17 +24,10 @@ automatic_scaling:
 inbound_services:
 - warmup
 
-# NOT WORKING OR USED. See section at bottom of README.md.
-#
 # Serverless VPC Access for Memorystore memcache
 # https://cloud.google.com/vpc/docs/serverless-vpc-access
-#
-# note that the VPC is a Shared VPC. bridgy-federated is the host project,
-# bounce-migrate is a service project.
-# https://docs.cloud.google.com/vpc/docs/shared-vpc
-# vpc_access_connector:
-#   name: projects/bounce-migrate/locations/us-central1/connectors/to-bridgy-fed-shared
-#   # egress_setting: all-traffic
+vpc_access_connector:
+  name: projects/bridgy-federated/locations/us-central1/connectors/bridgy-fed
 
 env_variables:
   PDS_HOST: atproto.brid.gy
