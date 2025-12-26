@@ -1,13 +1,1 @@
-# https://cloud.google.com/appengine/docs/standard/python/config/queueref
-# https://cloud.google.com/tasks/docs/queue-yaml
-queue:
-- name: review
-  rate: 500/s
-  retry_parameters:
-    task_retry_limit: 5
-    min_backoff_seconds: 5
-
-- name: migrate
-  rate: 500/s
-  retry_parameters:
-    task_retry_limit: 0
+# Bounce's task queues are defined in ../bridgy-fed/queue.yaml

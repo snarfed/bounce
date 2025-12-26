@@ -74,9 +74,8 @@ PROTOCOLS = set(p for p in models.PROTOCOLS.values() if p and p.LABEL != 'ui')
 BRIDGY_FED_PROJECT_ID = 'bridgy-federated'
 bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
 
-# point Google Cloud APIs to bounce-migrate project
+# point ndb to bounce-migrate's datastore
 BOUNCE_PROJECT_ID = 'bounce-migrate'
-appengine_info.PROJECT = appengine_info.APP_ID = BOUNCE_PROJECT_ID
 bounce_ndb = appengine_config.ndb_client = \
     appengine_config.thread_local.ndb_client = ndb.Client(project=BOUNCE_PROJECT_ID)
 
