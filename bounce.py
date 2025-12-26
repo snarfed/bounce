@@ -1,4 +1,4 @@
-"""UI pages."""
+"""All of the Bounce app."""
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from enum import auto, IntEnum
@@ -51,7 +51,6 @@ from oauth_dropins.webutil.flask_util import (
 )
 from oauth_dropins.webutil.models import EnumProperty, JsonProperty
 from oauth_dropins.webutil.util import json_dumps, json_loads
-from pymemcache.test.utils import MockMemcacheClient
 import pytz
 from requests import RequestException
 from requests_oauth2client import TokenSerializer, OAuth2AccessTokenAuth
@@ -1008,7 +1007,6 @@ def disable_bridging_post(from_auth, to_auth):
         # TODO? for #50
         # to_user.delete(from_proto)
         to_user.disable_protocol(from_proto)
-        memcache.remote_evict(to_user.key)
 
     return confirm()
 
@@ -1272,14 +1270,8 @@ def migrate_in(migration, from_auth, from_user, to_user):
             'pds_client': old_pds_client,
         }
 
-    memcache.remote_evict(to_user.key)
-    if to_user.obj_key:
-        memcache.remote_evict(to_user.obj_key)
-
     with ndb.context.Context(bridgy_fed_ndb).use():
         from_user.migrate_in(to_user, from_user.key.id(), **migrate_in_kwargs)
-
-    memcache.remote_evict(from_user.key)
 
 
 def migrate_in_blobs(from_auth):
@@ -1365,8 +1357,6 @@ def migrate_out(migration, from_user, to_user):
     with ndb.context.Context(bridgy_fed_ndb).use():
         to_user.enable_protocol(from_proto)
         from_proto.bot_maybe_follow_back(to_user)
-
-    memcache.remote_evict(to_user.key)
 
 
 @app.get('/admin/memcache-get')

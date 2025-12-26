@@ -1270,11 +1270,6 @@ When you migrate  al.ice to  @alice@in.st ...
             'uri': 'at://did:plc:eve/fo.ll.ow/456',
             'cid': 'xyzuvtsr',
         }),
-        # memcache evict both accounts, twice
-        requests_response(''),
-        requests_response(''),
-        requests_response(''),
-        requests_response(''),
     ])
     @patch('requests.get', side_effect=[
         requests_response(DID_DOC),
@@ -1310,12 +1305,6 @@ When you migrate  al.ice to  @alice@in.st ...
             self.assertEqual(False, to_key.get().manual_opt_out)
 
         mock_post.assert_has_calls([
-            call('https://fed.brid.gy/admin/memcache-evict',
-                 data={'key': from_key.urlsafe()},
-                 headers=ANY, timeout=15, stream=True),
-            call('https://fed.brid.gy/admin/memcache-evict',
-                 data={'key': to_key.urlsafe()},
-                 headers=ANY, timeout=15, stream=True),
             call('https://some.pds.bsky.network/xrpc/com.atproto.repo.createRecord', json={
                 'repo': 'did:plc:alice',
                 'collection': 'app.bsky.graph.follow',
@@ -1350,15 +1339,9 @@ When you migrate  al.ice to  @alice@in.st ...
         # createRecords for follows
         requests_response(status=400),
         requests_response({'id': '456', 'following': True}),
-        # memcache evict to user and its profile object
-        requests_response(''),
-        requests_response(''),
         requests_response({'operation': {'foo': 'bar'}}),  # signPlcOperation
         requests_response(),    # PLC update
         requests_response({}),  # deactivateAccount
-        # memcache evict from, to accounts
-        requests_response(''),
-        requests_response(''),
     ])
     @patch('requests.get', side_effect=[
         requests_response(SNARFED2_DID_DOC),
@@ -1665,13 +1648,11 @@ When you migrate  al.ice to  @alice@in.st ...
 
     @patch.object(tasks_client, 'create_task')
     @patch('bounce.confirm', return_value='okay')
-    @patch('requests.post', return_value=requests_response())  # memcache evict alice
     @patch('requests.get', side_effect=[
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
     ])
-    def test_disable_bridging_post(self, mock_get, mock_post, mock_confirm,
-                                   mock_create_task):
+    def test_disable_bridging_post(self, mock_get, mock_confirm, mock_create_task):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
             to_auth = self.make_mastodon(sess)
@@ -1700,10 +1681,6 @@ When you migrate  al.ice to  @alice@in.st ...
         with ndb.context.Context(bridgy_fed_ndb).use():
             to_user = to_user.key.get()
             self.assertEqual([], to_user.enabled_protocols)
-
-        mock_post.assert_called_with('https://fed.brid.gy/admin/memcache-evict',
-                                     data={'key': to_user.key.urlsafe()},
-                                     headers=ANY, timeout=15, stream=True)
 
         # TODO? for #50
         # id = 'http://in.st/users/alice#bridgy-fed-delete-user-atproto-2022-01-02T03:04:05+00:00'
