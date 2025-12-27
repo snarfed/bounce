@@ -150,6 +150,7 @@ app.wsgi_app = flask_util.ndb_context_middleware(
 
 models.reset_protocol_properties()
 
+arroba.datastore_storage.memcache = memcache.memcache
 arroba.server.storage = DatastoreStorage(ndb_client=bridgy_fed_ndb)
 
 
