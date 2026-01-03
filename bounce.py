@@ -1360,21 +1360,6 @@ def migrate_out(migration, from_user, to_user):
         from_proto.bot_maybe_follow_back(to_user)
 
 
-@app.get('/admin/memcache-get')
-def memcache_get():
-    logger.info(f'memcache get {memcache.memcache.server}')
-    if request.headers.get('Authorization') != app.config['SECRET_KEY']:
-        return '', 401
-
-    if key := request.values.get('key'):
-        return repr(Key(urlsafe=key).get(use_cache=False, use_datastore=False,
-                                         use_global_cache=True))
-    elif raw := request.values.get('raw'):
-        return repr(memcache.memcache.get(raw))
-    else:
-        error('either key or raw are required')
-
-
 @app.get('/admin/activity')
 def admin_activity():
     # maps string platform to count
