@@ -34,7 +34,6 @@ env_variables:
   PLC_HOST: plc.directory
   APPVIEW_HOST: api.bsky.app
   BGS_HOST: bsky.network
-  MEMCACHE_SEQUENCE_ALLOCATION: true
   MEMCACHE_HOST: '10.126.144.3'
 
 handlers:
