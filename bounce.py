@@ -59,10 +59,12 @@ from requests_oauth2client import TokenSerializer, OAuth2AccessTokenAuth
 from activitypub import ActivityPub
 from atproto import ATProto
 import common
+import domains
 import ids
 from ids import translate_user_id
 import memcache
 import models
+import nostr
 from protocol import Protocol
 from web import Web
 
@@ -150,8 +152,7 @@ app.wsgi_app = flask_util.ndb_context_middleware(
 
 models.reset_protocol_properties()
 
-arroba.datastore_storage.memcache = memcache.memcache
-arroba.server.storage = DatastoreStorage(ndb_client=bridgy_fed_ndb)
+# atproto.py sets up arroba.server.storage, etc
 
 
 #
@@ -742,7 +743,7 @@ def review_follows(migration, from_auth, to_auth):
     ids_by_proto = defaultdict(list)
     for followee in follows:
         followee['image'] = util.get_first(followee, 'image')
-        id = common.unwrap(followee.get('id'))
+        id = domains.unwrap(followee.get('id'))
         proto = Protocol.for_id(id, remote=False) or from_proto
         ids_by_proto[proto].append(id)
 
