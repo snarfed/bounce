@@ -12,7 +12,7 @@ import sys
 from urllib.parse import urljoin
 
 from arroba import xrpc_repo
-from arroba.datastore_storage import AtpRemoteBlob, DatastoreStorage
+from arroba.datastore_storage import AtpRemoteBlob, DatastoreStorage, MemcacheSequences
 import arroba.server
 from flask import Flask, redirect, render_template, request
 import flask_gae_static
@@ -153,7 +153,8 @@ app.wsgi_app = flask_util.ndb_context_middleware(
 
 models.reset_protocol_properties()
 
-# atproto.py sets up arroba.server.storage, etc
+if not appengine_info.DEBUG and not appengine_info.LOCAL_SERVER:
+    atproto.init(MemcacheSequences)
 
 
 #

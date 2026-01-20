@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, quote, urlencode
 
 import arroba
 from arroba import did, server
-from arroba.datastore_storage import AtpRemoteBlob
+from arroba.datastore_storage import AtpRemoteBlob, MemcacheSequences
 from arroba.tests.test_xrpc_repo import (
     SNARFED2_CAR,
     SNARFED2_DID,
@@ -50,6 +50,7 @@ from requests_oauth2client import (
 # from Bridgy Fed
 import activitypub
 from activitypub import ActivityPub
+import atproto
 from atproto import ATProto
 import common
 from common import long_to_base64, TASKS_LOCATION
@@ -205,6 +206,9 @@ class BounceTest(TestCase, Asserts):
         util.now = lambda **kwargs: NOW
 
         appengine_info.APP_ID = 'my-app'
+
+        atproto.appview.address = 'https://appview.local'
+        atproto.init(MemcacheSequences)
 
     def tearDown(self):
         self.ndb_context.__exit__(None, None, None)
