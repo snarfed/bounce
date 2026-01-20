@@ -357,19 +357,17 @@ class BounceTest(TestCase, Asserts):
         self.assert_multiline_in("""\
 <a id="logins" href="/from">
 <nobr title="Bluesky: al.ice">""", body, ignore_blanks=True)
-        # TODO: re-enable when we add fediverse => Bluesky support
-#         self.assert_multiline_in("""\
-# <nobr title="Mastodon: @alice@in.st">""", body)
-
+        self.assert_multiline_in("""\
+<nobr title="Mastodon: @alice@in.st">""", body)
         self.assert_multiline_in("""\
 <a class="actor" href="/to?from=agNhcHByHgsSC0JsdWVza3lBdXRoIg1kaWQ6cGxjOmFsaWNlDA">
 <img src="/oauth_dropins_static/bluesky_icon.png"
 class="logo" title="Bluesky" />
 <img src="http://alice/pic" class="profile">
 <span style="unicode-bidi: isolate">al.ice</span>""", body)
-#         self.assert_multiline_in("""\
-# <img src="http://in.st/@alice/pic" class="profile">
-# <span style="unicode-bidi: isolate">@alice@in.st</span>""", body)
+        self.assert_multiline_in("""\
+<img src="http://in.st/@alice/pic" class="profile">
+<span style="unicode-bidi: isolate">@alice@in.st</span>""", body)
 
     def test_to(self):
         with self.client.session_transaction() as sess:
@@ -400,6 +398,10 @@ class="logo" title="Bluesky" />
         self.assertEqual(['Sorry, did:webs are not currently supported.'],
                          get_flashed_messages())
 
+    def test_to_bad_key(self):
+        resp = self.get('/to', **{'from': 'not a urlsafe key'})
+        self.assertEqual(400, resp.status_code)
+
     def test_review_not_logged_in(self):
         resp = self.get('/review', BlueskyAuth(id='did:foo').key,
                         MastodonAuth(id='@bar@ba.z').key)
@@ -408,6 +410,10 @@ class="logo" title="Bluesky" />
 
     def test_review_no_auth_param(self):
         resp = self.get('/review')
+        self.assertEqual(400, resp.status_code)
+
+    def test_review_bad_to_key(self):
+        resp = self.get('/to', to='not a urlsafe key')
         self.assertEqual(400, resp.status_code)
 
     @patch.object(tasks_client, 'create_task')

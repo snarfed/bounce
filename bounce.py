@@ -18,6 +18,7 @@ from flask import Flask, redirect, render_template, request
 import flask_gae_static
 from google.cloud import ndb, storage
 from google.cloud.ndb.key import Key
+from google.protobuf.message import DecodeError
 from granary import as2
 from granary.bluesky import Bluesky
 from granary.mastodon import Mastodon
@@ -340,7 +341,11 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
         else:
             error(f'missing one of required params: {params}')
 
-        key = ndb.Key(urlsafe=urlsafe_key)
+        try:
+            key = ndb.Key(urlsafe=urlsafe_key)
+        except DecodeError as err:
+            error(f'invalid {param}', exc_info=True)
+
         if auth := key.get():
             if not logged_in or key in oauth_dropins.get_logins():
                 return auth
