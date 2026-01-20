@@ -58,6 +58,7 @@ from requests_oauth2client import TokenSerializer, OAuth2AccessTokenAuth
 
 # from Bridgy Fed
 from activitypub import ActivityPub
+import atproto
 from atproto import ATProto
 import common
 import domains
