@@ -1419,6 +1419,7 @@ class MastodonStart(FlashErrors, oauth_dropins.mastodon.Start):
         '/oauth/mastodon/finish/from',
         '/oauth/mastodon/finish/to',
     )
+    ON_ERROR_REDIRECT_TO = '/from'
 
     def app_name(self):
         return 'Bounce'
@@ -1427,7 +1428,7 @@ class MastodonStart(FlashErrors, oauth_dropins.mastodon.Start):
         return 'https://bounce.anew.social/'
 
 class MastodonCallback(FlashErrors, oauth_dropins.mastodon.Callback):
-    pass
+    ON_ERROR_REDIRECT_TO = '/from'
 
 
 class PixelfedStart(FlashErrors, oauth_dropins.pixelfed.Start):
@@ -1438,6 +1439,7 @@ class PixelfedStart(FlashErrors, oauth_dropins.pixelfed.Start):
         '/oauth/pixelfed/finish/from',
         '/oauth/pixelfed/finish/to',
     )
+    ON_ERROR_REDIRECT_TO = '/from'
 
     def app_name(self):
         return 'Bounce'
@@ -1446,7 +1448,7 @@ class PixelfedStart(FlashErrors, oauth_dropins.pixelfed.Start):
         return 'https://bounce.anew.social/'
 
 class PixelfedCallback(FlashErrors, oauth_dropins.pixelfed.Callback):
-    pass
+    ON_ERROR_REDIRECT_TO = '/from'
 
 
 # class ThreadsStart(FlashErrors, oauth_dropins.threads.Start):
