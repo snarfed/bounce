@@ -1,5 +1,10 @@
 <!-- TODO: unify with actor_label.html; use granary source to_as1_actor -->
 <nobr>
+{% if auth.key.id() == 'protocol-only' %}
+  <img src="/oauth_dropins_static/{{ auth.site_name().lower() }}_icon.png"
+       class="logo"/>
+  {{ auth.site_name() }}
+{% else %}
 <a class="actor" href="{{ auth.url|safe }}">
   <img src="/oauth_dropins_static/{{ auth.site_name().lower() }}_icon.png"
        class="logo" title="{{ auth.site_name() }}" />
@@ -9,4 +14,5 @@
   <!--   · <span class="small">{{ auth.key.id() }}</span> -->
   <!-- {% endif %} -->
 </a>
+{% endif %}
 </nobr>

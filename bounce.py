@@ -105,6 +105,10 @@ BRIDGE_DOMAIN_TO_PROTOCOL = {
     'fed.brid.gy': Web,
     'web.brid.gy': Web,
 }
+# used as the key id in oauth-dropins auth entities and Bridgy Fed user entities
+# when we know the protocol someone's migrating to, but not the account yet, since
+# it'll be a new account that we create
+PROTOCOL_ONLY_ID = 'protocol-only'
 SETTINGS_PATH_ALIAS = {
     MastodonAuth: '/settings/aliases',
     PixelfedAuth: '/settings/account/aliases/manage',
@@ -348,6 +352,10 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
         except DecodeError as err:
             error(f'invalid {param}', exc_info=True)
 
+        if key.id() == PROTOCOL_ONLY_ID:
+            cls = ndb.Model._kind_map[key.kind()]
+            return cls(id=PROTOCOL_ONLY_ID)
+
         if auth := key.get():
             if not logged_in or key in oauth_dropins.get_logins():
                 return auth
@@ -453,6 +461,10 @@ def _get_user(auth):
       models.User:
     """
     proto = AUTH_TO_PROTOCOL[auth.__class__]
+
+    if auth.key.id() == PROTOCOL_ONLY_ID:
+        return proto(id=PROTOCOL_ONLY_ID)
+
     id = auth.actor_id() if proto == ActivityPub else auth.key.id()
 
     with ndb.context.Context(bridgy_fed_ndb).use():

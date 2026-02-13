@@ -67,6 +67,7 @@ from bounce import (
     app,
     CLOUD_STORAGE_BASE_URL,
     CLOUD_STORAGE_BUCKET,
+    PROTOCOL_ONLY_ID,
     bridgy_fed_ndb,
     Migration,
     State,
@@ -623,9 +624,103 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
+    @patch.object(tasks_client, 'create_task')
+    def test_review_protocol_only_starts_task(self, mock_create_task):
+        self.make_bot_users()
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        to_key = BlueskyAuth(id=PROTOCOL_ONLY_ID).key
+        resp = self.get('/review', from_auth, to_key)
+        self.assertEqual(200, resp.status_code)
+
+        migration = Migration.get_by_id(f'@alice@in.st atproto')
+        self.assertEqual(State.review_followers, migration.state)
+        self.assert_task(mock_create_task, 'review', from_=from_auth, to=to_key)
+
+    def test_review_done_protocol_only(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        to_key = BlueskyAuth(id=PROTOCOL_ONLY_ID).key
+        Migration(id=f'@alice@in.st atproto', from_=from_auth, to=to_key,
+                  state=State.review_done,
+                  review=REVIEW_DATA_MASTODON_TO_BLUESKY).put()
+
+        resp = self.get('/review', from_auth, to_key)
+        self.assertEqual(200, resp.status_code)
+
+        body = resp.get_data(as_text=True)
+        self.assert_multiline_in("""
+document.getElementById('followers-chart'));
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1]])""", body)
+        self.assert_multiline_in("""
+document.getElementById('follows-chart'));
+chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 0], ["Web", 1], ["not bridged", 1]])""", body)
+
+        text = html_to_text(body)
+        self.assert_multiline_in("""
+When you migrate  @alice@in.st to  Bluesky  ...
+### You'll keep _all_ of your 2 followers.
+* @alice@in.st
+* Bawb · ba.wb
+### You'll keep _67%_ of your 3 follows.
+* @alice@in.st
+* Bawb · ba.wb
+* 🌐 e.ve""", text, ignore_blanks=True)
+        self.assertIn('<form action="/confirm" method="post">', body)
+
+    def test_review_task_protocol_only_mastodon_to_bluesky(self):
+        self.make_bot_users()
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess, login=False)
+
+        alice = {
+            'id': '234',
+            'uri': 'http://in.st/users/alice',
+            'username': 'alice',
+            'display_name': 'Ms Alice',
+            'acct': 'alice@in.st',
+            'url': 'http://in.st/users/alice',
+            'avatar': 'http://in.st/alice/pic',
+        }
+        bob = {
+            'uri': 'http://bsky.brid.gy/ap/did:plc:bob',
+            'username': 'bo.b',
+            'acct': 'bo.b@bsky.brid.gy',
+            'url': 'https://bsky.brid.gy/r/https://bsky.app/profile/bo.b',
+            'avatar': 'http://bsky.app/bo.b/pic',
+        }
+        eve = {
+            'uri': 'http://web.brid.gy/e.ve',
+            'username': 'e.ve',
+            'acct': 'e.ve@web.brid.gy',
+            'url': 'http://e.ve/',
+            'avatar': 'http://e.ve/pic',
+        }
+        bot = {  # should be ignored
+            'uri': 'https://bsky.brid.gy/bsky.brid.gy',
+            'username': 'bsky.brid.gy',
+            'acct': 'bsky.brid.gy@bsky.brid.gy',
+        }
+
+        to_auth = BlueskyAuth(id=PROTOCOL_ONLY_ID).key
+        migration = self._test_review_task_activitypub_to_bluesky(
+            from_auth=from_auth, to_auth=to_auth, followers=[alice, bob],
+            follows=[alice, bob, eve, bot])
+        self.assertEqual(State.review_done, migration.state)
+        self.assertEqual(['did:plc:bob', 'did:plc:eve'], migration.to_follow)
+
+    def test_get_user_protocol_only(self):
+        to_auth = BlueskyAuth(id=PROTOCOL_ONLY_ID)
+        user = bounce._get_user(to_auth)
+        self.assertEqual(PROTOCOL_ONLY_ID, user.key.id())
+        self.assertIsInstance(user, ATProto)
+
     def test_review_task_pixelfed_to_bluesky(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_pixelfed(sess, login=False)
+            to_auth = self.make_bluesky(sess, login=False)
 
         # background: https://github.com/pixelfed/pixelfed/discussions/6182
         alice = {  # local
@@ -671,7 +766,7 @@ When you migrate  al.ice to  @alice@in.st ...
         })
 
         migration = self._test_review_task_activitypub_to_bluesky(
-            from_auth=from_auth, followers=[alice, bob],
+            from_auth=from_auth, to_auth=to_auth, followers=[alice, bob],
             follows=[alice, alan, bob, eve, bot],
             extra_gets=[
                 alan_ap_actor,
@@ -699,6 +794,7 @@ When you migrate  al.ice to  @alice@in.st ...
     def test_review_task_mastodon_to_bluesky(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess, login=False)
+            to_auth = self.make_bluesky(sess, login=False)
 
         alice = {
             'id': '234',
@@ -730,14 +826,14 @@ When you migrate  al.ice to  @alice@in.st ...
         }
 
         migration = self._test_review_task_activitypub_to_bluesky(
-            from_auth=from_auth, followers=[alice, bob],
+            from_auth=from_auth, to_auth=to_auth, followers=[alice, bob],
             follows=[alice, bob, eve, bot])
         self.assertEqual(['did:plc:bob', 'did:plc:eve'], migration.to_follow)
         self.assert_equals(REVIEW_DATA_MASTODON_TO_BLUESKY, migration.review,
                            ignore=['follows_preview_raw', 'followers_preview_raw'])
 
     @patch('requests.get')
-    def _test_review_task_activitypub_to_bluesky(self, mock_get, from_auth,
+    def _test_review_task_activitypub_to_bluesky(self, mock_get, from_auth, to_auth,
                                                  followers, follows, extra_gets=()):
         self.make_bot_users()
 
@@ -767,10 +863,10 @@ When you migrate  al.ice to  @alice@in.st ...
             Object(id='did:plc:alice', raw=DID_DOC).put()
             ATProto(id='did:plc:alice', enabled_protocols=['web']).put()
 
-        with self.client.session_transaction() as sess:
-            to_auth = self.make_bluesky(sess, login=False)
-
-        Migration.get_or_insert(from_auth.get(), to_auth.get())
+        to_auth_entity = (ndb.Model._kind_map[to_auth.kind()](id=PROTOCOL_ONLY_ID)
+                          if to_auth.id() == PROTOCOL_ONLY_ID
+                          else to_auth.get())
+        Migration.get_or_insert(from_auth.get(), to_auth_entity)
         resp = self.post('/queue/review', from_auth, to_auth)
         self.assertEqual(200, resp.status_code)
 
