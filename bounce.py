@@ -53,7 +53,7 @@ from oauth_dropins.webutil.flask_util import (
 from oauth_dropins.webutil.models import EnumProperty, JsonProperty
 from oauth_dropins.webutil.util import json_dumps, json_loads
 import pytz
-from requests import RequestException
+from requests import HTTPError, RequestException
 from requests_oauth2client import TokenSerializer, OAuth2AccessTokenAuth
 
 # from Bridgy Fed
@@ -926,8 +926,8 @@ def bluesky_new_pds_post(from_auth):
         'bluesky_create_account.html',
         from_auth=from_auth,
         pds=pds,
-        domain=domains[0],
         invite_code=desc.get('inviteCodeRequired'),
+        phone_verification_code=desc.get('phoneVerificationRequired'),
         **template_vars(),
     )
 
@@ -936,7 +936,29 @@ def bluesky_new_pds_post(from_auth):
 @require_accounts('from')
 def bluesky_create_account(from_auth):
     """Creates a new Bluesky account on a given PDS."""
-    return '', 200
+    kwargs = {
+        'pds': get_required_param('pds'),
+        'email': get_required_param('email'),
+        'password': get_required_param('password'),
+        'invite_code': request.values.get('invite-code'),
+        'phone_verification_code': request.values.get('phone-verification-code'),
+    }
+
+    try:
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            resp = ATProto.create_account_for_migrate_out(
+                get_user(from_auth), **kwargs)
+        # TODO: store tokens in Migration
+        return redirect(url('/confirm', from_auth, BlueskyAuth(id=PROTOCOL_ONLY_ID)))
+
+    except HTTPError as e:
+        msg = str(e)
+        if e.response is not None and e.response.headers.get('Content-Type') == 'application/json':
+            # https://atproto.com/specs/xrpc#error-responses
+            msg = e.response.json().get('message') or e.response.json().get('error')
+        flash(msg)
+        return render_template('bluesky_create_account.html',
+                               from_auth=from_auth, **kwargs, **template_vars())
 
 
 @app.route('/confirm', methods=['GET', 'POST'])

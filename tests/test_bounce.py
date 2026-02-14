@@ -10,7 +10,9 @@ from urllib.parse import parse_qs, quote, urlencode
 
 import arroba
 from arroba import did, server
+import arroba.util
 from arroba.datastore_storage import AtpRemoteBlob, MemcacheSequences
+from arroba.repo import Repo
 from arroba.tests.test_xrpc_repo import (
     SNARFED2_CAR,
     SNARFED2_DID,
@@ -39,6 +41,7 @@ from oauth_dropins.webutil.testutil import (
 )
 from oauth_dropins.webutil.util import json_dumps, json_loads
 import requests
+from requests import HTTPError
 from requests_oauth2client import (
   DPoPKey,
   DPoPToken,
@@ -1858,16 +1861,76 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assert_multiline_in(f"""\
 <input type="hidden" name="from" value="{from_auth.urlsafe().decode()}" />
 <input type="hidden" name="pds" value="https://pds.net" />
-<input type="hidden" name="domain" value=".my.pds.net" />
 """, body)
+        self.assert_multiline_in('<input type="text" name="invite-code" required placeholder="invite code" />', body)
 
-    def test_bluesky_create_account(self):
+    @patch('requests.post', return_value=requests_response({
+        'accessJwt': 'towkin',
+        'refreshJwt': 'reefresh',
+        'handle': 'in.st.pds.net',
+        'did': 'did:plc:alice',
+    }))
+    @patch('requests.get', return_value=requests_response({
+        'did': 'did:web:pds.net',
+        'availableUserDomains': ['pds.net'],
+    }))
+    def test_bluesky_create_account(self, mock_get, mock_post):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
+
+        key = arroba.util.new_key(seed=1234)
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+            Repo.create(server.storage, 'did:plc:alice', handle='alice.in.st.brid.gy',
+                        signing_key=key, rotation_key=key)
+
+        resp = self.post('/bluesky-create-account', from_auth, pds='https://pds.net',
+                         email='alice@example.com', password='hunter2')
+        self.assertEqual(302, resp.status_code)
+        self.assertIn('/confirm', resp.headers['Location'])
+
+        mock_post.assert_called_once_with(
+            'https://pds.net/xrpc/com.atproto.server.createAccount',
+            json={
+                'handle': 'alice.in.st.pds.net',
+                'did': 'did:plc:alice',
+                'email': 'alice@example.com',
+                'password': 'hunter2',
+            },
+            data=None, headers=ANY, auth=None)
+
+    @patch('requests.post', return_value= requests_response(
+        {'error': 'InvalidInviteCode', 'message': 'foo bar'},
+        status=400, headers={'Content-Type': 'application/json'},
+    ))
+    @patch('requests.get', return_value=requests_response({
+        'did': 'did:web:pds.net',
+        'availableUserDomains': ['pds.net'],
+    }))
+    def test_bluesky_create_account_error(self, mock_get, mock_post):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        key = arroba.util.new_key(seed=1234)
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+            Repo.create(server.storage, 'did:plc:alice', handle='in.st.brid.gy',
+                        signing_key=key, rotation_key=key)
 
         resp = self.post('/bluesky-create-account', from_auth, pds='https://pds.net',
                          email='alice@example.com', password='hunter2')
         self.assertEqual(200, resp.status_code)
+        self.assertEqual('foo bar', get_flashed_messages()[0])
+
+        body = resp.get_data(as_text=True)
+        self.assert_multiline_in(f"""\
+<input type="hidden" name="from" value="{from_auth.urlsafe().decode()}" />
+<input type="hidden" name="pds" value="https://pds.net" />
+""", body)
 
     @patch('requests.get', side_effect=[
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),

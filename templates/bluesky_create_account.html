@@ -20,7 +20,6 @@
   <form action="/bluesky-create-account" method="post">
     <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
     <input type="hidden" name="pds" value="{{ pds }}" />
-    <input type="hidden" name="domain" value="{{ domain }}" />
     <p>
     <input type="email" name="email" required placeholder="email" />
     <input type="password" name="password" required placeholder="password" />
