@@ -1861,33 +1861,13 @@ When you migrate  @alice@in.st to  Bluesky  ...
 <input type="hidden" name="domain" value=".my.pds.net" />
 """, body)
 
-    def test_bluesky_new_pds_details(self):
+    def test_bluesky_create_account(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
 
-        resp = self.post('/bluesky-new-pds-details', from_auth,
-                         pds='https://pds.net',
+        resp = self.post('/bluesky-create-account', from_auth, pds='https://pds.net',
                          email='alice@example.com', password='hunter2')
         self.assertEqual(200, resp.status_code)
-
-    @patch('requests.get', side_effect=[
-        requests_response({
-            'did': 'did:web:pds.net',
-            'availableUserDomains': ['pds.net'],
-            'inviteCodeRequired': False,
-            'phoneVerificationRequired': False,
-        }),
-    ])
-    def test_bluesky_new_pds_post_describe_server_fields(self, mock_get):
-        with self.client.session_transaction() as sess:
-            from_auth = self.make_mastodon(sess)
-
-        resp = self.post('/bluesky-new-pds', from_auth,
-                         pds='https://pds.net')
-        self.assertEqual(200, resp.status_code)
-        body = resp.get_data(as_text=True)
-        self.assertIn('pds.net', body)
-        self.assertNotIn('invite-code', body)
 
     @patch('requests.get', side_effect=[
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),

@@ -925,7 +925,7 @@ def bluesky_new_pds_post(from_auth):
         return redirect(url('/bluesky-new-pds', from_auth))
 
     return render_template(
-        'bluesky_new_pds_details.html',
+        'bluesky_create_account.html',
         from_auth=from_auth,
         pds=pds,
         domain=domains[0],
@@ -934,10 +934,10 @@ def bluesky_new_pds_post(from_auth):
     )
 
 
-@app.post('/bluesky-new-pds-details')
+@app.post('/bluesky-create-account')
 @require_accounts('from')
-def bluesky_new_pds_details(from_auth):
-    """Handles the new PDS account creation details."""
+def bluesky_create_account(from_auth):
+    """Creates a new Bluesky account on a given PDS."""
     return '', 200
 
 
