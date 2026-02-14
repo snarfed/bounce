@@ -713,7 +713,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
 
     def test_get_user_protocol_only(self):
         to_auth = BlueskyAuth(id=PROTOCOL_ONLY_ID)
-        user = bounce._get_user(to_auth)
+        user = bounce.get_user(to_auth)
         self.assertEqual(PROTOCOL_ONLY_ID, user.key.id())
         self.assertIsInstance(user, ATProto)
 

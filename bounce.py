@@ -451,7 +451,7 @@ def granary_source(auth, with_auth=False, **requests_kwargs):
                        **requests_kwargs)
 
 
-def _get_user(auth):
+def get_user(auth):
     """Loads and returns the Bridgy Fed user for a given auth entity.
 
     Args:
@@ -469,8 +469,6 @@ def _get_user(auth):
 
     with ndb.context.Context(bridgy_fed_ndb).use():
         return proto.get_or_create(id, allow_opt_out=True)
-
-get_to_user = get_from_user = _get_user
 
 
 #
@@ -597,7 +595,7 @@ def review(from_auth, to_auth):
             return redirect(url('/to', from_auth))
 
     # check that "to" user is eligible
-    get_to_user(to_auth)
+    get_user(to_auth)
 
     if migration.to and migration.to != to_auth.key:
         logger.info(f'  overwriting existing to {migration.to} with {to_auth.key}')
@@ -953,7 +951,7 @@ def confirm(from_auth, to_auth):
 
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
     to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
-    to_user = get_to_user(to_auth)
+    to_user = get_user(to_auth)
 
     # first, do all the checks that don't add request params:
     # * if to user is already bridged back, need to disable that
@@ -961,7 +959,7 @@ def confirm(from_auth, to_auth):
     if from_proto.HAS_COPIES and to_user.is_enabled(from_proto):
         return redirect(url('/disable-bridging', from_auth, to_auth))
 
-    from_user = get_from_user(from_auth)
+    from_user = get_user(from_auth)
     if from_user.is_enabled(to_proto):
         try:
             with ndb.context.Context(bridgy_fed_ndb).use():
@@ -1026,7 +1024,7 @@ def set_alsoKnownAs(from_auth, to_auth):
     if AUTH_TO_PROTOCOL[to_auth.__class__] != ActivityPub:
         error(f'{to_auth.key.id()} is not ActivityPub')
 
-    from_user = get_from_user(from_auth)
+    from_user = get_user(from_auth)
     with ndb.context.Context(bridgy_fed_ndb).use():
         from_ap_handle = from_user.handle_as(ActivityPub)
 
@@ -1047,7 +1045,7 @@ def set_alsoKnownAs(from_auth, to_auth):
 def disable_bridging_get(from_auth, to_auth):
     """View for disabling existing bridging."""
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
-    to_user = _get_user(to_auth)
+    to_user = get_user(to_auth)
 
     with ndb.context.Context(bridgy_fed_ndb).use():
         follower_count = models.Follower.query(
@@ -1072,7 +1070,7 @@ def disable_bridging_get(from_auth, to_auth):
 def disable_bridging_post(from_auth, to_auth):
     """Disable bridging for the to account."""
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
-    to_user = _get_user(to_auth)
+    to_user = get_user(to_auth)
 
     with ndb.context.Context(bridgy_fed_ndb).use():
         # TODO? for #50
@@ -1150,7 +1148,7 @@ def migrate_get(from_auth, to_auth):
         ActivityPub=ActivityPub,
         from_auth=from_auth,
         to_auth=to_auth,
-        to_user=get_to_user(to_auth),
+        to_user=get_user(to_auth),
         migration=migration,
         State=State,
         **vars,
@@ -1170,12 +1168,12 @@ def activitypub_profile_moved(from_auth, to_auth):
         flash(f'Migration not done yet.')
         return redirect(url('/migrate', from_auth, to_auth))
 
-    from_user = get_from_user(from_auth)
+    from_user = get_user(from_auth)
     with ndb.context.Context(bridgy_fed_ndb).use():
         from_user.reload_profile()
 
     moved_to = from_user.obj.as2.get('movedTo')
-    to_user = get_to_user(to_auth)
+    to_user = get_user(to_auth)
     if moved_to == to_user.id_as(ActivityPub):
         template = 'done.html'
     else:
@@ -1197,7 +1195,7 @@ def activitypub_profile_moved(from_auth, to_auth):
         ActivityPub=ActivityPub,
         from_auth=from_auth,
         to_auth=to_auth,
-        to_user=get_to_user(to_auth),
+        to_user=get_user(to_auth),
         migration=migration,
         **vars,
     )
@@ -1221,8 +1219,8 @@ def migrate_task(from_auth, to_auth):
     migration.last_attempt = util.now()
     migration.put()
 
-    from_user = get_from_user(from_auth)
-    to_user = get_to_user(to_auth)
+    from_user = get_user(from_auth)
+    to_user = get_user(to_auth)
 
     # override spam filters
     with ndb.context.Context(bridgy_fed_ndb).use():
