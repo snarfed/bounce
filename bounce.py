@@ -545,6 +545,9 @@ def choose_to(from_auth):
     for acct in accounts:
         acct.url = url('/review', from_auth, acct)
 
+    atproto_protocol_only_url = url('/review', from_auth,
+                                    BlueskyAuth(id=PROTOCOL_ONLY_ID))
+
     state = f'<input type="hidden" name="state" value="{from_auth.key.urlsafe().decode()}" />'
     if from_proto != ATProto:
         vars['bluesky_button'] = oauth_dropins.bluesky.Start.button_html(
@@ -570,6 +573,8 @@ def choose_to(from_auth):
         from_auth=from_auth,
         from_proto=from_proto,
         accounts=accounts,
+        atproto_protocol_only_url=atproto_protocol_only_url,
+        offer_new_account=(from_proto != ATProto),
         **vars,
     )
 
@@ -621,12 +626,17 @@ def review(from_auth, to_auth):
         path, _ = util.remove_query_param(request.full_path, 'force')
         return redirect(path)
 
+    next_path = '/confirm'
+    if isinstance(to_auth, BlueskyAuth) and to_auth.key.id() == PROTOCOL_ONLY_ID:
+        next_path = '/bluesky-new-pds'
+
     return render_template(
         ('review.html' if migration.state == State.review_done
          else 'review_progress.html'),
         from_auth=from_auth,
         to_auth=to_auth,
         migration=migration,
+        next_path=next_path,
         State=State,
         **migration.review,
         **template_vars(),
@@ -889,6 +899,46 @@ def bluesky_password(from_auth, to_auth):
         to_auth=to_auth,
         **template_vars(),
     )
+
+
+@app.get('/bluesky-new-pds')
+@require_accounts('from')
+def bluesky_new_pds(from_auth):
+    """View for choosing a new Bluesky PDS."""
+    return render_template(
+        'bluesky_new_pds.html',
+        from_auth=from_auth,
+        **template_vars(),
+    )
+
+
+@app.post('/bluesky-new-pds')
+@require_accounts('from')
+def bluesky_new_pds_post(from_auth):
+    """Calls describeServer on the new PDS and shows details form."""
+    pds = get_required_param('pds')
+    client = lexrpc.Client(pds)
+    desc = client.com.atproto.server.describeServer()
+
+    if not (domains := desc['availableUserDomains']):
+        flash(f"{pds} doesn't advertise any handle domains")
+        return redirect(url('/bluesky-new-pds', from_auth))
+
+    return render_template(
+        'bluesky_new_pds_details.html',
+        from_auth=from_auth,
+        pds=pds,
+        domain=domains[0],
+        invite_code=desc.get('inviteCodeRequired'),
+        **template_vars(),
+    )
+
+
+@app.post('/bluesky-new-pds-details')
+@require_accounts('from')
+def bluesky_new_pds_details(from_auth):
+    """Handles the new PDS account creation details."""
+    return '', 200
 
 
 @app.route('/confirm', methods=['GET', 'POST'])

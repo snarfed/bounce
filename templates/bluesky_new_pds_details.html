@@ -1,0 +1,40 @@
+{% set body_id = 'bluesky-password' %}
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="row big">
+  Migrating
+  {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
+  to
+  <img src="/oauth_dropins_static/bluesky_icon.png" class="logo" title="Bluesky">
+  {{ util.pretty_link(pds)|safe }}...
+</div>
+
+<div class="row">
+  <p>Please enter the email address, password, etc. for your new account on
+  {{ util.pretty_link(pds)|safe }}.
+</div>
+
+<div class="row">
+  <form action="/bluesky-new-pds-details" method="post">
+    <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
+    <input type="hidden" name="pds" value="{{ pds }}" />
+    <input type="hidden" name="domain" value="{{ domain }}" />
+    <p>
+    <input type="email" name="email" required placeholder="email" />
+    <input type="password" name="password" required placeholder="password" />
+    <p>
+    {% if invite_code %}
+      <input type="text" name="invite-code" required placeholder="invite code" />
+    {% endif %}
+    {% if phone_verification_code %}
+      <input type="text" name="phone-verification-code" required
+             placeholder="phone verification code" />
+    {% endif %}
+    <p>
+    <input type="submit" class="btn btn-default" value="Next" />
+  </form>
+</div>
+
+{% endblock content %}

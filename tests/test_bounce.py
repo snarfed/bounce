@@ -549,7 +549,7 @@ When you migrate  @alice@in.st to  al.ice ...
 * @alice@in.st
 * Bawb · ba.wb
 * 🌐 e.ve""", text, ignore_blanks=True)
-        self.assertIn('<form action="/confirm" method="post">', body)
+        self.assertIn('<form action="/confirm" method="get">', body)
 
     def test_review_done_bluesky_to_mastodon(self):
         with self.client.session_transaction() as sess:
@@ -585,7 +585,7 @@ When you migrate  al.ice to  @alice@in.st ...
 * al.ice
 * bawb
 * 🌐 e.ve""", text, ignore_blanks=True)
-        self.assertIn('<form action="/confirm" method="post">', body)
+        self.assertIn('<form action="/confirm" method="get">', body)
 
     @patch.object(tasks_client, 'create_task')
     def test_review_in_progress_with_new_to(self, mock_create_task):
@@ -668,7 +668,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
 * @alice@in.st
 * Bawb · ba.wb
 * 🌐 e.ve""", text, ignore_blanks=True)
-        self.assertIn('<form action="/confirm" method="post">', body)
+        self.assertIn('<form action="/bluesky-new-pds" method="get">', body)
 
     def test_review_task_protocol_only_mastodon_to_bluesky(self):
         self.make_bot_users()
@@ -1831,6 +1831,63 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(200, resp.status_code)
         self.assertIn('Success!', resp.get_data(as_text=True))
         self.assertEqual([], get_flashed_messages())
+
+    def test_bluesky_new_pds(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        resp = self.get('/bluesky-new-pds', from_auth)
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+        self.assertIn('@alice@in.st', body)
+
+    @patch('requests.get', side_effect=[
+        requests_response({
+            'did': 'did:web:pds.net',
+            'availableUserDomains': ['.my.pds.net'],
+            'inviteCodeRequired': True,
+        }),
+    ])
+    def test_bluesky_new_pds_post_invite_code_required(self, mock_get):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        resp = self.post('/bluesky-new-pds', from_auth, pds='https://pds.net')
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+        self.assert_multiline_in(f"""\
+<input type="hidden" name="from" value="{from_auth.urlsafe().decode()}" />
+<input type="hidden" name="pds" value="https://pds.net" />
+<input type="hidden" name="domain" value=".my.pds.net" />
+""", body)
+
+    def test_bluesky_new_pds_details(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        resp = self.post('/bluesky-new-pds-details', from_auth,
+                         pds='https://pds.net',
+                         email='alice@example.com', password='hunter2')
+        self.assertEqual(200, resp.status_code)
+
+    @patch('requests.get', side_effect=[
+        requests_response({
+            'did': 'did:web:pds.net',
+            'availableUserDomains': ['pds.net'],
+            'inviteCodeRequired': False,
+            'phoneVerificationRequired': False,
+        }),
+    ])
+    def test_bluesky_new_pds_post_describe_server_fields(self, mock_get):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        resp = self.post('/bluesky-new-pds', from_auth,
+                         pds='https://pds.net')
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+        self.assertIn('pds.net', body)
+        self.assertNotIn('invite-code', body)
 
     @patch('requests.get', side_effect=[
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),

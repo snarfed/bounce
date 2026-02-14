@@ -1,0 +1,25 @@
+{% set body_id = 'bluesky-password' %}
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="row big">
+  <p>Which
+  <img src="/oauth_dropins_static/bluesky_icon.png" class="logo"/>
+  <a href="https://docs.bsky.app/docs/advanced-guides/federation-architecture#personal-data-server-pds">Bluesky PDS</a>
+  do you want to migrate
+  {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
+  to?
+</div>
+
+<div class="row">
+  <form action="/bluesky-new-pds" method="post">
+    <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
+    <input type="url" name="pds" placeholder="pds.com" />
+    <input type="submit" class="btn btn-default" value="Next" />
+  </form>
+  <br><br>
+  <p>(<a href="https://blue.mackuba.eu/directory/pdses">Here are some options.</a>)
+</div>
+
+{% endblock content %}
