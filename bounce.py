@@ -35,6 +35,7 @@ import oauth_dropins.pixelfed
 from oauth_dropins.pixelfed import PixelfedAuth
 import oauth_dropins.threads
 from oauth_dropins.threads import ThreadsAuth
+from oauth_dropins.webutil.appengine_info import DEBUG, LOCAL_SERVER
 from oauth_dropins.webutil import (
     appengine_info,
     appengine_config,
@@ -138,6 +139,8 @@ DOMAIN = 'bounce.anew.social'
 APPSPOT_DOMAIN = 'bounce-migrate.appspot.com'
 
 
+logger.info(f'DEBUG {DEBUG} LOCAL_SERVER {LOCAL_SERVER}')
+
 #
 # Flask app
 #
@@ -150,7 +153,7 @@ app.before_request(canonicalize_domain([APPSPOT_DOMAIN], DOMAIN))
 app.after_request(flask_util.default_modern_headers)
 app.register_error_handler(Exception, flask_util.handle_exception)
 
-if appengine_info.LOCAL_SERVER:
+if LOCAL_SERVER:
     flask_gae_static.init_app(app)
 
 app.wsgi_app = flask_util.ndb_context_middleware(
@@ -158,7 +161,9 @@ app.wsgi_app = flask_util.ndb_context_middleware(
 
 models.reset_protocol_properties()
 
-if not appengine_info.DEBUG and not appengine_info.LOCAL_SERVER:
+if DEBUG or LOCAL_SERVER:
+    atproto.init(atproto.RemoteSequences)
+else:
     atproto.init(MemcacheSequences)
 
 
@@ -919,7 +924,7 @@ def bluesky_new_pds_post(from_auth):
     desc = client.com.atproto.server.describeServer()
 
     if not (domains := desc['availableUserDomains']):
-        flash(f"{pds} doesn't advertise any handle domains")
+        flash(f"{util.domain_from_link(pds)} doesn't advertise any handle domains")
         return redirect(url('/bluesky-new-pds', from_auth))
 
     return render_template(
@@ -936,29 +941,48 @@ def bluesky_new_pds_post(from_auth):
 @require_accounts('from')
 def bluesky_create_account(from_auth):
     """Creates a new Bluesky account on a given PDS."""
+    pds = get_required_param('pds')
     kwargs = {
-        'pds': get_required_param('pds'),
+        'pds': pds,
         'email': get_required_param('email'),
         'password': get_required_param('password'),
         'invite_code': request.values.get('invite-code'),
         'phone_verification_code': request.values.get('phone-verification-code'),
     }
 
+    from_user = get_user(from_auth)
     try:
         with ndb.context.Context(bridgy_fed_ndb).use():
-            resp = ATProto.create_account_for_migrate_out(
-                get_user(from_auth), **kwargs)
-        # TODO: store tokens in Migration
-        return redirect(url('/confirm', from_auth, BlueskyAuth(id=PROTOCOL_ONLY_ID)))
-
+            resp = ATProto.create_account_for_migrate_out(from_user, **kwargs)
     except HTTPError as e:
         msg = str(e)
-        if e.response is not None and e.response.headers.get('Content-Type') == 'application/json':
+        if (e.response is not None
+                and common.content_type(e.response) == 'application/json'):
             # https://atproto.com/specs/xrpc#error-responses
             msg = e.response.json().get('message') or e.response.json().get('error')
-        flash(msg)
+        flash(f'Error from {util.domain_from_link(pds)}: {msg}')
         return render_template('bluesky_create_account.html',
                                from_auth=from_auth, **kwargs, **template_vars())
+
+    # extract and store tokens from createAccount response
+    did = from_user.get_copy(ATProto)
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        user_json = {
+            'did': did,
+            'handle': from_user.handle_as(ATProto),
+        }
+
+    # make auth entity for new Bluesky account; point migration to it
+    to_auth = BlueskyAuth(id=did, pds_url=pds, session=resp,
+                          user_json=json_dumps(user_json))
+    to_auth.put()
+
+    migration = Migration.get(from_auth, to_auth)
+    logger.info(f'updating migration {migration.key} with to auth {to_auth.key}')
+    migration.to = to_auth.key
+    migration.put()
+
+    return redirect(url('/confirm', from_auth, to_auth))
 
 
 @app.route('/confirm', methods=['GET', 'POST'])

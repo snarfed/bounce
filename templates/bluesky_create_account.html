@@ -4,16 +4,13 @@
 {% block content %}
 
 <div class="row big">
-  Migrating
-  {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
-  to
+  Creating a new account on
   <img src="/oauth_dropins_static/bluesky_icon.png" class="logo" title="Bluesky">
   {{ util.pretty_link(pds)|safe }}...
 </div>
 
 <div class="row">
-  <p>Please enter the email address, password, etc. for your new account on
-  {{ util.pretty_link(pds)|safe }}.
+  <p>Please enter an email address, password, etc. for your new account.
 </div>
 
 <div class="row">

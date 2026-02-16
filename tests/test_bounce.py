@@ -25,6 +25,7 @@ from flask import get_flashed_messages, session
 from google.cloud import ndb, storage
 from granary import as2
 from granary.source import html_to_text
+import jwt
 import oauth_dropins
 from oauth_dropins.bluesky import BlueskyAuth
 from oauth_dropins.mastodon import MastodonApp, MastodonAuth
@@ -1883,8 +1884,12 @@ When you migrate  @alice@in.st to  Bluesky  ...
             ActivityPub(id='http://in.st/users/alice',
                         copies=[Target(protocol='atproto', uri='did:plc:alice')],
                         ).put()
-            Repo.create(server.storage, 'did:plc:alice', handle='alice.in.st.brid.gy',
-                        signing_key=key, rotation_key=key)
+            repo = Repo.create(server.storage, 'did:plc:alice',
+                               handle='alice.in.st.brid.gy', signing_key=key,
+                               rotation_key=key)
+
+        migration_key = Migration(id='@alice@in.st atproto', from_=from_auth,
+                                  state=State.review_done).put()
 
         resp = self.post('/bluesky-create-account', from_auth, pds='https://pds.net',
                          email='alice@example.com', password='hunter2')
@@ -1894,12 +1899,21 @@ When you migrate  @alice@in.st to  Bluesky  ...
         mock_post.assert_called_once_with(
             'https://pds.net/xrpc/com.atproto.server.createAccount',
             json={
-                'handle': 'alice.in.st.pds.net',
+                'handle': 'alice-in-st.pds.net',
                 'did': 'did:plc:alice',
                 'email': 'alice@example.com',
                 'password': 'hunter2',
             },
             data=None, headers=ANY, auth=None)
+
+        token = jwt.decode(
+            mock_post.call_args[1]['headers']['Authorization'].removeprefix('Bearer '),
+            repo.signing_key.public_key(), algorithms=['ES256K'],
+            audience='did:web:pds.net')
+
+        auth = BlueskyAuth.get_by_id('did:plc:alice')
+        self.assertEqual(mock_post.return_value.json(), auth.session)
+        self.assertEqual(auth.key, migration_key.get().to)
 
     @patch('requests.post', return_value= requests_response(
         {'error': 'InvalidInviteCode', 'message': 'foo bar'},
@@ -1924,7 +1938,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         resp = self.post('/bluesky-create-account', from_auth, pds='https://pds.net',
                          email='alice@example.com', password='hunter2')
         self.assertEqual(200, resp.status_code)
-        self.assertEqual('foo bar', get_flashed_messages()[0])
+        self.assertEqual('Error from pds.net: foo bar', get_flashed_messages()[0])
 
         body = resp.get_data(as_text=True)
         self.assert_multiline_in(f"""\
