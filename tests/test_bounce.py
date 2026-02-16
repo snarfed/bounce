@@ -1119,6 +1119,25 @@ When you migrate  @alice@in.st to  Bluesky  ...
             f'/disable-bridging?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}',
             resp.headers['Location'])
 
+    def test_confirm_ap_to_bluesky_new_pds_to_auth_is_bridged_did_not_logged_in(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+            to_auth = self.make_bluesky(sess, did='did:plc:alice', login=False)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.review_done)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            Object(id='did:plc:alice', raw=DID_DOC).put()
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+
+        resp = self.post('/confirm', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+        self.assertIn('<form action="/migrate" method="post">', body)
+
     def test_confirm_from_mastodon_currently_bridged_back_ignore(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
@@ -1309,8 +1328,18 @@ When you migrate  @alice@in.st to  Bluesky  ...
         resp = self.post('/migrate', from_key=auth)
         self.assertEqual(400, resp.status_code)
 
-    def test_migrate_not_logged_in(self):
+    def test_migrate_not_logged_in_from(self):
         from_auth = MastodonAuth(id='@alice@in.st').key
+        to_auth = BlueskyAuth(id='did:foo').key
+
+        resp = self.post('/migrate', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual('/', resp.headers['Location'])
+
+    def test_migrate_not_logged_in_to(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
         to_auth = BlueskyAuth(id='did:foo').key
 
         resp = self.post('/migrate', from_auth, to_auth)

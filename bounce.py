@@ -327,6 +327,8 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
     Passes both entities as positional args to the function, as oauth-dropins auth
     entities. Also performs sanity checks:
     * Both must be logged in (if ``logged_in`` is True)
+      * The to account doesn't need to be logged in if it's the bridged copy of the
+        from account.
     * They must be different protocols
     * If a Bluesky account is involved, it can't be a did:web
 
@@ -361,12 +363,7 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
             cls = ndb.Model._kind_map[key.kind()]
             return cls(id=PROTOCOL_ONLY_ID)
 
-        if auth := key.get():
-            if not logged_in or key in oauth_dropins.get_logins():
-                return auth
-
-        logger.warning(f'not logged in for {key}')
-        raise Found(location='/')
+        return key.get()
 
     def decorator(fn):
         @wraps(fn)
@@ -375,15 +372,39 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
                 flash("You'll need to approve the prompt to continue.")
                 return redirect(failures_to or '/')
 
+            logins = oauth_dropins.get_logins()
+
             from_auth = load(from_params)
+            if logged_in and (not from_auth or from_auth.key not in logins):
+                logger.warning(f'not logged in for {from_params}: {request.values}')
+                raise Found(location='/')
+
             args += (from_auth,)
 
             to_auth = None
             if to_params:
-                to_auth = load(to_params)
-                if (AUTH_TO_PROTOCOL[from_auth.__class__]
-                        == AUTH_TO_PROTOCOL[to_auth.__class__]):
-                    error(f"Can't migrate {from_auth.__class__.__name__} to {to_auth.__class__.__name__}")
+                if not (to_auth := load(to_params)):
+                    logger.warning(f'not logged in for {to_params}: {request.values}')
+                    raise Found(location='/')
+
+                from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
+                to_proto = AUTH_TO_PROTOCOL[to_auth.__class__]
+
+                if from_proto == to_proto:
+                    error(f"Can't migrate {from_proto.LABEL} to {to_proto.LABEL}")
+
+                if (logged_in and to_auth.key not in logins
+                        and to_auth.key.id() != PROTOCOL_ONLY_ID):
+                    from_user = get_user(from_auth)
+                    # check if we're migrating a bridged Bluesky account itself to a
+                    # new PDS. note that this requires the auth entity key id to be
+                    # the same as the Bridgy Fed user id for to_proto!
+                    with ndb.context.Context(bridgy_fed_ndb).use():
+                        from_bridged_id = from_user.id_as(to_proto)
+                    if from_bridged_id != to_auth.key.id():
+                        logger.warning(f'not logged in for {to_auth.key}')
+                        raise Found(location='/')
+
                 args += (to_auth,)
 
             # Check for did:web in Bluesky accounts
@@ -1316,7 +1337,7 @@ def migrate_follows(migration, to_auth):
       migration (Migration)
       to_auth (oauth_dropins.models.BaseAuth)
     """
-    logging.info(f'Creating follows for {to_auth.key_id()}')
+    logger.info(f'Creating follows for {to_auth.key_id()}')
     to_follow = migration.to_follow
     migration.to_follow = []
     source = granary_source(to_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
@@ -1354,7 +1375,7 @@ def migrate_in(migration, from_auth, from_user, to_user):
       from_auth (oauth_dropins.models.BaseAuth)
       from_user (models.User)
     """
-    logging.info(f'Migrating {from_user.key.id()} in')
+    logger.info(f'Migrating {from_user.key.id()} in')
 
     migrate_in_kwargs = {}
 
@@ -1372,7 +1393,7 @@ def migrate_in(migration, from_auth, from_user, to_user):
         resp = old_pds_client.com.atproto.sync.getRepo({}, did=from_auth.key.id())
         repo_car = resp.content
 
-        logging.info(f'Importing repo from {from_auth.pds_url}')
+        logger.info(f'Importing repo from {from_auth.pds_url}')
         with ndb.context.Context(bridgy_fed_ndb).use(), \
              app.test_request_context('/migrate', headers={
                  'Authorization': f'Bearer {os.environ["REPO_TOKEN"]}',
@@ -1410,7 +1431,7 @@ def migrate_in_blobs(from_auth):
     source = granary_source(from_auth)
 
     did = from_auth.key.id()
-    logging.info(f"Migrating Bluesky account {did}'s blobs into GCS")
+    logger.info(f"Migrating Bluesky account {did}'s blobs into GCS")
 
     client = storage.Client()
     bucket = client.bucket(CLOUD_STORAGE_BUCKET)
@@ -1446,12 +1467,17 @@ def migrate_out(migration, from_user, to_user):
       from_user (models.User)
       to_user (models.User)
     """
-    logging.info(f'Migrating bridged account {from_user.key.id()} out to {to_user.key.id()}')
+    logger.info(f'Migrating bridged account {from_user.key.id()} out to {to_user.key.id()}')
+    to_existing_account = (isinstance(to_user, ATProto)
+                           and from_user.get_copy(ATProto) != to_user.key.id())
 
-    with ndb.context.Context(bridgy_fed_ndb).use():
-        to_proto = to_user.__class__
-        if from_user.is_enabled(to_proto):
-            to_user.migrate_out(from_user, to_user.key.id())
+    if to_existing_account:
+        logger.info('Migrating to existing native account, skipping migrate_out')
+    else:
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            to_proto = to_user.__class__
+            if from_user.is_enabled(to_proto):
+                to_user.migrate_out(from_user, to_user.key.id())
 
     from_proto = from_user.__class__
     if from_proto.HAS_COPIES:
