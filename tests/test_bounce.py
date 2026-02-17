@@ -354,6 +354,45 @@ class BounceTest(TestCase, Asserts):
         got = self.client.get('/admin/activity')
         self.assert_equals(200, got.status_code)
 
+    @patch('oauth_dropins.bluesky.oauth_client_for_pds',
+           return_value=OAuth2Client(token_endpoint='https://un/used',
+                                     client_id='unused', client_secret='unused'))
+    def test_granary_source_bluesky_dpop_token(self, _):
+        auth = BlueskyAuth(
+            id='did:plc:alice',
+            pds_url='https://some.pds/',
+            user_json=json_dumps({
+                '$type': 'app.bsky.actor.defs#profileView',
+                'handle': 'al.ice',
+            }),
+            dpop_token=DPOP_TOKEN_STR,
+        )
+        with app.test_request_context('/'):
+            source = bounce.granary_source(auth, with_auth=True)
+        self.assertEqual('https://some.pds/', source._client.address)
+        self.assertEqual(
+            'towkin', source._client.requests_kwargs['auth'].token.access_token)
+        self.assertEqual(bounce.bluesky_session_callback,
+                         source._client.session_callback)
+
+    def test_granary_source_bluesky_session_with_tokens(self):
+        auth = BlueskyAuth(
+            id='did:plc:alice',
+            pds_url='https://some.pds/',
+            user_json=json_dumps({
+                '$type': 'app.bsky.actor.defs#profileView',
+                'handle': 'al.ice',
+            }),
+            session={'accessJwt': 'towkin', 'refreshJwt': 'reefresh'},
+        )
+        with app.test_request_context('/'):
+            source = bounce.granary_source(auth, with_auth=True)
+        self.assertEqual('https://some.pds/', source._client.address)
+        self.assertEqual('towkin', source._client.session['accessJwt'])
+        self.assertEqual('reefresh', source._client.session['refreshJwt'])
+        self.assertEqual(bounce.bluesky_session_callback,
+                         source._client.session_callback)
+
     def test_from(self):
         with self.client.session_transaction() as sess:
             self.make_bluesky(sess)

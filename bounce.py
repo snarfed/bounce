@@ -471,11 +471,15 @@ def granary_source(auth, with_auth=False, **requests_kwargs):
 
     elif isinstance(auth, BlueskyAuth):
         if with_auth:
-            oauth_client = oauth_dropins.bluesky.oauth_client_for_pds(
-                bluesky_oauth_client_metadata(), auth.pds_url)
-            token = TokenSerializer().loads(auth.dpop_token)
-            dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
-            requests_kwargs['auth'] = dpop_auth
+            if auth.dpop_token:
+                oauth_client = oauth_dropins.bluesky.oauth_client_for_pds(
+                    bluesky_oauth_client_metadata(), auth.pds_url)
+                token = TokenSerializer().loads(auth.dpop_token)
+                dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
+                requests_kwargs['auth'] = dpop_auth
+            elif auth.session:
+                requests_kwargs['access_token'] = auth.session['accessJwt']
+                requests_kwargs['refresh_token'] = auth.session['refreshJwt']
 
         return Bluesky(pds_url=auth.pds_url, handle=auth.user_display_name(),
                        did=auth.key.id(), session_callback=bluesky_session_callback,
