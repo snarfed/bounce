@@ -8,7 +8,9 @@
 <a class="actor" href="{{ auth.url|safe }}">
   <img src="/oauth_dropins_static/{{ auth.site_name().lower() }}_icon.png"
        class="logo" title="{{ auth.site_name() }}" />
-  <img src="{{ auth.image_url()|safe }}" class="profile">
+  {% if auth.image_url() %}
+    <img src="{{ auth.image_url()|safe }}" class="profile">
+  {% endif %}
   <span style="unicode-bidi: isolate">{{ auth.user_display_name() }}</span>
   <!-- {% if auth.key.id() != auth.user_display_name() %} -->
   <!--   · <span class="small">{{ auth.key.id() }}</span> -->
