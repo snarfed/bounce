@@ -146,6 +146,10 @@ logger.info(f'DEBUG {DEBUG} LOCAL_SERVER {LOCAL_SERVER}')
 #
 app = Flask(__name__, static_folder=None)
 app.template_folder = './templates'
+app.jinja_options.update({
+    'trim_blocks': True,
+    'lstrip_blocks': True,
+})
 app.json.compact = False
 app.config.from_pyfile(Path(__file__).parent / 'config.py')
 app.url_map.converters['regex'] = flask_util.RegexConverter
@@ -316,6 +320,7 @@ def template_vars():
     return {
         'auths': auths,
         'humanize_number': humanize_number,
+        'MAIN_PDS_DOMAINS': MAIN_PDS_DOMAINS,
         'request': request,
         'util': util,
     }

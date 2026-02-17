@@ -6,15 +6,19 @@
 {% set from_label %}
   {% with auth = from_auth %}{% include 'account_label.html' %}{% endwith %}
 {% endset %}
+
 {% set to_label %}
   {% with auth = to_auth %}{% include 'account_label.html' %}{% endwith %}
 {% endset %}
+
 {% set bridged_to_label =
      from_label if from_user.HAS_COPIES
      else ('<code>' + to_user_bridged_handle + '</code>')|safe %}
 
 <div class="row big">
-<p>Migrate {{ from_label }} to {{ to_label }}?</p>
+<p>Migrate {{ from_label }} to {{ to_label }}
+{% if to_auth.pds_url and util.domain_from_link(to_auth.pds_url) not in MAIN_PDS_DOMAINS %}
+  on {{ util.pretty_link(to_auth.pds_url)|safe }}{% endif %}?
 </div>
 
 <div class="row" style="text-align: left">
