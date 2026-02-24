@@ -1181,7 +1181,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             Object(id='did:plc:alice', raw=DID_DOC).put()
-            ActivityPub(id='http://in.st/users/alice',
+            ActivityPub(id='http://in.st/users/alice', enabled_protocols=['atproto'],
                         copies=[Target(protocol='atproto', uri='did:plc:alice')],
                         ).put()
 
@@ -1534,6 +1534,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         }),
         requests_response(),  # importRepo
         requests_response(),  # PLC directory update
+        requests_response(),  # activateAccount
     ])
     @patch('requests.get', side_effect=[
         requests_response(DID_DOC),
@@ -1641,9 +1642,11 @@ When you migrate  @alice@in.st to  Bluesky  ...
             }, data=None, headers=ANY, auth=None, timeout=60),
             call('https://newpds.example.com/xrpc/com.atproto.repo.importRepo',
                  data=ANY, json=None, headers=ANY, auth=None),
+            call('https://newpds.example.com/xrpc/com.atproto.server.activateAccount',
+                 data=ANY, json=None, headers=ANY, auth=None),
         ], any_order=True)
 
-        del mock_post.call_args_list[-1][1]['json']['sig']
+        del mock_post.call_args_list[3][1]['json']['sig']
         self.assert_equals(call('https://plc.local/did:plc:alice', json={
                 'type': 'plc_operation',
                 'did': 'did:plc:alice',
@@ -1660,7 +1663,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
                 },
                 'prev': 'prev-cid',
             }, timeout=15, stream=True, headers={'User-Agent': bounce.USER_AGENT}),
-            mock_post.call_args_list[-1])
+            mock_post.call_args_list[3])
 
         migration = migration.get()
         self.assertEqual(State.migrate_done, migration.state)
