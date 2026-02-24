@@ -1171,7 +1171,8 @@ When you migrate  @alice@in.st to  Bluesky  ...
             f'/disable-bridging?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}',
             resp.headers['Location'])
 
-    def test_confirm_ap_to_bluesky_new_pds_to_auth_is_bridged_did_not_logged_in(self):
+    @patch('requests.get', return_value=requests_response(DID_DOC))  # did:plc:alice
+    def test_confirm_ap_to_bluesky_new_pds_to_auth_is_bridged_not_logged_in(self, _):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
             to_auth = self.make_bluesky(sess, did='did:plc:alice', login=False)
