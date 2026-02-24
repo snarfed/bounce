@@ -1331,7 +1331,7 @@ def migrate_task(from_auth, to_auth):
 
     if migration.state == State.migrate_out:
         logger.info('starting migrate_out')
-        migrate_out(migration, from_user, to_user)
+        migrate_out(migration, from_user, to_auth, to_user)
         migration.state = State.migrate_done
         migration.put()
         logger.info('finished, now at migrate_done')
@@ -1383,6 +1383,7 @@ def migrate_in(migration, from_auth, from_user, to_user):
       migration (Migration)
       from_auth (oauth_dropins.models.BaseAuth)
       from_user (models.User)
+      to_user (models.User)
     """
     logger.info(f'Migrating {from_user.key.id()} in')
 
@@ -1468,12 +1469,13 @@ def migrate_in_blobs(from_auth):
             blob.put()
 
 
-def migrate_out(migration, from_user, to_user):
+def migrate_out(migration, from_user, to_auth, to_user):
     """Migrates a Bridgy Fed bridged account out to a native account.
 
     Args:
       migration (Migration)
       from_user (models.User)
+      to_auth (oauth_dropins.models.BaseAuth)
       to_user (models.User)
     """
     logger.info(f'Migrating bridged account {from_user.key.id()} out to {to_user.key.id()}')
@@ -1486,7 +1488,15 @@ def migrate_out(migration, from_user, to_user):
         with ndb.context.Context(bridgy_fed_ndb).use():
             to_proto = to_user.__class__
             if from_user.is_enabled(to_proto):
-                to_user.migrate_out(from_user, to_user.key.id())
+                kwargs = {}
+                if isinstance(to_user, ATProto):
+                    assert to_auth.session
+                    kwargs = {
+                        'to_pds': to_auth.pds_url,
+                        'access_token': to_auth.session['accessJwt'],
+                        'refresh_token': to_auth.session['refreshJwt'],
+                    }
+                to_user.migrate_out(from_user, to_user.key.id(), **kwargs)
 
     from_proto = from_user.__class__
     if from_proto.HAS_COPIES:
