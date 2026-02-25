@@ -1675,7 +1675,9 @@ When you migrate  @alice@in.st to  Bluesky  ...
         with ndb.context.Context(bridgy_fed_ndb).use():
             self.assertEqual(DEACTIVATED,
                              arroba.server.storage.load_repo('did:plc:alice').status)
-            self.assertFalse(from_key.get().is_enabled(ATProto))
+            user = from_key.get()
+            self.assertFalse(user.is_enabled(ATProto))
+            self.assertEqual([], user.copies)
 
     @patch('google.cloud.storage.Client', autospec=True)
     @patch.object(tasks_client, 'create_task')
