@@ -959,21 +959,28 @@ def bluesky_new_pds_post(from_auth):
         flash(f"Couldn't connect to pds: {body}")
         return redirect(url('/bluesky-new-pds', from_auth))
 
-    if not (domains := desc['availableUserDomains']):
+    if not (user_domains := desc['availableUserDomains']):
         flash(f"{util.domain_from_link(pds)} doesn't advertise any handle domains")
         return redirect(url('/bluesky-new-pds', from_auth))
 
-    handle_domain = domains[0]
+    handle_domain = user_domains[0]
     if not handle_domain.startswith('.'):
         handle_domain = '.' + handle_domain
+
+    from_user = get_user(from_auth)
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        at_handle = from_user.handle_as(ATProto)
+    show_handle = not at_handle or at_handle.endswith(domains.SUPERDOMAIN)
 
     return render_template(
         'bluesky_create_account.html',
         from_auth=from_auth,
         pds=pds,
         handle_domain=handle_domain,
-        show_invite_code=str(desc.get('inviteCodeRequired') is True),
-        show_phone_verification_code=str(desc.get('phoneVerificationRequired') is True),
+        show_handle=str(show_handle is True).lower(),
+        show_invite_code=str(desc.get('inviteCodeRequired') is True).lower(),
+        show_phone_verification_code=str(
+            desc.get('phoneVerificationRequired') is True).lower(),
         **template_vars(),
     )
 
@@ -985,13 +992,17 @@ def bluesky_create_account(from_auth):
     pds = get_required_param('pds')
     from_user = get_user(from_auth)
 
-    # just check that these two are there
+    # just check that these are there
+    get_required_param('show_handle')
     get_required_param('show_invite_code')
     get_required_param('show_phone_verification_code')
 
+    handle = request.values.get('handle')
+    if handle:
+        handle = handle + get_required_param('handle_domain')
+
     try:
         with ndb.context.Context(bridgy_fed_ndb).use():
-            handle = get_required_param('handle') + get_required_param('handle_domain')
             resp = ATProto.create_account_for_migrate_out(
                 from_user, pds=pds, handle=handle,
                 email=get_required_param('email'),

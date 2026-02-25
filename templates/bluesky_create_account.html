@@ -17,11 +17,16 @@
   <form action="/bluesky-create-account" method="post">
     <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
     <input type="hidden" name="pds" value="{{ pds }}" />
+
+    <input type="hidden" name="show_handle" value="{{ show_handle }}" />
+    {% if show_handle.lower() == 'true' %}
     <p>
     <input type="text" name="handle" required maxlength="20"
            placeholder="handle (only a-z, 0-9, and -)" value="{{ handle }}"
            pattern="[a-z][a-z0-9\-]*" />{{ handle_domain }}
     <input type="hidden" name="handle_domain" value="{{ handle_domain }}" />
+    {% endif %}
+
     <p>
     <input type="email" name="email" required placeholder="email" value="{{ email }}"/>
     <input type="password" name="password" required placeholder="password"

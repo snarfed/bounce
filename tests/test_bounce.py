@@ -2104,12 +2104,21 @@ When you migrate  @alice@in.st to  Bluesky  ...
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
 
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+            Repo.create(server.storage, 'did:plc:alice',
+                        handle='alice.in.st.ap.brid.gy', signing_key=K256_KEY,
+                        rotation_key=K256_KEY)
+
         resp = self.post('/bluesky-new-pds', from_auth, pds='https://pds.net')
         self.assertEqual(200, resp.status_code)
         body = resp.get_data(as_text=True)
         self.assert_multiline_in(f"""\
 <input type="hidden" name="from" value="{from_auth.urlsafe().decode()}" />
 <input type="hidden" name="pds" value="https://pds.net" />
+<input type="hidden" name="show_handle" value="true" />
 <p>
 <input type="text" name="handle" required maxlength="20"
        placeholder="handle (only a-z, 0-9, and -)" value=""
@@ -2119,11 +2128,38 @@ When you migrate  @alice@in.st to  Bluesky  ...
 <input type="email" name="email" required placeholder="email" value=""/>
 <input type="password" name="password" required placeholder="password"
        value="" />
-""", body)
+""", body, ignore_blanks=True)
         self.assert_multiline_in("""
 <input type="text" name="invite_code" required placeholder="invite code"
        value="" />
 """, body)
+
+    @patch('requests.get', side_effect=[
+        requests_response({
+            'did': 'did:web:pds.net',
+            'availableUserDomains': ['.my.pds.net'],
+        }),
+    ])
+    def test_bluesky_new_pds_post_custom_handle(self, mock_get):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+            Object(id='did:plc:alice', raw={
+                **DID_DOC,
+                'alsoKnownAs': ['at://alice.custom.com'],
+            }).put()
+            Repo.create(server.storage, 'did:plc:alice', handle='alice.custom.com',
+                        signing_key=K256_KEY, rotation_key=K256_KEY)
+
+        resp = self.post('/bluesky-new-pds', from_auth, pds='https://pds.net')
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+        self.assertNotIn('name="handle"', body)
+        self.assertNotIn('name="handle_domain"', body)
 
     @patch('requests.post', return_value=requests_response({
         'accessJwt': 'towkin',
@@ -2153,7 +2189,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         resp = self.post('/bluesky-create-account', from_auth, pds='https://pds.net',
                          handle='myhandle', handle_domain='.pds.net',
                          email='alice@example.com', password='hunter2',
-                         show_invite_code='false',
+                         show_handle='true', show_invite_code='true',
                          show_phone_verification_code='false')
         self.assertEqual(302, resp.status_code)
         self.assertIn('/confirm', resp.headers['Location'])
@@ -2177,6 +2213,48 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(mock_post.return_value.json(), auth.session)
         self.assertEqual(auth.key, migration_key.get().to)
 
+    @patch('requests.post', return_value=requests_response({
+        'accessJwt': 'towkin',
+        'refreshJwt': 'reefresh',
+        'handle': 'alice.custom.com',
+        'did': 'did:plc:alice',
+    }))
+    @patch('requests.get', return_value=requests_response({
+        'did': 'did:web:pds.net',
+        'availableUserDomains': ['pds.net'],
+    }))
+    def test_bluesky_create_account_custom_handle(self, mock_get, mock_post):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+            Repo.create(server.storage, 'did:plc:alice',
+                        handle='alice.custom.com', signing_key=K256_KEY,
+                        rotation_key=K256_KEY)
+
+        migration_key = Migration(id='@alice@in.st atproto', from_=from_auth,
+                                  state=State.review_done).put()
+
+        resp = self.post('/bluesky-create-account', from_auth, pds='https://pds.net',
+                         email='alice@example.com', password='hunter2',
+                         show_handle='false', show_invite_code='false',
+                         show_phone_verification_code='false')
+        self.assertEqual(302, resp.status_code)
+        self.assertIn('/confirm', resp.headers['Location'])
+
+        mock_post.assert_called_once_with(
+            'https://pds.net/xrpc/com.atproto.server.createAccount',
+            json={
+                'handle': 'alice-in-st.pds.net',
+                'did': 'did:plc:alice',
+                'email': 'alice@example.com',
+                'password': 'hunter2',
+            },
+            data=None, headers=ANY, auth=None)
+
     @patch('requests.post', return_value= requests_response(
         {'error': 'InvalidInviteCode', 'message': 'foo bar'},
         status=400, headers={'Content-Type': 'application/json'},
@@ -2199,7 +2277,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         resp = self.post('/bluesky-create-account', from_auth, pds='https://pds.net',
                          handle='myhandle', handle_domain='.pds.net',
                          email='alice@example.com', password='hunter2',
-                         show_invite_code='true',
+                         show_handle='true', show_invite_code='true',
                          show_phone_verification_code='true')
         self.assertEqual(200, resp.status_code)
         self.assertEqual('Error from pds.net: foo bar', get_flashed_messages()[0])
