@@ -18,15 +18,26 @@
     <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
     <input type="hidden" name="pds" value="{{ pds }}" />
     <p>
-    <input type="email" name="email" required placeholder="email" />
-    <input type="password" name="password" required placeholder="password" />
+    <input type="text" name="handle" required maxlength="20"
+           placeholder="handle (only a-z, 0-9, and -)" value="{{ handle }}"
+           pattern="[a-z][a-z0-9\-]*" />{{ handle_domain }}
+    <input type="hidden" name="handle_domain" value="{{ handle_domain }}" />
     <p>
-    {% if invite_code %}
-      <input type="text" name="invite-code" required placeholder="invite code" />
+    <input type="email" name="email" required placeholder="email" value="{{ email }}"/>
+    <input type="password" name="password" required placeholder="password"
+           value="{{ password }}" />
+    <p>
+    <input type="hidden" name="show_invite_code" value="{{ show_invite_code }}" />
+    {% if show_invite_code.lower() == 'true' %}
+      <input type="text" name="invite_code" required placeholder="invite code"
+             value="{{ invite_code }}" />
     {% endif %}
-    {% if phone_verification_code %}
-      <input type="text" name="phone-verification-code" required
-             placeholder="phone verification code" />
+    <input type="hidden" name="show_phone_verification_code"
+           value="{{ show_phone_verification_code }}" />
+    {% if show_phone_verification_code.lower() == 'true' %}
+      <input type="text" name="phone_verification_code" required
+             placeholder="phone verification code"
+             value="{{ phone_verification_code }}" />
     {% endif %}
     <p>
     <input type="submit" class="btn btn-default" value="Next" />

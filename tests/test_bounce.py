@@ -2084,6 +2084,15 @@ When you migrate  @alice@in.st to  Bluesky  ...
         body = resp.get_data(as_text=True)
         self.assertIn('@alice@in.st', body)
 
+    def test_bluesky_new_pds_connection_failure(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        resp = self.get('/bluesky-new-pds', from_auth)
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+        self.assertIn('@alice@in.st', body)
+
     @patch('requests.get', side_effect=[
         requests_response({
             'did': 'did:web:pds.net',
@@ -2101,8 +2110,20 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assert_multiline_in(f"""\
 <input type="hidden" name="from" value="{from_auth.urlsafe().decode()}" />
 <input type="hidden" name="pds" value="https://pds.net" />
+<p>
+<input type="text" name="handle" required maxlength="20"
+       placeholder="handle (only a-z, 0-9, and -)" value=""
+       pattern="[a-z][a-z0-9\\-]*" />.my.pds.net
+<input type="hidden" name="handle_domain" value=".my.pds.net" />
+<p>
+<input type="email" name="email" required placeholder="email" value=""/>
+<input type="password" name="password" required placeholder="password"
+       value="" />
 """, body)
-        self.assert_multiline_in('<input type="text" name="invite-code" required placeholder="invite code" />', body)
+        self.assert_multiline_in("""
+<input type="text" name="invite_code" required placeholder="invite code"
+       value="" />
+""", body)
 
     @patch('requests.post', return_value=requests_response({
         'accessJwt': 'towkin',
@@ -2130,14 +2151,17 @@ When you migrate  @alice@in.st to  Bluesky  ...
                                   state=State.review_done).put()
 
         resp = self.post('/bluesky-create-account', from_auth, pds='https://pds.net',
-                         email='alice@example.com', password='hunter2')
+                         handle='myhandle', handle_domain='.pds.net',
+                         email='alice@example.com', password='hunter2',
+                         show_invite_code='false',
+                         show_phone_verification_code='false')
         self.assertEqual(302, resp.status_code)
         self.assertIn('/confirm', resp.headers['Location'])
 
         mock_post.assert_called_once_with(
             'https://pds.net/xrpc/com.atproto.server.createAccount',
             json={
-                'handle': 'alice-in-st.pds.net',
+                'handle': 'myhandle.pds.net',
                 'did': 'did:plc:alice',
                 'email': 'alice@example.com',
                 'password': 'hunter2',
@@ -2173,7 +2197,10 @@ When you migrate  @alice@in.st to  Bluesky  ...
                         signing_key=K256_KEY, rotation_key=K256_KEY)
 
         resp = self.post('/bluesky-create-account', from_auth, pds='https://pds.net',
-                         email='alice@example.com', password='hunter2')
+                         handle='myhandle', handle_domain='.pds.net',
+                         email='alice@example.com', password='hunter2',
+                         show_invite_code='true',
+                         show_phone_verification_code='true')
         self.assertEqual(200, resp.status_code)
         self.assertEqual('Error from pds.net: foo bar', get_flashed_messages()[0])
 

@@ -951,18 +951,29 @@ def bluesky_new_pds_post(from_auth):
     """Calls describeServer on the new PDS and shows details form."""
     pds = get_required_param('pds')
     client = lexrpc.Client(pds)
-    desc = client.com.atproto.server.describeServer()
+
+    try:
+        desc = client.com.atproto.server.describeServer()
+    except Exception as e:
+        _, body = util.interpret_http_exception(e)
+        flash(f"Couldn't connect to pds: {body}")
+        return redirect(url('/bluesky-new-pds', from_auth))
 
     if not (domains := desc['availableUserDomains']):
         flash(f"{util.domain_from_link(pds)} doesn't advertise any handle domains")
         return redirect(url('/bluesky-new-pds', from_auth))
 
+    handle_domain = domains[0]
+    if not handle_domain.startswith('.'):
+        handle_domain = '.' + handle_domain
+
     return render_template(
         'bluesky_create_account.html',
         from_auth=from_auth,
         pds=pds,
-        invite_code=desc.get('inviteCodeRequired'),
-        phone_verification_code=desc.get('phoneVerificationRequired'),
+        handle_domain=handle_domain,
+        show_invite_code=str(desc.get('inviteCodeRequired') is True),
+        show_phone_verification_code=str(desc.get('phoneVerificationRequired') is True),
         **template_vars(),
     )
 
@@ -972,18 +983,21 @@ def bluesky_new_pds_post(from_auth):
 def bluesky_create_account(from_auth):
     """Creates a new Bluesky account on a given PDS."""
     pds = get_required_param('pds')
-    kwargs = {
-        'pds': pds,
-        'email': get_required_param('email'),
-        'password': get_required_param('password'),
-        'invite_code': request.values.get('invite-code'),
-        'phone_verification_code': request.values.get('phone-verification-code'),
-    }
-
     from_user = get_user(from_auth)
+
+    # just check that these two are there
+    get_required_param('show_invite_code')
+    get_required_param('show_phone_verification_code')
+
     try:
         with ndb.context.Context(bridgy_fed_ndb).use():
-            resp = ATProto.create_account_for_migrate_out(from_user, **kwargs)
+            handle = get_required_param('handle') + get_required_param('handle_domain')
+            resp = ATProto.create_account_for_migrate_out(
+                from_user, pds=pds, handle=handle,
+                email=get_required_param('email'),
+                password=get_required_param('password'),
+                invite_code=request.values.get('invite_code'),
+                phone_verification_code=request.values.get('phone_verification_code'))
     except HTTPError as e:
         msg = str(e)
         if (e.response is not None
@@ -991,8 +1005,8 @@ def bluesky_create_account(from_auth):
             # https://atproto.com/specs/xrpc#error-responses
             msg = e.response.json().get('message') or e.response.json().get('error')
         flash(f'Error from {util.domain_from_link(pds)}: {msg}')
-        return render_template('bluesky_create_account.html',
-                               from_auth=from_auth, **kwargs, **template_vars())
+        return render_template('bluesky_create_account.html', from_auth=from_auth,
+                               **request.values, **template_vars())
 
     # extract and store tokens from createAccount response
     did = from_user.get_copy(ATProto)
