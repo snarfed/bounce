@@ -50,8 +50,8 @@ td {
   <tr><th>from</th><th>to</th><th>state</th><th>created</th><th>updated</th><tr>
   {% for m in recent_migrations %}
     <tr>
-      <td>{{ m.from_auth.user_display_name() }}</td>
-      <td>{{ m.to_auth.user_display_name() }}</td>
+      <td>{{ m.from_auth.user_display_name() if m.from_auth else 'None (!)' }}</td>
+      <td>{{ m.to_auth.user_display_name() if m.to_auth else 'None (!)'}}</td>
       <td>{{ m.state.name }}</td>
       <td>{{ m.created.astimezone(PT).isoformat(' ', 'seconds')[:-6] }}</td>
       <td>{{ m.updated.astimezone(PT).isoformat(' ', 'seconds')[:-6] }}</td>
