@@ -1538,6 +1538,130 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(),  # activateAccount
     ])
     @patch('requests.get', side_effect=[
+        requests_response({
+            **DID_DOC,
+            'alsoKnownAs': ['at://alice.in.st.ap.brid.gy'],
+        }),
+        requests_response(ALICE_BSKY_PROFILE),
+        requests_response({  # checkAccountStatus
+            'activated': False,
+            'validDid': True,
+            'repoCommit': 'bafyreibjhbhznld7ogit',
+            'repoRev': '123',
+            'repoBlocks': 0,
+            'indexedRecords': 0,
+            'privateStateValues': 0,
+            'expectedBlobs': 0,
+            'importedBlobs': 0,
+        }),
+        requests_response({  # getRecommendedDidCredentials
+            'rotationKeys': [did.encode_did_key(K256_KEY.public_key())],
+            'verificationMethods': {
+                'atproto': did.encode_did_key(K256_KEY.public_key()),
+            },
+            'services': {
+                'atproto_pds': {
+                    'type': 'AtprotoPersonalDataServer',
+                    'endpoint': 'https://new.pds.com',
+                },
+            },
+        }),
+        requests_response([{  # PLC audit log
+            'cid': 'prev-cid',
+            'operation': {
+                'alsoKnownAs': ['at://alice.in.st.ap.brid.gy'],
+                'rotationKeys': ['did:key:old'],
+                'verificationMethods': {'atproto': 'did:key:old'},
+                'services': {
+                    'atproto_pds': {
+                        'type': 'AtprotoPersonalDataServer',
+                        'endpoint': 'https://atproto.brid.gy',
+                    },
+                },
+            },
+        }]),
+        # reload_profile in migrate_in
+        requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(ALICE_WEBFINGER),
+    ])
+    def test_migrate_task_mastodon_to_bluesky_existing_bridged_account_to_new_pds_default_handle(
+            self, mock_get, mock_post, mock_create_task):
+        self.make_bot_users()
+
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess, login=False)
+            to_auth = self.make_bluesky(sess, pds_url='https://new.pds.com/',
+                                        login=False)
+
+        to_auth_entity = to_auth.get()
+        to_auth_entity.session = {
+            'accessJwt': 'towkin',
+            'refreshJwt': 'reefresh',
+            'handle': 'alice.new.pds.com',
+        }
+        to_auth_entity.dpop_token = None
+        to_auth_entity.put()
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            from_key = ActivityPub(
+                id='http://in.st/users/alice',
+                copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                enabled_protocols=['atproto']).put()
+            obj_key = Object(id='at://did:plc:alice/app.bsky.actor.profile/self',
+                             bsky=ALICE_BSKY_PROFILE['value']).put()
+            repo = Repo.create(server.storage, 'did:plc:alice',
+                               handle='alice.in.st.ap.brid.gy',
+                               signing_key=K256_KEY, rotation_key=K256_KEY)
+            to_key = ATProto(id='did:plc:alice', enabled_protocols=['activitypub'],
+                             obj_key=obj_key).put()
+
+        migration = Migration(id='@alice@in.st atproto', from_=from_auth, to=to_auth,
+                              to_follow=['did:bob', 'did:eve'],
+                              state=State.migrate_follows).put()
+
+        # default ATProto handle on ap.brid.gy
+        self.assertEqual('alice.in.st.ap.brid.gy', from_key.get().handle_as(ATProto))
+
+        resp = self.post('/queue/migrate', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+
+        # PLC update should use the new PDS handle
+        del mock_post.call_args_list[3][1]['json']['sig']
+        self.assert_equals(call('https://plc.local/did:plc:alice', json={
+                'type': 'plc_operation',
+                'did': 'did:plc:alice',
+                'rotationKeys': [did.encode_did_key(K256_KEY.public_key())],
+                'verificationMethods': {
+                    'atproto': did.encode_did_key(K256_KEY.public_key()),
+                },
+                'alsoKnownAs': ['at://alice.new.pds.com'],
+                'services': {
+                    'atproto_pds': {
+                        'type': 'AtprotoPersonalDataServer',
+                        'endpoint': 'https://new.pds.com',
+                    },
+                },
+                'prev': 'prev-cid',
+            }, timeout=15, stream=True, headers={'User-Agent': bounce.USER_AGENT}),
+            mock_post.call_args_list[3])
+
+    @patch.object(tasks_client, 'create_task')
+    @patch('requests.post', side_effect=[
+        # createRecord for two follows
+        requests_response({
+            'uri': 'at://did:plc:bob/fo.ll.ow/123',
+            'cid': 'abcdefgh',
+        }),
+        requests_response({
+            'uri': 'at://did:plc:eve/fo.ll.ow/456',
+            'cid': 'xyzuvtsr',
+        }),
+        requests_response(),  # importRepo
+        requests_response(),  # PLC directory update
+        requests_response(),  # activateAccount
+    ])
+    @patch('requests.get', side_effect=[
         requests_response(DID_DOC),
         requests_response(ALICE_BSKY_PROFILE),
         requests_response({  # checkAccountStatus
@@ -1589,7 +1713,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess, login=False)
             to_auth = self.make_bluesky(
-                sess, pds_url='https://newpds.example.com/', login=False)
+                sess, pds_url='https://new.pds.com/', login=False)
 
         to_auth_entity = to_auth.get()
         to_auth_entity.session = {'accessJwt': 'towkin', 'refreshJwt': 'reefresh'}
@@ -1611,8 +1735,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
 
         migration = Migration(id='@alice@in.st atproto', from_=from_auth, to=to_auth,
                               to_follow=['did:bob', 'did:eve'],
-                              state=State.migrate_follows,
-                              ).put()
+                              state=State.migrate_follows).put()
 
         resp = self.post('/queue/migrate', from_auth, to_auth)
         self.assertEqual(200, resp.status_code)
@@ -1623,7 +1746,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
             self.assertEqual(False, to_key.get().manual_opt_out)
 
         mock_post.assert_has_calls([
-            call('https://newpds.example.com/xrpc/com.atproto.repo.createRecord', json={
+            call('https://new.pds.com/xrpc/com.atproto.repo.createRecord', json={
                 'repo': 'did:plc:alice',
                 'collection': 'app.bsky.graph.follow',
                 'record': {
@@ -1632,7 +1755,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
                     'createdAt': '2022-01-02T03:04:05.000Z',
                 },
             }, data=None, headers=ANY, auth=None, timeout=60),
-            call('https://newpds.example.com/xrpc/com.atproto.repo.createRecord', json={
+            call('https://new.pds.com/xrpc/com.atproto.repo.createRecord', json={
                 'repo': 'did:plc:alice',
                 'collection': 'app.bsky.graph.follow',
                 'record': {
@@ -1641,9 +1764,9 @@ When you migrate  @alice@in.st to  Bluesky  ...
                     'createdAt': '2022-01-02T03:04:05.000Z',
                 },
             }, data=None, headers=ANY, auth=None, timeout=60),
-            call('https://newpds.example.com/xrpc/com.atproto.repo.importRepo',
+            call('https://new.pds.com/xrpc/com.atproto.repo.importRepo',
                  data=ANY, json=None, headers=ANY, auth=None),
-            call('https://newpds.example.com/xrpc/com.atproto.server.activateAccount',
+            call('https://new.pds.com/xrpc/com.atproto.server.activateAccount',
                  data=ANY, json=None, headers=ANY, auth=None),
         ], any_order=True)
 

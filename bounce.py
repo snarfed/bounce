@@ -1525,6 +1525,9 @@ def migrate_out(migration, from_user, to_auth, to_user):
                         'access_token': to_auth.session['accessJwt'],
                         'refresh_token': to_auth.session['refreshJwt'],
                     }
+                    at_handle = from_user.handle_as(ATProto)
+                    if at_handle and at_handle.endswith(domains.SUPERDOMAIN):
+                        kwargs['handle'] = to_auth.session['handle']
                 to_user.migrate_out(from_user, to_user.key.id(), **kwargs)
 
     from_proto = from_user.__class__
