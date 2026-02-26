@@ -2255,6 +2255,48 @@ When you migrate  @alice@in.st to  Bluesky  ...
             },
             data=None, headers=ANY, auth=None)
 
+    @patch('requests.post', return_value=requests_response({
+        'accessJwt': 'towkin',
+        'refreshJwt': 'reefresh',
+        'handle': 'myhandle.pds.net',
+        'did': 'did:plc:alice',
+    }))
+    @patch('requests.get', return_value=requests_response({
+        'did': 'did:web:pds.net',
+        'availableUserDomains': ['pds.net'],
+    }))
+    def test_bluesky_create_account_not_bridged(self, mock_get, mock_post):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            alice_key = ActivityPub(id='http://in.st/users/alice').put()
+
+        migration_key = Migration(id='@alice@in.st atproto', from_=from_auth,
+                                  state=State.review_done).put()
+
+        def enable(self, to_proto):
+            self.add('copies', Target(protocol='atproto', uri='did:plc:alice'))
+            self.put()
+            Repo.create(server.storage, 'did:plc:alice', signing_key=K256_KEY,
+                        rotation_key=K256_KEY)
+
+        with patch.object(ActivityPub, 'enable_protocol', autospec=True,
+                          side_effect=enable) as mock_enable:
+            resp = self.post('/bluesky-create-account', from_auth,
+                             pds='https://pds.net', handle='myhandle',
+                             handle_domain='.pds.net',
+                             email='alice@example.com', password='hunter2',
+                             show_handle='true', show_invite_code='false',
+                             show_phone_verification_code='false')
+
+        self.assertEqual(302, resp.status_code)
+        self.assertIn('/confirm', resp.headers['Location'])
+
+        mock_enable.assert_called_once()
+        self.assertEqual(alice_key, mock_enable.call_args[0][0].key)
+        self.assertEqual(ATProto, mock_enable.call_args[0][1])
+
     @patch('requests.post', return_value= requests_response(
         {'error': 'InvalidInviteCode', 'message': 'foo bar'},
         status=400, headers={'Content-Type': 'application/json'},

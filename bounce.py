@@ -1001,6 +1001,10 @@ def bluesky_create_account(from_auth):
     if handle:
         handle = handle + get_required_param('handle_domain')
 
+    if not from_user.is_enabled(ATProto, explicit=True):
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            from_user.enable_protocol(ATProto)
+
     try:
         with ndb.context.Context(bridgy_fed_ndb).use():
             resp = ATProto.create_account_for_migrate_out(
