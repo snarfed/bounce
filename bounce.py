@@ -265,30 +265,6 @@ class Migration(ndb.Model):
         })
 
 
-def humanize_number(num, noun):
-    """Generates a string for a number of objects in a human-friendly form.
-
-    Eg ``12k widgets``, ``2M fluffs``, ``1 foo``.
-
-    Args:
-      num (int)
-      noun (str)
-
-    Returns:
-      str:
-    """
-    # hacky, uses humanize's file size function and then tweaks it
-    # https://humanize.readthedocs.io/en/latest/filesize/
-    number = humanize.naturalsize(num, format='%.0f')\
-                     .upper().removesuffix('BYTES').removesuffix('BYTE')\
-                     .rstrip('B').replace(' ', '')
-    if num != 1:
-        noun += 's'
-
-    return f'{number} {noun}'
-
-
-
 def url(path, from_auth, to_auth=None):
     """Simple helper to create URLs with from and optional to auth entities.
 
@@ -319,7 +295,7 @@ def template_vars():
 
     return {
         'auths': auths,
-        'humanize_number': humanize_number,
+        'humanize_number': util.humanize_number,
         'MAIN_PDS_DOMAINS': MAIN_PDS_DOMAINS,
         'request': request,
         'util': util,
