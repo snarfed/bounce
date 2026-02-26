@@ -2475,3 +2475,29 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(200, resp.status_code)
         self.assertIn("doesn't show that you've started the profile move",
                       get_flashed_messages()[0])
+
+    def test_bluesky_oauth_client_metadata(self):
+        self._test_bluesky_oauth_client_metadata()
+
+    def test_bluesky_oauth_client_metadata_forged_host(self):
+        self._test_bluesky_oauth_client_metadata(headers={'Host': 'evil.example'})
+
+    @patch('bounce.DEBUG', False)
+    def _test_bluesky_oauth_client_metadata(self, **kwargs):
+        resp = self.get('/oauth/bluesky/client-metadata.json', **kwargs)
+        self.assertEqual(200, resp.status_code)
+        self.assert_equals({
+            'application_type': 'web',
+            'client_id': 'https://bounce.anew.social/oauth/bluesky/client-metadata.json',
+            'client_name': 'Bounce',
+            'client_uri': 'https://bounce.anew.social/',
+            'dpop_bound_access_tokens': True,
+            'grant_types': ['authorization_code', 'refresh_token'],
+            'redirect_uris': [
+                'https://bounce.anew.social/oauth/bluesky/finish/to',
+                'https://bounce.anew.social/oauth/bluesky/finish/from',
+            ],
+            'response_types': ['code'],
+            'scope': 'atproto transition:generic',
+            'token_endpoint_auth_method': 'none',
+        }, resp.json)
