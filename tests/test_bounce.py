@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, quote, urlencode
 import arroba
 from arroba import did, server
 import arroba.util
-from arroba.datastore_storage import AtpRemoteBlob, MemcacheSequences
+from arroba.datastore_storage import AtpRemoteBlob, AtpRepo, MemcacheSequences
 from arroba.storage import DEACTIVATED
 from arroba.repo import Repo
 from arroba.tests.test_xrpc_repo import (
@@ -281,15 +281,17 @@ class BounceTest(TestCase, Asserts):
 
         return auth
 
-    def make_bluesky(self, sess, did='did:plc:alice',
-                     pds_url='https://some.pds.bsky.network/', login=True, **kwargs):
+    def make_bluesky(self, sess, did='did:plc:alice', login=True,
+                     pds_url='https://some.pds.bsky.network/', user_json=None,
+                     dpop_token=DPOP_TOKEN_STR, session=None, **kwargs):
         user_json = json_dumps({
             '$type': 'app.bsky.actor.defs#profileView',
             'handle': 'al.ice',
             'avatar': 'http://alice/pic',
+            **(user_json or {}),
         })
         auth = BlueskyAuth(id=did, pds_url=pds_url, user_json=user_json,
-                           dpop_token=DPOP_TOKEN_STR, **kwargs).put()
+                           session=session, dpop_token=dpop_token, **kwargs).put()
 
         if login:
             sess.setdefault(LOGINS_SESSION_KEY, []).append(('BlueskyAuth', did))
@@ -1594,16 +1596,11 @@ When you migrate  @alice@in.st to  Bluesky  ...
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess, login=False)
             to_auth = self.make_bluesky(sess, pds_url='https://new.pds.com/',
-                                        login=False)
-
-        to_auth_entity = to_auth.get()
-        to_auth_entity.session = {
-            'accessJwt': 'towkin',
-            'refreshJwt': 'reefresh',
-            'handle': 'alice.new.pds.com',
-        }
-        to_auth_entity.dpop_token = None
-        to_auth_entity.put()
+                                        login=False, dpop_token=None, session={
+                                            'accessJwt': 'towkin',
+                                            'refreshJwt': 'reefresh',
+                                            'handle': 'alice.new.pds.com',
+                                        })
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             from_key = ActivityPub(
@@ -1714,13 +1711,12 @@ When you migrate  @alice@in.st to  Bluesky  ...
 
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess, login=False)
-            to_auth = self.make_bluesky(
-                sess, pds_url='https://new.pds.com/', login=False)
-
-        to_auth_entity = to_auth.get()
-        to_auth_entity.session = {'accessJwt': 'towkin', 'refreshJwt': 'reefresh'}
-        to_auth_entity.dpop_token = None
-        to_auth_entity.put()
+            to_auth = self.make_bluesky(sess, pds_url='https://new.pds.com/',
+                                        login=False, dpop_token=None, session={
+                                            'accessJwt': 'towkin',
+                                            'refreshJwt': 'reefresh',
+                                            'handle': 'alice.new.pds.com',
+                                        })
 
         with ndb.context.Context(bridgy_fed_ndb).use():
             from_key = ActivityPub(id='http://in.st/users/alice',
@@ -2101,6 +2097,83 @@ When you migrate  @alice@in.st to  Bluesky  ...
         mock_get.assert_not_called()
         self.assertEqual([], AtpRemoteBlob.query().fetch())
 
+    @patch('oauth_dropins.bluesky.oauth_client_for_pds',
+           return_value=OAuth2Client(token_endpoint='https://un/used',
+                                     client_id='unused', client_secret='unused'))
+    @patch('requests.post', return_value=requests_response({
+        'blob': {'$type': 'blob', 'ref': {'$link': 'baf000'}, 'size': 99},
+    }))
+    @patch('requests.get', side_effect=[
+        requests_response(DID_DOC),
+        # requests_response(DID_DOC),
+        # blob downloads
+        requests_response(b'blob one', headers={'Content-Type': 'image/jpeg'}),
+        requests_response(b'blob two', headers={'Content-Type': 'video/mp4'}),
+    ])
+    def test_migrate_out_blobs(self, mock_get, mock_post, mock_oauth2client):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess, login=False)
+            to_auth = self.make_bluesky(
+                sess, pds_url='https://new.pds.com/', login=False,
+                session = {'accessJwt': 'towkin', 'refreshJwt': 'reefresh'},
+                user_json={'protocolOnly': True})
+            to_auth_entity = to_auth.get()
+
+        did = 'did:plc:alice'
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            from_user = ActivityPub(id='http://in.st/users/alice',
+                                    copies=[Target(protocol='atproto', uri=did)],
+                                    enabled_protocols=['atproto']).put().get()
+            to_user = ATProto(id=did).put().get()
+
+            repo_key = ndb.Key(AtpRepo, did)
+            AtpRemoteBlob(id='https://in.st/blob1', url='https://in.st/blob1',
+                          mime_type='image/jpeg', repos=[repo_key]).put()
+            AtpRemoteBlob(id='https://in.st/blob2', mime_type='video/mp4',
+                          repos=[repo_key]).put()
+
+        with app.test_request_context('/'):
+            bounce.migrate_out_blobs(from_user, to_auth_entity, to_user)
+
+        # check blob fetches
+        mock_get.assert_has_calls([
+            call('https://in.st/blob1', stream=True, timeout=15, headers=ANY),
+            call('https://in.st/blob2', stream=True, timeout=15, headers=ANY),
+        ], any_order=True)
+
+        # check blob uploads
+        self.assertEqual(2, mock_post.call_count)
+        self.assertEqual([
+            call('https://new.pds.com/xrpc/com.atproto.repo.uploadBlob', json=None,
+                 auth=ANY, data=b'blob one', timeout=60, headers={
+                     'Content-Type': 'image/jpeg',
+                     'User-Agent': 'Bounce (https://bounce.anew.social/)',
+                 }),
+            call('https://new.pds.com/xrpc/com.atproto.repo.uploadBlob', json=None,
+                 auth=ANY, data=b'blob two', timeout=60, headers={
+                     'Content-Type': 'video/mp4',
+                     'User-Agent': 'Bounce (https://bounce.anew.social/)',
+                 }),
+        ], mock_post.call_args_list)
+
+    @patch('requests.post')
+    @patch('requests.get', side_effect=[
+        requests_response(DID_DOC),
+    ])
+    def test_migrate_out_blobs_not_bluesky(self, _, mock_post):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess, login=False)
+            to_auth = self.make_mastodon(sess, login=False)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            from_user = ATProto(id='did:plc:alice').put().get()
+            to_user = ActivityPub(id='http://in.st/users/alice').put().get()
+
+        with app.test_request_context('/'):
+            bounce.migrate_out_blobs(from_user, to_auth.get(), to_user)
+
+        mock_post.assert_not_called()
+
     def test_disable_bridging_get(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_bluesky(sess)
@@ -2337,8 +2410,11 @@ When you migrate  @alice@in.st to  Bluesky  ...
         auth = BlueskyAuth.get_by_id('did:plc:alice')
         self.assertEqual(mock_post.return_value.json(), auth.session)
         self.assertEqual(auth.key, migration_key.get().to)
-        self.assertEqual({'did': 'did:plc:alice', 'handle': 'in.st.pds.net'},
-                         json_loads(auth.user_json))
+        self.assertEqual({
+            'did': 'did:plc:alice',
+            'handle': 'in.st.pds.net',
+            'protocolOnly': True,
+        }, json_loads(auth.user_json))
 
     @patch('requests.post', return_value=requests_response({
         'accessJwt': 'towkin',
@@ -2383,8 +2459,11 @@ When you migrate  @alice@in.st to  Bluesky  ...
             data=None, headers=ANY, auth=None)
 
         auth = BlueskyAuth.get_by_id('did:plc:alice')
-        self.assertEqual({'did': 'did:plc:alice', 'handle': 'alice-in-st.pds.net'},
-                         json_loads(auth.user_json))
+        self.assertEqual({
+            'did': 'did:plc:alice',
+            'handle': 'alice-in-st.pds.net',
+            'protocolOnly': True,
+        }, json_loads(auth.user_json))
 
     @patch('requests.post', return_value=requests_response({
         'accessJwt': 'towkin',

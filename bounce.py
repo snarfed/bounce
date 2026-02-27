@@ -12,7 +12,7 @@ import sys
 from urllib.parse import urljoin
 
 from arroba import xrpc_repo
-from arroba.datastore_storage import AtpRemoteBlob, DatastoreStorage, MemcacheSequences
+from arroba.datastore_storage import AtpRemoteBlob, AtpRepo, DatastoreStorage, MemcacheSequences
 import arroba.server
 from flask import Flask, redirect, render_template, request
 import flask_gae_static
@@ -175,16 +175,17 @@ else:
 # models
 #
 class State(IntEnum):
-    # in order!
-    review_followers = auto()
-    review_follows = auto()
-    review_analyze = auto()
-    review_done = auto()
-    migrate_follows = auto()
-    migrate_in = auto()
-    migrate_in_blobs = auto()
-    migrate_out = auto()
-    migrate_done = auto()
+    # don't change these! they're stored in existing migrations in the datastore
+    review_followers = 1
+    review_follows = 2
+    review_analyze = 3
+    review_done = 4
+    migrate_follows = 5
+    migrate_in = 6
+    migrate_in_blobs = 7
+    migrate_out = 8
+    migrate_out_blobs = 10
+    migrate_done = 9
 
 
 class Migration(ndb.Model):
@@ -1053,6 +1054,8 @@ def bluesky_create_account(from_auth):
         user_json = {
             'did': did,
             'handle': resp['handle'],
+            # used by migrate_out_blobs
+            'protocolOnly': True,
         }
 
     # make auth entity for new Bluesky account; point migration to it
@@ -1385,6 +1388,13 @@ def migrate_task(from_auth, to_auth):
     if migration.state == State.migrate_out:
         logger.info('starting migrate_out')
         migrate_out(migration, from_user, to_auth, to_user)
+        migration.state = State.migrate_out_blobs
+        migration.put()
+        logger.info('finished, now at migrate_out_blobs')
+
+    if migration.state == State.migrate_out_blobs:
+        logger.info('starting migrate_out_blobs')
+        migrate_out_blobs(from_user, to_auth, to_user)
         migration.state = State.migrate_done
         migration.put()
         logger.info('finished, now at migrate_done')
@@ -1571,6 +1581,40 @@ def migrate_out(migration, from_user, to_auth, to_user):
     with ndb.context.Context(bridgy_fed_ndb).use():
         to_user.enable_protocol(from_proto)
         from_proto.bot_maybe_follow_back(to_user)
+
+
+def migrate_out_blobs(from_user, to_auth, to_user):
+    """Uploads blobs for a user bridged to Bluesky to their new PDS.
+
+    Currently only runs when migrating to Bluesky to a new PDS. Otherwise, does
+    nothing.
+
+    Args:
+      from_user (models.User)
+      to_auth (oauth_dropins.models.BaseAuth)
+      to_user (models.User)
+    """
+    if (isinstance(to_user, ATProto) and to_auth.user_json
+            and json_loads(to_auth.user_json).get('protocolOnly')):
+        did = from_user.get_copy(ATProto)
+        assert did
+        assert to_auth.pds_url
+        logger.info(f'Uploading blobs for {did} to {to_auth.pds_url}')
+
+        source = granary_source(to_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            blobs = AtpRemoteBlob.query(AtpRemoteBlob.repos == ndb.Key(AtpRepo, did)
+                                        ).fetch()
+
+        logger.info(f'Found {len(blobs)} blobs')
+
+        for blob in blobs:
+            url = blob.url or blob.key.id()
+            resp = util.requests_get(url, stream=True)
+            resp.raise_for_status()
+            source._client.com.atproto.repo.uploadBlob(
+                input=resp.content, headers={'Content-Type': blob.mime_type})
 
 
 @app.get('/admin/activity')
