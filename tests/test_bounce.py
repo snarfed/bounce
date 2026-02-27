@@ -247,7 +247,7 @@ class BounceTest(TestCase, Asserts):
                     bot.copies = [Target(protocol='atproto', uri='did:plc:ap')]
                 bot.put()
 
-    def make_mastodon(self, sess, name='alice', login=True):
+    def make_mastodon(self, sess, name='alice', login=True, **kwargs):
         app = MastodonApp(instance='http://in.st/', data='{}').put()
         user_json = json_dumps({
             'id': '234',
@@ -255,7 +255,7 @@ class BounceTest(TestCase, Asserts):
             'avatar_static': f'http://in.st/@{name}/pic',
         })
         auth = MastodonAuth(id=f'@{name}@in.st', access_token_str='towkin', app=app,
-                            user_json=user_json).put()
+                            user_json=user_json, **kwargs).put()
 
         if login:
             sess.setdefault(LOGINS_SESSION_KEY, []).append(
@@ -263,7 +263,7 @@ class BounceTest(TestCase, Asserts):
 
         return auth
 
-    def make_pixelfed(self, sess, name='alice', login=True):
+    def make_pixelfed(self, sess, name='alice', login=True, **kwargs):
         app = PixelfedApp(instance='http://in.st/', data='{}').put()
         # https://github.com/pixelfed/pixelfed/discussions/6182
         user_json = json_dumps({
@@ -273,7 +273,7 @@ class BounceTest(TestCase, Asserts):
             'avatar_static': f'http://in.st/@{name}/pic',
         })
         auth = PixelfedAuth(id=f'@{name}@in.st', access_token_str='towkin', app=app,
-                            user_json=user_json).put()
+                            user_json=user_json, **kwargs).put()
 
         if login:
             sess.setdefault(LOGINS_SESSION_KEY, []).append(
@@ -282,14 +282,14 @@ class BounceTest(TestCase, Asserts):
         return auth
 
     def make_bluesky(self, sess, did='did:plc:alice',
-                     pds_url='https://some.pds.bsky.network/', login=True):
+                     pds_url='https://some.pds.bsky.network/', login=True, **kwargs):
         user_json = json_dumps({
             '$type': 'app.bsky.actor.defs#profileView',
             'handle': 'al.ice',
             'avatar': 'http://alice/pic',
         })
         auth = BlueskyAuth(id=did, pds_url=pds_url, user_json=user_json,
-                           dpop_token=DPOP_TOKEN_STR).put()
+                           dpop_token=DPOP_TOKEN_STR, **kwargs).put()
 
         if login:
             sess.setdefault(LOGINS_SESSION_KEY, []).append(('BlueskyAuth', did))
@@ -1190,11 +1190,12 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(200, resp.status_code)
         body = resp.get_data(as_text=True)
         self.assertIn('<form action="/migrate" method="post">', body)
+        self.assertIn('to the fediverse as <code>@alice.in.st.ap.brid.gy@bsky.brid.gy</code>', body)
 
     def test_confirm_from_mastodon_currently_bridged_back_ignore(self):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
-            to_auth = self.make_bluesky(sess)
+            to_auth = self.make_bluesky(sess, session={'handle': 'al.i.ce'})
 
         Migration.get_or_insert(from_auth.get(), to_auth.get(),
                                 state=State.review_done)
@@ -1209,6 +1210,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(200, resp.status_code)
         body = resp.get_data(as_text=True)
         self.assertIn('<form action="/migrate" method="post">', body)
+        self.assertIn('to the fediverse as <code>@al.i.ce@bsky.brid.gy</code>', body)
 
     @patch('requests.post', side_effect=[
         requests_response({  # createSession

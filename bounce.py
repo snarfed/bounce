@@ -482,6 +482,54 @@ def get_user(auth):
         return proto.get_or_create(id, allow_opt_out=True)
 
 
+def new_to_handle(from_user, to_proto, to_auth):
+    """Helper to determine a migrated user's new handle in the to protocol.
+
+    Passes through to ``from_user.handle_as(to_proto)`` except:
+    * if ``to_user`` is ATProto and ``from_user`` doesn't have a custom handle
+      in ATProto, uses ``to_auth.user_json['handle']``
+
+    Args:
+      from_user (models.User)
+      to_proto (protocol.Protocol subclass or user instance)
+      to_auth (oauth_dropins.models.BaseAuth)
+
+    Returns:
+      str: ``from_user``'s handle in ``to_proto``
+    """
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        handle = from_user.handle_as(to_proto)
+
+    if to_proto.LABEL == 'atproto' and handle and handle.endswith(domains.SUPERDOMAIN):
+        if to_auth.session and (session_handle := to_auth.session.get('handle')):
+            return session_handle
+
+    return handle
+
+
+def new_from_handle(to_user, from_user, to_auth):
+    """Helper to determine a migrated user's new handle in the from protocol.
+
+    Passes through to ``to_user.handle_as(from_proto)`` except:
+    * if ``to_user`` is ATProto and ``from_user`` doesn't have a custom handle
+      in ATProto, uses ``to_auth.user_json['handle']``
+
+    Args:
+      to_user (models.User)
+      from_user (models.User)
+      to_auth (oauth_dropins.models.BaseAuth)
+
+    Returns:
+      str: ``to_user``'s handle in ``from_user``'s protocol
+    """
+    if isinstance(to_user, ATProto):
+        return ids.translate_handle(handle=new_to_handle(from_user, to_user, to_auth),
+                                    from_=ATProto, to=from_user)
+
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        handle = from_user.handle_as(to_proto)
+
+
 #
 # views
 #
@@ -1086,7 +1134,7 @@ def confirm(from_auth, to_auth):
 
     vars = template_vars()
     with ndb.context.Context(bridgy_fed_ndb).use():
-        vars['to_user_bridged_handle'] = to_user.handle_as(from_proto)
+        vars['to_user_bridged_handle'] = new_from_handle(to_user, from_user, to_auth)
 
     return render_template(
         'confirm.html',
@@ -1496,13 +1544,9 @@ def migrate_out(migration, from_user, to_auth, to_user):
                 kwargs = {}
                 if isinstance(to_user, ATProto):
                     assert to_auth.session
-                    with ndb.context.Context(bridgy_fed_ndb).use():
-                        handle = from_user.handle_as(ATProto)
-                    if handle and handle.endswith(domains.SUPERDOMAIN):
-                        handle = to_auth.session['handle']
                     kwargs = {
                         'to_pds': to_auth.pds_url,
-                        'handle': handle,
+                        'handle': new_to_handle(from_user, ATProto, to_auth),
                         'access_token': to_auth.session['accessJwt'],
                         'refresh_token': to_auth.session['refreshJwt'],
                     }
