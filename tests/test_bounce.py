@@ -1778,7 +1778,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
                 'verificationMethods': {
                     'atproto': did.encode_did_key(K256_KEY.public_key()),
                 },
-                'alsoKnownAs': ['at://han.dull.brid.gy'],
+                'alsoKnownAs': ['at://al.ice'],
                 'services': {
                     'atproto_pds': {
                         'type': 'AtprotoPersonalDataServer',
@@ -2284,13 +2284,13 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertNotIn('name="handle"', body)
         self.assertNotIn('name="handle_domain"', body)
 
-    @patch('requests.post', return_value=requests_response({
+    @patch('requests.post', return_value=requests_response({  # createAccount
         'accessJwt': 'towkin',
         'refreshJwt': 'reefresh',
         'handle': 'in.st.pds.net',
         'did': 'did:plc:alice',
     }))
-    @patch('requests.get', return_value=requests_response({
+    @patch('requests.get', return_value=requests_response({  # describeServer
         'did': 'did:web:pds.net',
         'availableUserDomains': ['pds.net'],
     }))
@@ -2335,11 +2335,13 @@ When you migrate  @alice@in.st to  Bluesky  ...
         auth = BlueskyAuth.get_by_id('did:plc:alice')
         self.assertEqual(mock_post.return_value.json(), auth.session)
         self.assertEqual(auth.key, migration_key.get().to)
+        self.assertEqual({'did': 'did:plc:alice', 'handle': 'in.st.pds.net'},
+                         json_loads(auth.user_json))
 
     @patch('requests.post', return_value=requests_response({
         'accessJwt': 'towkin',
         'refreshJwt': 'reefresh',
-        'handle': 'alice.custom.com',
+        'handle': 'alice-in-st.pds.net',
         'did': 'did:plc:alice',
     }))
     @patch('requests.get', return_value=requests_response({
@@ -2377,6 +2379,10 @@ When you migrate  @alice@in.st to  Bluesky  ...
                 'password': 'hunter2',
             },
             data=None, headers=ANY, auth=None)
+
+        auth = BlueskyAuth.get_by_id('did:plc:alice')
+        self.assertEqual({'did': 'did:plc:alice', 'handle': 'alice-in-st.pds.net'},
+                         json_loads(auth.user_json))
 
     @patch('requests.post', return_value=requests_response({
         'accessJwt': 'towkin',

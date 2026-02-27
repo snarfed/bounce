@@ -1004,7 +1004,7 @@ def bluesky_create_account(from_auth):
     with ndb.context.Context(bridgy_fed_ndb).use():
         user_json = {
             'did': did,
-            'handle': from_user.handle_as(ATProto),
+            'handle': resp['handle'],
         }
 
     # make auth entity for new Bluesky account; point migration to it
@@ -1496,14 +1496,16 @@ def migrate_out(migration, from_user, to_auth, to_user):
                 kwargs = {}
                 if isinstance(to_user, ATProto):
                     assert to_auth.session
+                    with ndb.context.Context(bridgy_fed_ndb).use():
+                        handle = from_user.handle_as(ATProto)
+                    if handle and handle.endswith(domains.SUPERDOMAIN):
+                        handle = to_auth.session['handle']
                     kwargs = {
                         'to_pds': to_auth.pds_url,
+                        'handle': handle,
                         'access_token': to_auth.session['accessJwt'],
                         'refresh_token': to_auth.session['refreshJwt'],
                     }
-                    at_handle = from_user.handle_as(ATProto)
-                    if at_handle and at_handle.endswith(domains.SUPERDOMAIN):
-                        kwargs['handle'] = to_auth.session['handle']
                 to_user.migrate_out(from_user, to_user.key.id(), **kwargs)
 
     from_proto = from_user.__class__
