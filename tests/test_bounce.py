@@ -2291,6 +2291,16 @@ When you migrate  @alice@in.st to  Bluesky  ...
         body = resp.get_data(as_text=True)
         self.assertIn('@alice@in.st', body)
 
+    def test_bluesky_new_pds_post_main_pds(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        resp = self.post('/bluesky-new-pds', from_auth, pds='https://bsky.social')
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/bluesky-new-pds?from={from_auth.urlsafe().decode()}',
+                         resp.headers['Location'])
+        self.assertIn("can't yet migrate", get_flashed_messages()[0])
+
     @patch('requests.get', side_effect=[
         requests_response({
             'did': 'did:web:pds.net',

@@ -979,6 +979,11 @@ def bluesky_new_pds(from_auth):
 def bluesky_new_pds_post(from_auth):
     """Calls describeServer on the new PDS and shows details form."""
     pds = get_required_param('pds')
+
+    if util.domain_or_parent_in(pds, MAIN_PDS_DOMAINS):
+        flash(f"Sorry, we can't yet migrate to {util.domain_from_link(pds)}; it <a href=\"https://docs.bsky.app/blog/incoming-migration\">only allows accounts that it originally created</a>.", escape=False)
+        return redirect(url('/bluesky-new-pds', from_auth))
+
     client = lexrpc.Client(pds)
 
     try:
@@ -1060,10 +1065,13 @@ def bluesky_phone_verification_post(from_auth):
 @require_accounts('from')
 def bluesky_create_account_get(from_auth):
     """View for entering email, password, etc. for a new Bluesky account."""
+    vals = request.values.to_dict(flat=True)
+    vals.setdefault('show_phone_verification_code', 'false')
+    vals.setdefault('show_invite_code', 'false')
     return render_template(
         'bluesky_create_account.html',
         from_auth=from_auth,
-        **request.values,
+        **vals,
         **template_vars(),
     )
 
