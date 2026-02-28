@@ -266,21 +266,25 @@ class Migration(ndb.Model):
         })
 
 
-def url(path, from_auth, to_auth=None):
+def url(path, from_auth, to_auth=None, **params):
     """Simple helper to create URLs with from and optional to auth entities.
 
     Args:
-          from_auth (oauth_dropins.models.BaseAuth)
-          to_auth (oauth_dropins.models.BaseAuth)
+      from_auth (oauth_dropins.models.BaseAuth)
+      to_auth (oauth_dropins.models.BaseAuth)
+      params (dict): query params to include
 
     Returns:
       str: URL with ``from`` and optionally ``to`` query params
     """
-    url = f'{path}?from={from_auth.key.urlsafe().decode()}'
+    # add from and to first, then rest of params, so that they come first in
+    # the generated query param string
+    vars = {'from': from_auth.key.urlsafe().decode()}
     if to_auth:
-        url += f'&to={to_auth.key.urlsafe().decode()}'
+        vars['to'] = to_auth.key.urlsafe().decode()
+    vars.update(params)
 
-    return url
+    return path + '?' + urlencode(vars)
 
 
 def template_vars():
@@ -1004,15 +1008,11 @@ def bluesky_new_pds_post(from_auth):
         'show_invite_code': str(desc.get('inviteCodeRequired') is True).lower(),
     }
 
-    phone_verif = desc.get('phoneVerificationRequired')
-    if phone_verif:
-        return redirect(url('/bluesky-phone-verification', from_auth)
-                         + '&' + urlencode(vars))
+    if phone_verif := desc.get('phoneVerificationRequired'):
+        return redirect(url('/bluesky-phone-verification', from_auth, **vars))
 
-    return redirect(url('/bluesky-create-account', from_auth) + '&' + urlencode({
-        **vars,
-        'show_phone_verification_code': str(bool(phone_verif)).lower(),
-    }))
+    vars['show_phone_verification_code'] = str(bool(phone_verif)).lower()
+    return redirect(url('/bluesky-create-account', from_auth, **vars))
 
 
 @app.get('/bluesky-phone-verification')
@@ -1053,7 +1053,7 @@ def bluesky_phone_verification_post(from_auth):
     vals.pop('from')
     vals.pop('phone_number')
     vals['show_phone_verification_code'] = 'true'
-    return redirect(url('/bluesky-create-account', from_auth) + '&' + urlencode(vals))
+    return redirect(url('/bluesky-create-account', from_auth, **vals))
 
 
 @app.get('/bluesky-create-account')
@@ -1105,8 +1105,7 @@ def bluesky_create_account(from_auth):
         flash(f'Error from {util.domain_from_link(pds)}: {msg}')
 
         vals = {k: v for k, v in request.values.items() if k != 'from'}
-        return redirect(url('/bluesky-create-account', from_auth)
-                         + '&' + urlencode(vals))
+        return redirect(url('/bluesky-create-account', from_auth, **vals))
 
     # extract and store tokens from createAccount response
     did = from_user.get_copy(ATProto)
