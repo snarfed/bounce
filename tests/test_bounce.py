@@ -2311,26 +2311,10 @@ When you migrate  @alice@in.st to  Bluesky  ...
                         rotation_key=K256_KEY)
 
         resp = self.post('/bluesky-new-pds', from_auth, pds='https://pds.net')
-        self.assertEqual(200, resp.status_code)
-        body = resp.get_data(as_text=True)
-        self.assert_multiline_in(f"""\
-<input type="hidden" name="from" value="{from_auth.urlsafe().decode()}" />
-<input type="hidden" name="pds" value="https://pds.net" />
-<input type="hidden" name="show_handle" value="true" />
-<p>
-<input type="text" name="handle" required maxlength="20"
-       placeholder="handle (only a-z, 0-9, and -)" value=""
-       pattern="[a-z][a-z0-9\\-]*" />.my.pds.net
-<input type="hidden" name="handle_domain" value=".my.pds.net" />
-<p>
-<input type="email" name="email" required placeholder="email" value=""/>
-<input type="password" name="password" required placeholder="password"
-       value="" />
-""", body, ignore_blanks=True)
-        self.assert_multiline_in("""
-<input type="text" name="invite_code" required placeholder="invite code"
-       value="" />
-""", body)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(
+            f'/bluesky-create-account?from={from_auth.urlsafe().decode()}&pds=https%3A%2F%2Fpds.net&handle_domain=.my.pds.net&show_handle=true&show_invite_code=true&show_phone_verification_code=false',
+            resp.headers['Location'])
 
     @patch('requests.get', side_effect=[
         requests_response({  # describeServer
@@ -2383,24 +2367,10 @@ When you migrate  @alice@in.st to  Bluesky  ...
                          pds='https://pds.net', handle_domain='.my.pds.net',
                          show_handle='true', show_invite_code='false',
                          phone_number='+15551234567')
-        self.assertEqual(200, resp.status_code)
-        body = resp.get_data(as_text=True)
-        self.assert_multiline_in(f"""\
-<form action="/bluesky-create-account" method="post">
-<input type="hidden" name="from" value="{from_auth.urlsafe().decode()}" />
-<input type="hidden" name="pds" value="https://pds.net" />
-<input type="hidden" name="show_handle" value="true" />
-<p>
-<input type="text" name="handle" required maxlength="20"
-       placeholder="handle (only a-z, 0-9, and -)" value=""
-       pattern="[a-z][a-z0-9\-]*" />.my.pds.net
-<input type="hidden" name="handle_domain" value=".my.pds.net" />
-""", body, ignore_blanks=True)
-        self.assert_multiline_in("""\
-<input type="text" name="phone_verification_code" required
-       placeholder="phone verification code"
-       value="" />
-""", body)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(
+            f'/bluesky-create-account?from={from_auth.urlsafe().decode()}&pds=https%3A%2F%2Fpds.net&handle_domain=.my.pds.net&show_handle=true&show_invite_code=false&show_phone_verification_code=true',
+            resp.headers['Location'])
 
         mock_post.assert_called_once_with(
             'https://pds.net/xrpc/com.atproto.temp.requestPhoneVerification',
@@ -2428,10 +2398,39 @@ When you migrate  @alice@in.st to  Bluesky  ...
                         signing_key=K256_KEY, rotation_key=K256_KEY)
 
         resp = self.post('/bluesky-new-pds', from_auth, pds='https://pds.net')
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(
+            f'/bluesky-create-account?from={from_auth.urlsafe().decode()}&pds=https%3A%2F%2Fpds.net&handle_domain=.my.pds.net&show_handle=false&show_invite_code=false&show_phone_verification_code=false',
+            resp.headers['Location'])
+
+    def test_bluesky_create_account_get(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        resp = self.get('/bluesky-create-account', from_auth,
+                        pds='https://pds.net', handle_domain='.my.pds.net',
+                        show_handle='true', show_invite_code='true',
+                        show_phone_verification_code='false')
         self.assertEqual(200, resp.status_code)
         body = resp.get_data(as_text=True)
-        self.assertNotIn('name="handle"', body)
-        self.assertNotIn('name="handle_domain"', body)
+        self.assert_multiline_in(f"""\
+<input type="hidden" name="from" value="{from_auth.urlsafe().decode()}" />
+<input type="hidden" name="pds" value="https://pds.net" />
+<input type="hidden" name="show_handle" value="true" />
+<p>
+<input type="text" name="handle" required maxlength="20"
+       placeholder="handle (only a-z, 0-9, and -)" value=""
+       pattern="[a-z][a-z0-9\\-]*" />.my.pds.net
+<input type="hidden" name="handle_domain" value=".my.pds.net" />
+<p>
+<input type="email" name="email" required placeholder="email" value=""/>
+<input type="password" name="password" required placeholder="password"
+       value="" />
+""", body, ignore_blanks=True)
+        self.assert_multiline_in("""
+<input type="text" name="invite_code" required placeholder="invite code"
+       value="" />
+""", body)
 
     @patch('requests.post', return_value=requests_response({  # createAccount
         'accessJwt': 'towkin',
@@ -2605,14 +2604,11 @@ When you migrate  @alice@in.st to  Bluesky  ...
                          email='alice@example.com', password='hunter2',
                          show_handle='true', show_invite_code='true',
                          show_phone_verification_code='true')
-        self.assertEqual(200, resp.status_code)
-        self.assertEqual('Error from pds.net: foo bar', get_flashed_messages()[0])
-
-        body = resp.get_data(as_text=True)
-        self.assert_multiline_in(f"""\
-<input type="hidden" name="from" value="{from_auth.urlsafe().decode()}" />
-<input type="hidden" name="pds" value="https://pds.net" />
-""", body)
+        self.assertEqual(302, resp.status_code)
+        self.assertIn('/bluesky-create-account', resp.headers['Location'])
+        self.assertEqual(
+            f'/bluesky-create-account?from={from_auth.urlsafe().decode()}&pds=https%3A%2F%2Fpds.net&handle=myhandle&handle_domain=.pds.net&email=alice%40example.com&password=hunter2&show_handle=true&show_invite_code=true&show_phone_verification_code=true',
+            resp.headers['Location'])
 
     @patch('requests.get', side_effect=[
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),

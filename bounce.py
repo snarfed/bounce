@@ -1009,13 +1009,10 @@ def bluesky_new_pds_post(from_auth):
         return redirect(url('/bluesky-phone-verification', from_auth)
                          + '&' + urlencode(vars))
 
-    return render_template(
-        'bluesky_create_account.html',
-        from_auth=from_auth,
+    return redirect(url('/bluesky-create-account', from_auth) + '&' + urlencode({
         **vars,
-        show_phone_verification_code=str(phone_verif).lower(),
-        **template_vars(),
-    )
+        'show_phone_verification_code': str(bool(phone_verif)).lower(),
+    }))
 
 
 @app.get('/bluesky-phone-verification')
@@ -1052,10 +1049,20 @@ def bluesky_phone_verification_post(from_auth):
             **template_vars(),
         )
 
+    vals = request.values.to_dict(flat=True)
+    vals.pop('from')
+    vals.pop('phone_number')
+    vals['show_phone_verification_code'] = 'true'
+    return redirect(url('/bluesky-create-account', from_auth) + '&' + urlencode(vals))
+
+
+@app.get('/bluesky-create-account')
+@require_accounts('from')
+def bluesky_create_account_get(from_auth):
+    """View for entering email, password, etc. for a new Bluesky account."""
     return render_template(
         'bluesky_create_account.html',
         from_auth=from_auth,
-        show_phone_verification_code='true',
         **request.values,
         **template_vars(),
     )
@@ -1096,8 +1103,10 @@ def bluesky_create_account(from_auth):
             # https://atproto.com/specs/xrpc#error-responses
             msg = e.response.json().get('message') or e.response.json().get('error')
         flash(f'Error from {util.domain_from_link(pds)}: {msg}')
-        return render_template('bluesky_create_account.html', from_auth=from_auth,
-                               **request.values, **template_vars())
+
+        vals = {k: v for k, v in request.values.items() if k != 'from'}
+        return redirect(url('/bluesky-create-account', from_auth)
+                         + '&' + urlencode(vals))
 
     # extract and store tokens from createAccount response
     did = from_user.get_copy(ATProto)
