@@ -2333,6 +2333,80 @@ When you migrate  @alice@in.st to  Bluesky  ...
 """, body)
 
     @patch('requests.get', side_effect=[
+        requests_response({  # describeServer
+            'did': 'did:web:pds.net',
+            'availableUserDomains': ['.my.pds.net'],
+            'phoneVerificationRequired': True,
+        }),
+    ])
+    def test_bluesky_new_pds_post_phone_verification_required(self, mock_get):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+
+        resp = self.post('/bluesky-new-pds', from_auth, pds='https://pds.net')
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(
+            f'/bluesky-phone-verification?from={from_auth.urlsafe().decode()}&pds=https%3A%2F%2Fpds.net&handle_domain=.my.pds.net&show_handle=true&show_invite_code=false',
+            resp.headers['Location'])
+
+    def test_bluesky_phone_verification_get(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        resp = self.get('/bluesky-phone-verification', from_auth,
+                        pds='https://pds.net', handle_domain='.my.pds.net',
+                        show_handle='true', show_invite_code='false')
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+        self.assert_multiline_in(f"""\
+<input type="hidden" name="from" value="{from_auth.urlsafe().decode()}" />
+<input type="hidden" name="pds" value="https://pds.net" />
+<input type="hidden" name="handle_domain" value=".my.pds.net" />
+<input type="hidden" name="show_handle" value="true" />
+<input type="hidden" name="show_invite_code" value="false" />
+<input type="tel" name="phone_number" required placeholder="phone number"
+       value="" />
+""", body, ignore_blanks=True)
+
+    # requestPhoneVerification
+    @patch('requests.post', return_value=requests_response({}))
+    def test_bluesky_phone_verification_post(self, mock_post):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        resp = self.post('/bluesky-phone-verification', from_auth,
+                         pds='https://pds.net', handle_domain='.my.pds.net',
+                         show_handle='true', show_invite_code='false',
+                         phone_number='+15551234567')
+        self.assertEqual(200, resp.status_code)
+        body = resp.get_data(as_text=True)
+        self.assert_multiline_in(f"""\
+<form action="/bluesky-create-account" method="post">
+<input type="hidden" name="from" value="{from_auth.urlsafe().decode()}" />
+<input type="hidden" name="pds" value="https://pds.net" />
+<input type="hidden" name="show_handle" value="true" />
+<p>
+<input type="text" name="handle" required maxlength="20"
+       placeholder="handle (only a-z, 0-9, and -)" value=""
+       pattern="[a-z][a-z0-9\-]*" />.my.pds.net
+<input type="hidden" name="handle_domain" value=".my.pds.net" />
+""", body, ignore_blanks=True)
+        self.assert_multiline_in("""\
+<input type="text" name="phone_verification_code" required
+       placeholder="phone verification code"
+       value="" />
+""", body)
+
+        mock_post.assert_called_once_with(
+            'https://pds.net/xrpc/com.atproto.temp.requestPhoneVerification',
+            json={'phoneNumber': '+15551234567'}, data=None, headers=ANY)
+
+    @patch('requests.get', side_effect=[
         requests_response({
             'did': 'did:web:pds.net',
             'availableUserDomains': ['.my.pds.net'],

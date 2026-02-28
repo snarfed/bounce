@@ -9,7 +9,7 @@ import logging
 import os
 from pathlib import Path
 import sys
-from urllib.parse import urljoin
+from urllib.parse import urlencode, urljoin
 
 from arroba import xrpc_repo
 from arroba.datastore_storage import AtpRemoteBlob, AtpRepo, DatastoreStorage, MemcacheSequences
@@ -997,15 +997,66 @@ def bluesky_new_pds_post(from_auth):
         at_handle = from_user.handle_as(ATProto)
     show_handle = not at_handle or at_handle.endswith(domains.SUPERDOMAIN)
 
+    vars = {
+        'pds': pds,
+        'handle_domain': handle_domain,
+        'show_handle': str(show_handle is True).lower(),
+        'show_invite_code': str(desc.get('inviteCodeRequired') is True).lower(),
+    }
+
+    phone_verif = desc.get('phoneVerificationRequired')
+    if phone_verif:
+        return redirect(url('/bluesky-phone-verification', from_auth)
+                         + '&' + urlencode(vars))
+
     return render_template(
         'bluesky_create_account.html',
         from_auth=from_auth,
-        pds=pds,
-        handle_domain=handle_domain,
-        show_handle=str(show_handle is True).lower(),
-        show_invite_code=str(desc.get('inviteCodeRequired') is True).lower(),
-        show_phone_verification_code=str(
-            desc.get('phoneVerificationRequired') is True).lower(),
+        **vars,
+        show_phone_verification_code=str(phone_verif).lower(),
+        **template_vars(),
+    )
+
+
+@app.get('/bluesky-phone-verification')
+@require_accounts('from')
+def bluesky_phone_verification(from_auth):
+    """View for entering phone number for PDS verification."""
+    return render_template(
+        'bluesky_phone_verification.html',
+        from_auth=from_auth,
+        **request.values,
+        **template_vars(),
+    )
+
+
+@app.post('/bluesky-phone-verification')
+@require_accounts('from')
+def bluesky_phone_verification_post(from_auth):
+    """Sends phone verification SMS via PDS and shows create account form."""
+    pds = get_required_param('pds')
+    phone_number = get_required_param('phone_number')
+    client = lexrpc.Client(pds)
+
+    try:
+        client.com.atproto.temp.requestPhoneVerification(
+            {'phoneNumber': phone_number})
+    except Exception as e:
+        _, body = util.interpret_http_exception(e)
+        flash(f'Error requesting phone verification: {body}')
+        return render_template(
+            'bluesky_phone_verification.html',
+            from_auth=from_auth,
+            **request.values,
+            phone_number=phone_number,
+            **template_vars(),
+        )
+
+    return render_template(
+        'bluesky_create_account.html',
+        from_auth=from_auth,
+        show_phone_verification_code='true',
+        **request.values,
         **template_vars(),
     )
 

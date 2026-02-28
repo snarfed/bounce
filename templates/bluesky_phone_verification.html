@@ -1,0 +1,30 @@
+{% set body_id = 'bluesky-phone-verification' %}
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="row big">
+  Verifying phone number for
+  <img src="/oauth_dropins_static/bluesky_icon.png" class="logo" title="Bluesky">
+  {{ util.pretty_link(pds)|safe }}...
+</div>
+
+<div class="row">
+  <p>This PDS requires phone verification. Please enter your phone number, and they'll send you a verification code by SMS.
+</div>
+
+<div class="row">
+  <form action="/bluesky-phone-verification" method="post">
+    <input type="hidden" name="from" value="{{ from_auth.key.urlsafe().decode() }}" />
+    <input type="hidden" name="pds" value="{{ pds }}" />
+    <input type="hidden" name="handle_domain" value="{{ handle_domain }}" />
+    <input type="hidden" name="show_handle" value="{{ show_handle }}" />
+    <input type="hidden" name="show_invite_code" value="{{ show_invite_code }}" />
+    <input type="tel" name="phone_number" required placeholder="phone number"
+           value="{{ phone_number }}" />
+    <p>
+    <input type="submit" class="btn btn-default" value="Next" />
+  </form>
+</div>
+
+{% endblock content %}
