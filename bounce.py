@@ -487,7 +487,7 @@ def get_user(auth):
         return proto.get_or_create(id, allow_opt_out=True)
 
 
-def new_to_handle(from_user, to_proto, to_auth):
+def new_to_handle(from_user, to_user, to_auth):
     """Helper to determine a migrated user's new handle in the to protocol.
 
     Passes through to ``from_user.handle_as(to_proto)`` except:
@@ -496,12 +496,14 @@ def new_to_handle(from_user, to_proto, to_auth):
 
     Args:
       from_user (models.User)
-      to_proto (protocol.Protocol subclass or user instance)
+      to_user (models.User)
       to_auth (oauth_dropins.models.BaseAuth)
 
     Returns:
       str: ``from_user``'s handle in ``to_proto``
     """
+    to_proto = to_user.__class__
+
     with ndb.context.Context(bridgy_fed_ndb).use():
         handle = from_user.handle_as(to_proto)
 
@@ -1119,6 +1121,7 @@ def bluesky_create_account(from_auth):
     did = from_user.get_copy(ATProto)
     with ndb.context.Context(bridgy_fed_ndb).use():
         user_json = {
+            '$type': 'app.bsky.actor.defs#profileViewDetailed',
             'did': did,
             'handle': resp['handle'],
             # used by migrate_out_blobs
@@ -1305,7 +1308,7 @@ def migrate_post(from_auth, to_auth):
         migration.put()
 
     stale = util.now() - migration.updated >= STALE_TASK_AGE
-    if migration.state < State.migrate_done or stale:
+    if migration.state != State.migrate_done or stale:
         if migration.state == State.review_done:
             migration.state = State.migrate_follows
         migration.put()
@@ -1363,7 +1366,7 @@ def activitypub_profile_moved(from_auth, to_auth):
     migration = Migration.get(from_auth, to_auth)
     if not migration:
         error('migration not found', status=404)
-    elif not migration.state or migration.state < State.migrate_done:
+    elif not migration.state or migration.state != State.migrate_done:
         flash(f'Migration not done yet.')
         return redirect(url('/migrate', from_auth, to_auth))
 
@@ -1623,7 +1626,7 @@ def migrate_out(migration, from_user, to_auth, to_user):
                     assert to_auth.session
                     kwargs = {
                         'to_pds': to_auth.pds_url,
-                        'handle': new_to_handle(from_user, ATProto, to_auth),
+                        'handle': new_to_handle(from_user, to_user, to_auth),
                         'access_token': to_auth.session['accessJwt'],
                         'refresh_token': to_auth.session['refreshJwt'],
                     }
@@ -1663,8 +1666,7 @@ def migrate_out_blobs(from_user, to_auth, to_user):
     """
     if (isinstance(to_user, ATProto) and to_auth.user_json
             and json_loads(to_auth.user_json).get('protocolOnly')):
-        did = from_user.get_copy(ATProto)
-        assert did
+        did = to_auth.key.id()
         assert to_auth.pds_url
         logger.info(f'Uploading blobs for {did} to {to_auth.pds_url}')
 

@@ -1192,7 +1192,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(200, resp.status_code)
         body = resp.get_data(as_text=True)
         self.assertIn('<form action="/migrate" method="post">', body)
-        self.assertIn('to the fediverse as <code>@alice.in.st.ap.brid.gy@bsky.brid.gy</code>', body)
+        self.assertIn('to the fediverse as <code>@al.ice@bsky.brid.gy</code>', body)
 
     def test_confirm_from_mastodon_currently_bridged_back_ignore(self):
         with self.client.session_transaction() as sess:
@@ -2494,6 +2494,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(mock_post.return_value.json(), auth.session)
         self.assertEqual(auth.key, migration_key.get().to)
         self.assertEqual({
+            '$type': 'app.bsky.actor.defs#profileViewDetailed',
             'did': 'did:plc:alice',
             'handle': 'in.st.pds.net',
             'protocolOnly': True,
@@ -2543,6 +2544,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
 
         auth = BlueskyAuth.get_by_id('did:plc:alice')
         self.assertEqual({
+            '$type': 'app.bsky.actor.defs#profileViewDetailed',
             'did': 'did:plc:alice',
             'handle': 'alice-in-st.pds.net',
             'protocolOnly': True,
