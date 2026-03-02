@@ -9,6 +9,7 @@ flask_secret_key
 /local*
 /oauth_dropins_static
 private_notes
+pyrightconfig.json
 service_account_creds.json
 threads_app_*
 TAGS

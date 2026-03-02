@@ -1216,6 +1216,34 @@ When you migrate  @alice@in.st to  Bluesky  ...
 
     @patch('requests.post', side_effect=[
         requests_response({  # createSession
+            'handle': 'al.ice',
+            'did': 'did:plc:alice',
+            'accessJwt': 'towkin',
+            'refreshJwt': 'reephrush',
+        }),
+        requests_response({}),  # requestPlcOperationSignature
+    ])
+    def test_confirm_from_bluesky_to_mastodon(self, mock_post):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess)
+
+        Migration.get_or_insert(from_auth.get(), to_auth.get(),
+                                state=State.review_done)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            Object(id='did:plc:alice', raw=DID_DOC).put()
+            ATProto(id='did:plc:alice').put()
+            ActivityPub(id='http://in.st/users/alice').put()
+
+        resp = self.post('/confirm', from_auth, to_auth, password='hunter5')
+
+        self.assertEqual(200, resp.status_code)
+        self.assertIn('<form action="/migrate" method="post">',
+                      resp.get_data(as_text=True))
+
+    @patch('requests.post', side_effect=[
+        requests_response({  # createSession
             'error': 'AuthenticationRequired',
             'message': 'Invalid identifier or password',
         }, status=401),

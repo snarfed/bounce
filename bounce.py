@@ -534,7 +534,7 @@ def new_from_handle(to_user, from_user, to_auth):
                                     from_=ATProto, to=from_user)
 
     with ndb.context.Context(bridgy_fed_ndb).use():
-        handle = from_user.handle_as(to_proto)
+        return to_user.handle_as(from_user.__class__)
 
 
 #
