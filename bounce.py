@@ -55,7 +55,6 @@ from oauth_dropins.webutil.models import EnumProperty, JsonProperty
 from oauth_dropins.webutil.util import json_dumps, json_loads
 import pytz
 from requests import HTTPError, RequestException
-from requests_oauth2client import TokenSerializer, OAuth2AccessTokenAuth
 
 # from Bridgy Fed
 from activitypub import ActivityPub
@@ -405,24 +404,6 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
     return decorator
 
 
-def bluesky_session_callback(auth_entity):
-    """Returns a callable to pass to lexrpc.Client as session_callback.
-
-    When an access token or OAuth DPoP token is refreshed, stores the new token
-    back to the datastore in the auth entity.
-    """
-    def callback(session_or_auth):
-        if isinstance(session_or_auth, dict):
-            if session_or_auth != auth_entity.session:
-                auth_entity.session = session_or_auth
-                auth_entity.put()
-
-        elif isinstance(session_or_auth, OAuth2AccessTokenAuth):
-            serialized = TokenSerializer().dumps(auth.dpop_token)
-            if session_or_auth.token != serialized:
-                auth_entity.dpop_token = serialized
-                auth_entity.put()
-
 
 def granary_source(auth, with_auth=False, **requests_kwargs):
     """Returns a granary source instance for a given auth entity.
@@ -452,19 +433,10 @@ def granary_source(auth, with_auth=False, **requests_kwargs):
 
     elif isinstance(auth, BlueskyAuth):
         if with_auth:
-            if auth.dpop_token:
-                oauth_client = oauth_dropins.bluesky.oauth_client_for_pds(
-                    bluesky_oauth_client_metadata(), auth.pds_url)
-                token = TokenSerializer().loads(auth.dpop_token)
-                dpop_auth = OAuth2AccessTokenAuth(client=oauth_client, token=token)
-                requests_kwargs['auth'] = dpop_auth
-            elif auth.session:
-                requests_kwargs['access_token'] = auth.session['accessJwt']
-                requests_kwargs['refresh_token'] = auth.session['refreshJwt']
-
+            return Bluesky.from_auth(auth, bluesky_oauth_client_metadata(),
+                                     **requests_kwargs)
         return Bluesky(pds_url=auth.pds_url, handle=auth.user_display_name(),
-                       did=auth.key.id(), session_callback=bluesky_session_callback,
-                       **requests_kwargs)
+                       did=auth.key.id(), **requests_kwargs)
 
 
 def get_user(auth):
@@ -1525,7 +1497,8 @@ def migrate_in(migration, from_auth, from_user, to_user):
     if isinstance(from_auth, BlueskyAuth):
         # use the password-based session stored earlier in /confirm, since
         # signPlcOperation (below) doesn't support OAuth DPoP tokens
-        old_pds_client = from_auth._api(session_callback=bluesky_session_callback)
+        old_pds_client = from_auth._api(
+            session_callback=oauth_dropins.bluesky.make_session_callback(from_auth))
 
         # export repo from old PDS, import into BF
         #

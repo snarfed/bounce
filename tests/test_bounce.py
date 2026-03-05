@@ -387,8 +387,7 @@ class BounceTest(TestCase, Asserts):
         self.assertEqual('https://some.pds/', source._client.address)
         self.assertEqual(
             'towkin', source._client.requests_kwargs['auth'].token.access_token)
-        self.assertEqual(bounce.bluesky_session_callback,
-                         source._client.session_callback)
+        self.assertIsNotNone(source._client.session_callback)
 
     def test_granary_source_bluesky_session_with_tokens(self):
         auth = BlueskyAuth(
@@ -405,8 +404,7 @@ class BounceTest(TestCase, Asserts):
         self.assertEqual('https://some.pds/', source._client.address)
         self.assertEqual('towkin', source._client.session['accessJwt'])
         self.assertEqual('reefresh', source._client.session['refreshJwt'])
-        self.assertEqual(bounce.bluesky_session_callback,
-                         source._client.session_callback)
+        self.assertIsNotNone(source._client.session_callback)
 
     def test_from(self):
         with self.client.session_transaction() as sess:
@@ -2172,13 +2170,13 @@ When you migrate  @alice@in.st to  Bluesky  ...
         # check blob uploads
         self.assertEqual(2, mock_post.call_count)
         self.assertEqual([
-            call('https://new.pds.com/xrpc/com.atproto.repo.uploadBlob', json=None,
-                 auth=ANY, data=b'blob one', timeout=60, headers={
+            call('https://new.pds.com/xrpc/com.atproto.repo.uploadBlob',
+                 json=None, auth=ANY, data=b'blob one', timeout=60, headers={
                      'Content-Type': 'image/jpeg',
                      'User-Agent': 'Bounce (https://bounce.anew.social/)',
                  }),
-            call('https://new.pds.com/xrpc/com.atproto.repo.uploadBlob', json=None,
-                 auth=ANY, data=b'blob two', timeout=60, headers={
+            call('https://new.pds.com/xrpc/com.atproto.repo.uploadBlob',
+                 json=None, auth=ANY, data=b'blob two', timeout=60, headers={
                      'Content-Type': 'video/mp4',
                      'User-Agent': 'Bounce (https://bounce.anew.social/)',
                  }),
