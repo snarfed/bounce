@@ -39,7 +39,7 @@ env_variables:
   # https://bsky.app/profile/gargaj.umlaut.hu/post/3kxsvpqiuln26
   CHAT_HOST: api.bsky.chat
   CHAT_DID: did:web:api.bsky.chat
-  MEMCACHE_HOST: '10.126.144.3'
+  MEMCACHE_HOST: '10.126.144.67'
 
 handlers:
 
