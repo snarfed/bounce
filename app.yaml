@@ -41,6 +41,12 @@ env_variables:
   CHAT_DID: did:web:api.bsky.chat
   MEMCACHE_HOST: '10.126.144.67'
 
+  # DATASTORE_DB = us-single-region
+
+  # set to enable read only mode (eg during planned maintenance)
+  # https://github.com/snarfed/bridgy-fed/issues/2458
+  # READ_ONLY: 'true'
+
 handlers:
 
 # static
