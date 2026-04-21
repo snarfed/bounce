@@ -23,6 +23,7 @@ from arroba.tests.test_xrpc_repo import (
 )
 from Crypto.PublicKey import RSA
 from flask import get_flashed_messages, session
+from google.api_core.exceptions import PermissionDenied
 from google.cloud import ndb, storage
 from granary import as2
 from granary.source import html_to_text
@@ -224,6 +225,7 @@ class BounceTest(TestCase, Asserts):
         util.now = lambda **kwargs: NOW
 
         appengine_info.APP_ID = 'my-app'
+        appengine_info.READ_ONLY = False
 
         atproto.appview.address = 'https://appview.local'
         atproto.init(MemcacheSequences)
@@ -429,6 +431,22 @@ class="logo" title="Bluesky" />
         self.assert_multiline_in("""\
 <img src="http://in.st/@alice/pic" class="profile">
 <span style="unicode-bidi: isolate">@alice@in.st</span>""", body)
+
+    def test_handle_permission_denied(self):
+        appengine_info.READ_ONLY = True
+
+        with patch('bounce.render_template', side_effect=PermissionDenied('no')):
+            resp = self.client.get('/')
+
+        self.assertEqual(503, resp.status_code)
+        self.assertIn('planned maintenance', resp.get_data(as_text=True))
+
+    def test_read_only(self):
+        appengine_info.READ_ONLY = True
+
+        resp = self.client.get('/from')
+        self.assertEqual(503, resp.status_code)
+        self.assertIn('planned maintenance', resp.get_data(as_text=True))
 
     def test_to(self):
         with self.client.session_transaction() as sess:

@@ -14,8 +14,10 @@ from urllib.parse import urlencode, urljoin
 from arroba import xrpc_repo
 from arroba.datastore_storage import AtpRemoteBlob, AtpRepo, DatastoreStorage, MemcacheSequences
 import arroba.server
+import flask
 from flask import Flask, redirect, render_template, request
 import flask_gae_static
+from google.api_core.exceptions import PermissionDenied
 from google.cloud import ndb, storage
 from google.cloud.ndb.key import Key
 from google.protobuf.message import DecodeError
@@ -155,6 +157,7 @@ app.url_map.converters['regex'] = flask_util.RegexConverter
 app.before_request(canonicalize_domain([APPSPOT_DOMAIN], DOMAIN))
 app.after_request(flask_util.default_modern_headers)
 app.register_error_handler(Exception, flask_util.handle_exception)
+app.register_error_handler(PermissionDenied, flask_util.handle_read_only_permission_denied)
 
 if LOCAL_SERVER:
     flask_gae_static.init_app(app)
@@ -298,12 +301,19 @@ def template_vars():
             auths.append(auth)
 
     return {
+        'appengine_info': appengine_info,
         'auths': auths,
         'humanize_number': util.humanize_number,
         'MAIN_PDS_DOMAINS': MAIN_PDS_DOMAINS,
         'request': request,
         'util': util,
     }
+
+
+def render_read_only(template):
+    return render_template(template, appengine_info=appengine_info, util=util)
+
+disable_if_read_only = flask_util.disable_if_read_only(render_fn=render_read_only)
 
 
 def require_accounts(from_params, to_params=None, logged_in=True, failures_to=None):
@@ -535,6 +545,7 @@ def logout():
 
 
 @app.get('/from')
+@disable_if_read_only
 def choose_from():
     """Choose account to migrate from."""
     vars = template_vars()
@@ -566,6 +577,7 @@ def choose_from():
 
 
 @app.get('/to')
+@disable_if_read_only
 @require_accounts(('from', 'auth_entity'), failures_to='/from')
 def choose_to(from_auth):
     """Choose account to migrate to."""
@@ -616,6 +628,7 @@ def choose_to(from_auth):
 
 
 @app.get('/review')
+@disable_if_read_only
 @require_accounts(('from', 'state'), ('to', 'auth_entity'), failures_to='/from')
 def review(from_auth, to_auth):
     """Reviews a "from" account's followers and follows."""
@@ -923,6 +936,7 @@ def analyze_review(migration, from_auth):
 
 
 @app.get('/bluesky-password')
+@disable_if_read_only
 @require_accounts('from', 'to')
 def bluesky_password(from_auth, to_auth):
     """View for entering the user's Bluesky password."""
@@ -938,6 +952,7 @@ def bluesky_password(from_auth, to_auth):
 
 
 @app.get('/bluesky-new-pds')
+@disable_if_read_only
 @require_accounts('from')
 def bluesky_new_pds(from_auth):
     """View for choosing a new Bluesky PDS."""
@@ -949,6 +964,7 @@ def bluesky_new_pds(from_auth):
 
 
 @app.post('/bluesky-new-pds')
+@disable_if_read_only
 @require_accounts('from')
 def bluesky_new_pds_post(from_auth):
     """Calls describeServer on the new PDS and shows details form."""
@@ -995,6 +1011,7 @@ def bluesky_new_pds_post(from_auth):
 
 
 @app.get('/bluesky-phone-verification')
+@disable_if_read_only
 @require_accounts('from')
 def bluesky_phone_verification(from_auth):
     """View for entering phone number for PDS verification."""
@@ -1007,6 +1024,7 @@ def bluesky_phone_verification(from_auth):
 
 
 @app.post('/bluesky-phone-verification')
+@disable_if_read_only
 @require_accounts('from')
 def bluesky_phone_verification_post(from_auth):
     """Sends phone verification SMS via PDS and shows create account form."""
@@ -1036,6 +1054,7 @@ def bluesky_phone_verification_post(from_auth):
 
 
 @app.get('/bluesky-create-account')
+@disable_if_read_only
 @require_accounts('from')
 def bluesky_create_account_get(from_auth):
     """View for entering email, password, etc. for a new Bluesky account."""
@@ -1051,6 +1070,7 @@ def bluesky_create_account_get(from_auth):
 
 
 @app.post('/bluesky-create-account')
+@disable_if_read_only
 @require_accounts('from')
 def bluesky_create_account(from_auth):
     """Creates a new Bluesky account on a given PDS."""
@@ -1114,6 +1134,7 @@ def bluesky_create_account(from_auth):
 
 
 @app.route('/confirm', methods=['GET', 'POST'])
+@disable_if_read_only
 @require_accounts('from', 'to')
 def confirm(from_auth, to_auth):
     """View for the migration confirmation page."""
@@ -1192,6 +1213,7 @@ def confirm(from_auth, to_auth):
 
 
 @app.get('/set-alsoKnownAs')
+@disable_if_read_only
 @require_accounts('from', 'to')
 def set_alsoKnownAs(from_auth, to_auth):
     """View for entering the user's Bluesky password."""
@@ -1215,6 +1237,7 @@ def set_alsoKnownAs(from_auth, to_auth):
 
 
 @app.get('/disable-bridging')
+@disable_if_read_only
 @require_accounts('from', 'to')
 def disable_bridging_get(from_auth, to_auth):
     """View for disabling existing bridging."""
@@ -1240,6 +1263,7 @@ def disable_bridging_get(from_auth, to_auth):
 
 
 @app.post('/disable-bridging')
+@disable_if_read_only
 @require_accounts('from', 'to')
 def disable_bridging_post(from_auth, to_auth):
     """Disable bridging for the to account."""
@@ -1255,6 +1279,7 @@ def disable_bridging_post(from_auth, to_auth):
 
 
 @app.post('/migrate')
+@disable_if_read_only
 @require_accounts('from', 'to')
 def migrate_post(from_auth, to_auth):
     """Migrate handler that starts a background task.
@@ -1290,6 +1315,7 @@ def migrate_post(from_auth, to_auth):
 
 
 @app.get('/migrate')
+@disable_if_read_only
 @require_accounts('from', 'to')
 def migrate_get(from_auth, to_auth):
     """Migrate handler that shows progress or the final result."""
@@ -1330,6 +1356,7 @@ def migrate_get(from_auth, to_auth):
 
 
 @app.post('/activitypub-profile-moved')
+@disable_if_read_only
 @require_accounts('from', 'to')
 def activitypub_profile_moved(from_auth, to_auth):
     """Checks that a migration from ActivityPub started the profile move."""

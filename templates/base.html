@@ -76,8 +76,14 @@
 
 {% if body_id != 'front' %}
 <div class="row warning">
-<p><strong>WARNING:</strong> Bounce is still in beta testing. Expect bugs and rough edges.</p>
+  <p><strong>WARNING:</strong> Bounce is still in beta testing. Expect bugs and rough edges.</p>
 </div>
+{% else %}
+{% if appengine_info.READ_ONLY %}
+<div class="row warning">
+  <p><a href="https://blog.anew.social/"><strong>Currently undergoing planned maintenance.</strong></a> We'll be back soon!
+</div>
+{% endif %}
 {% endif %}
 
 {% block content %}
