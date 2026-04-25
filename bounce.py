@@ -974,7 +974,7 @@ def bluesky_new_pds_post(from_auth):
         flash(f"Sorry, we can't yet migrate to {util.domain_from_link(pds)}; it <a href=\"https://docs.bsky.app/blog/incoming-migration\">only allows accounts that it originally created</a>.", escape=False)
         return redirect(url('/bluesky-new-pds', from_auth))
 
-    client = lexrpc.Client(pds)
+    client = lexrpc.Client(pds, requests_session=util.session)
 
     try:
         desc = client.com.atproto.server.describeServer()
@@ -1030,7 +1030,7 @@ def bluesky_phone_verification_post(from_auth):
     """Sends phone verification SMS via PDS and shows create account form."""
     pds = get_required_param('pds')
     phone_number = get_required_param('phone_number')
-    client = lexrpc.Client(pds)
+    client = lexrpc.Client(pds, requests_session=util.session)
 
     try:
         client.com.atproto.temp.requestPhoneVerification(

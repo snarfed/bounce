@@ -496,7 +496,7 @@ class="logo" title="Bluesky" />
         self.assertEqual(400, resp.status_code)
 
     @patch.object(tasks_client, 'create_task')
-    @patch('requests.get', return_value=requests_response(
+    @patch.object(util.session, 'get', return_value=requests_response(
         ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE))
     def test_review_to_account_ignore_ineligible_for_bridging(
             self, mock_get, mock_create_task):
@@ -547,7 +547,7 @@ class="logo" title="Bluesky" />
                          resp.headers['Location'])
 
     @patch.object(tasks_client, 'create_task')
-    @patch('requests.get', return_value=requests_response(
+    @patch.object(util.session, 'get', return_value=requests_response(
         ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE))
     def test_review_starts_task(self, mock_get, mock_create_task):
         self.make_bot_users()
@@ -565,7 +565,7 @@ class="logo" title="Bluesky" />
         self.assert_task(mock_create_task, 'review', from_=from_auth, to=to_auth)
 
     @patch.object(tasks_client, 'create_task')
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response(ALICE_WEBFINGER),
         requests_response(ALICE_WEBFINGER),
@@ -588,7 +588,7 @@ class="logo" title="Bluesky" />
         self.assert_task(mock_create_task, 'review', from_=from_auth, to=to_auth)
         self.assertGreater(migration.key.get().updated, yesterday)
 
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response(DID_DOC),  # did:plc:alice
         requests_response(ALICE_BSKY_PROFILE),
     ])
@@ -906,7 +906,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assert_equals(REVIEW_DATA_MASTODON_TO_BLUESKY, migration.review,
                            ignore=['follows_preview_raw', 'followers_preview_raw'])
 
-    @patch('requests.get')
+    @patch.object(util.session, 'get')
     def _test_review_task_activitypub_to_bluesky(self, mock_get, from_auth, to_auth,
                                                  followers, follows, extra_gets=()):
         self.make_bot_users()
@@ -964,7 +964,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
-    @patch('requests.get')
+    @patch.object(util.session, 'get')
     def test_review_task_bluesky_to_mastodon(self, mock_get, mock_oauth2client):
         self.make_bot_users()
         alice = {
@@ -1039,7 +1039,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assert_equals(REVIEW_DATA_BLUESKY_TO_MASTODON, migration.review,
                            ignore=['follows_preview_raw', 'followers_preview_raw'])
 
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response([], content_type='application/json'),  # followers
         requests_response([], content_type='application/json'),  # follows
 
@@ -1071,7 +1071,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
             requests_response({
                 'subject': {'did': 'did:plc:alice', 'handle': 'al.ice'},
                 'followers': [],
@@ -1118,7 +1118,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/migrate?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
-    @patch('requests.post', side_effect=[
+    @patch.object(util.session, 'post', side_effect=[
         requests_response({  # createSession
             'handle': 'han.dull',
             'did': 'did:plc:alice',
@@ -1189,7 +1189,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
             f'/disable-bridging?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}',
             resp.headers['Location'])
 
-    @patch('requests.get', return_value=requests_response(DID_DOC))  # did:plc:alice
+    @patch.object(util.session, 'get', return_value=requests_response(DID_DOC))  # did:plc:alice
     def test_confirm_ap_to_bluesky_new_pds_to_auth_is_bridged_not_logged_in(self, _):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
@@ -1230,7 +1230,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertIn('<form action="/migrate" method="post">', body)
         self.assertIn('to the fediverse as <code>@al.i.ce@bsky.brid.gy</code>', body)
 
-    @patch('requests.post', side_effect=[
+    @patch.object(util.session, 'post', side_effect=[
         requests_response({  # createSession
             'handle': 'al.ice',
             'did': 'did:plc:alice',
@@ -1258,7 +1258,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertIn('<form action="/migrate" method="post">',
                       resp.get_data(as_text=True))
 
-    @patch('requests.post', side_effect=[
+    @patch.object(util.session, 'post', side_effect=[
         requests_response({  # createSession
             'error': 'AuthenticationRequired',
             'message': 'Invalid identifier or password',
@@ -1291,7 +1291,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
                          mock_post.call_args_list[0].kwargs['json'])
         self.assertIsNone(from_auth.get().session)
 
-    @patch('requests.post', side_effect=[
+    @patch.object(util.session, 'post', side_effect=[
         requests_response({  # createSession
             'error': 'AuthFactorTokenRequired',
             'message': 'A sign in code has been sent to your email address',
@@ -1325,7 +1325,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
                          mock_post.call_args_list[0].kwargs['json'])
         self.assertIsNone(from_auth.get().session)
 
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response(DID_DOC),  # did:plc:alice
         requests_response(ALICE_AP_ACTOR, content_type='application/activity+json'),
         requests_response(ALICE_WEBFINGER),
@@ -1501,7 +1501,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
     @patch.object(tasks_client, 'create_task')
-    @patch('requests.post', side_effect=[
+    @patch.object(util.session, 'post', side_effect=[
         requests_response({
             'uri': 'at://did:plc:bob/fo.ll.ow/123',
             'cid': 'abcdefgh',
@@ -1511,7 +1511,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
             'cid': 'xyzuvtsr',
         }),
     ])
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response(DID_DOC),
         requests_response(ALICE_BSKY_PROFILE),
     ])
@@ -1571,7 +1571,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual([], migration.to_follow)
 
     @patch.object(tasks_client, 'create_task')
-    @patch('requests.post', side_effect=[
+    @patch.object(util.session, 'post', side_effect=[
         # createRecord for two follows
         requests_response({
             'uri': 'at://did:plc:bob/fo.ll.ow/123',
@@ -1585,7 +1585,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(),  # PLC directory update
         requests_response(),  # activateAccount
     ])
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response({
             **DID_DOC,
             'alsoKnownAs': ['at://alice.in.st.ap.brid.gy'],
@@ -1690,7 +1690,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
             mock_post.call_args_list[3])
 
     @patch.object(tasks_client, 'create_task')
-    @patch('requests.post', side_effect=[
+    @patch.object(util.session, 'post', side_effect=[
         # createRecord for two follows
         requests_response({
             'uri': 'at://did:plc:bob/fo.ll.ow/123',
@@ -1704,7 +1704,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(),  # PLC directory update
         requests_response(),  # activateAccount
     ])
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response(DID_DOC),
         requests_response(ALICE_BSKY_PROFILE),
         requests_response({  # checkAccountStatus
@@ -1849,7 +1849,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
-    @patch('requests.post', side_effect=[
+    @patch.object(util.session, 'post', side_effect=[
         # createRecords for follows
         requests_response(status=400),
         requests_response({'id': '456', 'following': True}),
@@ -1857,7 +1857,9 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(),    # PLC update
         requests_response({}),  # deactivateAccount
     ])
-    @patch('requests.get', side_effect=[
+    @patch.object(arroba.util.session, 'get',
+                  return_value=testutil.requests_response(SNARFED2_DID_DOC))
+    @patch.object(util.session, 'get', side_effect=[
         requests_response(SNARFED2_DID_DOC),
         requests_response(ALICE_BSKY_PROFILE),
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
@@ -1870,7 +1872,6 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(b'abc00000 contents', content_type='foo/bar'),  # getBlob
         # getRepo
         requests_response(SNARFED2_CAR, content_type='application/vnd.ipld.car'),
-        requests_response(SNARFED2_DID_DOC),
         requests_response({
             **ALICE_AP_ACTOR,
             'alsoKnownAs': [f'https://bsky.brid.gy/ap/{SNARFED2_DID}'],
@@ -1878,7 +1879,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(ALICE_WEBFINGER),
         requests_response(ALICE_WEBFINGER),
     ])
-    def test_migrate_task_bluesky_to_mastodon(self, mock_get, mock_post,
+    def test_migrate_task_bluesky_to_mastodon(self, mock_get, mock_arroba_get, mock_post,
                                               mock_oauth2client, mock_create_task,
                                               mock_storage_client_cls):
         self.make_bot_users()
@@ -2004,8 +2005,8 @@ When you migrate  @alice@in.st to  Bluesky  ...
 
     @patch.object(tasks_client, 'create_task')
     @patch.object(ATProto, 'create_for')
-    @patch('requests.post')
-    @patch('requests.get', return_value=requests_response({
+    @patch.object(util.session, 'post')
+    @patch.object(util.session, 'get', return_value=requests_response({
         **ALICE_AP_ACTOR,
         'alsoKnownAs': ['https://bsky.brid.gy/ap/did:plc:alice'],
     }, content_type=as2.CONTENT_TYPE))
@@ -2082,7 +2083,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
                 'target': 'http://in.st/users/alice',
                 'to': ['https://www.w3.org/ns/activitystreams#Public'],
         }, util.json_loads(params[b'as2'][0]))
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         # listBlobs
         requests_response({'cids': ['abc00000', 'def00000', 'ghi00000']}),
         # getBlobs
@@ -2132,7 +2133,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
                               width=21, height=12),
             ], AtpRemoteBlob.query().fetch(), ignore=['created', 'updated'])
 
-    @patch('requests.get')
+    @patch.object(util.session, 'get')
     def test_migrate_in_blobs_not_main_pds(self, mock_get):
         with self.client.session_transaction() as sess:
             auth = self.make_bluesky(sess, pds_url='https://some.pds').get()
@@ -2144,10 +2145,10 @@ When you migrate  @alice@in.st to  Bluesky  ...
     @patch('oauth_dropins.bluesky.oauth_client_for_pds',
            return_value=OAuth2Client(token_endpoint='https://un/used',
                                      client_id='unused', client_secret='unused'))
-    @patch('requests.post', return_value=requests_response({
+    @patch.object(util.session, 'post', return_value=requests_response({
         'blob': {'$type': 'blob', 'ref': {'$link': 'baf000'}, 'size': 99},
     }))
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response(DID_DOC),
         # requests_response(DID_DOC),
         # blob downloads
@@ -2200,8 +2201,8 @@ When you migrate  @alice@in.st to  Bluesky  ...
                  }),
         ], mock_post.call_args_list)
 
-    @patch('requests.post')
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'post')
+    @patch.object(util.session, 'get', side_effect=[
         requests_response(DID_DOC),
     ])
     def test_migrate_out_blobs_not_bluesky(self, _, mock_post):
@@ -2239,7 +2240,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
 
     @patch.object(tasks_client, 'create_task')
     @patch('bounce.confirm', return_value='okay')
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
     ])
@@ -2291,7 +2292,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         #     user=to_user.key.urlsafe(),
         # )
 
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response({
             **ALICE_AP_ACTOR,
             'movedTo': 'https://bsky.brid.gy/ap/did:plc:alice',
@@ -2345,7 +2346,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
                          resp.headers['Location'])
         self.assertIn("can't yet migrate", get_flashed_messages()[0])
 
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response({
             'did': 'did:web:pds.net',
             'availableUserDomains': ['.my.pds.net'],
@@ -2370,7 +2371,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
             f'/bluesky-create-account?from={from_auth.urlsafe().decode()}&pds=https%3A%2F%2Fpds.net&handle_domain=.my.pds.net&show_handle=true&show_invite_code=true&show_phone_verification_code=false',
             resp.headers['Location'])
 
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response({  # describeServer
             'did': 'did:web:pds.net',
             'availableUserDomains': ['.my.pds.net'],
@@ -2412,7 +2413,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
 """, body, ignore_blanks=True)
 
     # requestPhoneVerification
-    @patch('requests.post', return_value=requests_response({}))
+    @patch.object(util.session, 'post', return_value=requests_response({}))
     def test_bluesky_phone_verification_post(self, mock_post):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
@@ -2430,7 +2431,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
             'https://pds.net/xrpc/com.atproto.temp.requestPhoneVerification',
             json={'phoneNumber': '+15551234567'}, data=None, headers=ANY)
 
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response({
             'did': 'did:web:pds.net',
             'availableUserDomains': ['.my.pds.net'],
@@ -2486,13 +2487,13 @@ When you migrate  @alice@in.st to  Bluesky  ...
        value="" />
 """, body)
 
-    @patch('requests.post', return_value=requests_response({  # createAccount
+    @patch.object(util.session, 'post', return_value=requests_response({  # createAccount
         'accessJwt': 'towkin',
         'refreshJwt': 'reefresh',
         'handle': 'in.st.pds.net',
         'did': 'did:plc:alice',
     }))
-    @patch('requests.get', return_value=requests_response({  # describeServer
+    @patch.object(util.session, 'get', return_value=requests_response({  # describeServer
         'did': 'did:web:pds.net',
         'availableUserDomains': ['pds.net'],
     }))
@@ -2544,13 +2545,13 @@ When you migrate  @alice@in.st to  Bluesky  ...
             'protocolOnly': True,
         }, json_loads(auth.user_json))
 
-    @patch('requests.post', return_value=requests_response({
+    @patch.object(util.session, 'post', return_value=requests_response({
         'accessJwt': 'towkin',
         'refreshJwt': 'reefresh',
         'handle': 'alice-in-st.pds.net',
         'did': 'did:plc:alice',
     }))
-    @patch('requests.get', return_value=requests_response({
+    @patch.object(util.session, 'get', return_value=requests_response({
         'did': 'did:web:pds.net',
         'availableUserDomains': ['pds.net'],
     }))
@@ -2594,13 +2595,13 @@ When you migrate  @alice@in.st to  Bluesky  ...
             'protocolOnly': True,
         }, json_loads(auth.user_json))
 
-    @patch('requests.post', return_value=requests_response({
+    @patch.object(util.session, 'post', return_value=requests_response({
         'accessJwt': 'towkin',
         'refreshJwt': 'reefresh',
         'handle': 'myhandle.pds.net',
         'did': 'did:plc:alice',
     }))
-    @patch('requests.get', return_value=requests_response({
+    @patch.object(util.session, 'get', return_value=requests_response({
         'did': 'did:web:pds.net',
         'availableUserDomains': ['pds.net'],
     }))
@@ -2636,11 +2637,11 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(alice_key, mock_enable.call_args[0][0].key)
         self.assertEqual(ATProto, mock_enable.call_args[0][1])
 
-    @patch('requests.post', return_value= requests_response(
+    @patch.object(util.session, 'post', return_value= requests_response(
         {'error': 'InvalidInviteCode', 'message': 'foo bar'},
         status=400, headers={'Content-Type': 'application/json'},
     ))
-    @patch('requests.get', return_value=requests_response({
+    @patch.object(util.session, 'get', return_value=requests_response({
         'did': 'did:web:pds.net',
         'availableUserDomains': ['pds.net'],
     }))
@@ -2666,7 +2667,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
             f'/bluesky-create-account?from={from_auth.urlsafe().decode()}&pds=https%3A%2F%2Fpds.net&handle=myhandle&handle_domain=.pds.net&email=alice%40example.com&password=hunter2&show_handle=true&show_invite_code=true&show_phone_verification_code=true',
             resp.headers['Location'])
 
-    @patch('requests.get', side_effect=[
+    @patch.object(util.session, 'get', side_effect=[
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response(ALICE_WEBFINGER),
         requests_response(ALICE_WEBFINGER),
