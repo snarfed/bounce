@@ -30,6 +30,7 @@ vpc_access_connector:
   name: projects/bridgy-federated/locations/us-central1/connectors/bridgy-fed
 
 env_variables:
+  DATASTORE_DB: us-single-region
   PDS_HOST: atproto.brid.gy
   PLC_HOST: plc.directory
   APPVIEW_HOST: api.bsky.app
@@ -41,11 +42,9 @@ env_variables:
   CHAT_DID: did:web:api.bsky.chat
   MEMCACHE_HOST: '10.126.144.67'
 
-  # DATASTORE_DB = us-single-region
-
   # set to enable read only mode (eg during planned maintenance)
   # https://github.com/snarfed/bridgy-fed/issues/2458
-  # READ_ONLY: 'true'
+  # READ_ONLY: true
 
 handlers:
 
