@@ -77,7 +77,8 @@ logger = logging.getLogger(__name__)
 PROTOCOLS = set(p for p in models.PROTOCOLS.values() if p and p.LABEL != 'ui')
 
 BRIDGY_FED_PROJECT_ID = 'bridgy-federated'
-bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID)
+bridgy_fed_ndb = ndb.Client(project=BRIDGY_FED_PROJECT_ID,
+                            database=os.environ.get('DATASTORE_DB'))
 
 # point ndb to bounce-migrate's datastore
 BOUNCE_PROJECT_ID = 'bounce-migrate'
