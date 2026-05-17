@@ -59,9 +59,9 @@ import pytz
 from requests import HTTPError, RequestException
 
 # from Bridgy Fed
-from activitypub import ActivityPub
+from activitypub import ActivityPub, NeedsAlias
 import atproto
-from atproto import ATProto
+from atproto import ATProto, MAIN_PDS_DOMAINS
 import common
 import domains
 import ids
@@ -128,8 +128,6 @@ DOCS_URL_MIGRATE = {
 # if a Migration hasn't been touched in this long, we'll restart its review or
 # migrate task on the next user request
 STALE_TASK_AGE = timedelta(minutes=5)
-
-MAIN_PDS_DOMAINS = ('bsky.app', 'bsky.network', 'bsky.social')
 
 CLOUD_STORAGE_BUCKET = 'bridgy-federated.appspot.com'
 CLOUD_STORAGE_BASE_URL = 'https://storage.googleapis.com/'
@@ -952,6 +950,9 @@ def bluesky_password(from_auth, to_auth):
     )
 
 
+# NOTE: the account migration flow below (PDS setup, account creation, the
+# alsoKnownAs/NeedsAlias check) is largely duplicated in bridgy-fed's dms.py
+# migrate-to DM commands and pages.py settings endpoints. Keep the three in sync.
 @app.get('/bluesky-new-pds')
 @disable_if_read_only
 @require_accounts('from')
@@ -1160,16 +1161,13 @@ def confirm(from_auth, to_auth):
         try:
             with ndb.context.Context(bridgy_fed_ndb).use():
                 to_proto.check_can_migrate_out(from_user, to_user.key.id())
+        except NeedsAlias:
+            return redirect(url('/set-alsoKnownAs', from_auth, to_auth))
         except ValueError as e:
-            # WARNING: this is brittle! depends on the exact exception message
-            # from ActivityPub.check_can_migrate_out
             msg = str(e)
             logger.info(msg)
-            if "alsoKnownAs doesn't contain" in msg:
-                return redirect(url('/set-alsoKnownAs', from_auth, to_auth))
-            else:
-                flash(f"{from_auth.user_display_name()} isn't ready to migrate: {msg}")
-                return redirect(url('/review', from_auth, to_auth))
+            flash(f"{from_auth.user_display_name()} isn't ready to migrate: {msg}")
+            return redirect(url('/review', from_auth, to_auth))
 
     # now, the checks that add request params:
     # * from Bluesky needs password
