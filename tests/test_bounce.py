@@ -2487,6 +2487,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
        value="" />
 """, body)
 
+    @patch.object(tasks_client, 'create_task')  # user-enabled task
     @patch.object(util.session, 'post', return_value=requests_response({  # createAccount
         'accessJwt': 'towkin',
         'refreshJwt': 'reefresh',
@@ -2497,7 +2498,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         'did': 'did:web:pds.net',
         'availableUserDomains': ['pds.net'],
     }))
-    def test_bluesky_create_account(self, mock_get, mock_post):
+    def test_bluesky_create_account(self, mock_get, mock_post, _):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
 
@@ -2545,6 +2546,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
             'protocolOnly': True,
         }, json_loads(auth.user_json))
 
+    @patch.object(tasks_client, 'create_task')  # user-enabled task
     @patch.object(util.session, 'post', return_value=requests_response({
         'accessJwt': 'towkin',
         'refreshJwt': 'reefresh',
@@ -2555,7 +2557,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         'did': 'did:web:pds.net',
         'availableUserDomains': ['pds.net'],
     }))
-    def test_bluesky_create_account_custom_handle(self, mock_get, mock_post):
+    def test_bluesky_create_account_custom_handle(self, mock_get, mock_post, _):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
 
@@ -2637,6 +2639,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(alice_key, mock_enable.call_args[0][0].key)
         self.assertEqual(ATProto, mock_enable.call_args[0][1])
 
+    @patch.object(tasks_client, 'create_task')  # user-enabled task
     @patch.object(util.session, 'post', return_value= requests_response(
         {'error': 'InvalidInviteCode', 'message': 'foo bar'},
         status=400, headers={'Content-Type': 'application/json'},
@@ -2645,7 +2648,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         'did': 'did:web:pds.net',
         'availableUserDomains': ['pds.net'],
     }))
-    def test_bluesky_create_account_error(self, mock_get, mock_post):
+    def test_bluesky_create_account_error(self, mock_get, mock_post, _):
         with self.client.session_transaction() as sess:
             from_auth = self.make_mastodon(sess)
 
