@@ -903,6 +903,9 @@ When you migrate  @alice@in.st to  Bluesky  ...
             from_auth=from_auth, to_auth=to_auth, followers=[alice, bob],
             follows=[alice, bob, eve, bot])
         self.assertEqual(['did:plc:bob', 'did:plc:eve'], migration.to_follow)
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            self.assertEqual([ActivityPub(id='http://in.st/users/alice').key],
+                             migration.dormant_follows)
         self.assert_equals(REVIEW_DATA_MASTODON_TO_BLUESKY, migration.review,
                            ignore=['follows_preview_raw', 'followers_preview_raw'])
 
@@ -1531,8 +1534,11 @@ When you migrate  @alice@in.st to  Bluesky  ...
             to_key = ATProto(id='did:plc:alice', enabled_protocols=['activitypub'],
                              obj_key=obj_key).put()
 
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            dormant_key = ActivityPub(id='http://other/bob').key
         migration = Migration(id='@alice@in.st atproto', from_=from_auth, to=to_auth,
                               to_follow=['did:bob', 'did:eve'],
+                              dormant_follows=[dormant_key],
                               state=State.migrate_follows,
                               ).put()
 
@@ -1569,6 +1575,15 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(State.migrate_done, migration.state)
         self.assertEqual(['did:bob', 'did:eve'], migration.followed)
         self.assertEqual([], migration.to_follow)
+        self.assertEqual([], migration.dormant_follows)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            self.assert_entities_equal([Follower(
+                from_=ATProto(id='did:plc:alice').key,
+                to=ActivityPub(id='http://other/bob').key,
+                status='dormant',
+                reason='bounce',
+            )], Follower.query().fetch(), ignore=['created', 'updated'])
 
     @patch.object(tasks_client, 'create_task')
     @patch.object(util.session, 'post', side_effect=[

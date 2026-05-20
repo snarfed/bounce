@@ -208,6 +208,10 @@ class Migration(ndb.Model):
     to_follow = ndb.StringProperty(repeated=True)
     followed = ndb.StringProperty(repeated=True)
 
+    # unbridged follow targets, tracked so that we can DM the bouncing user via
+    # Bridgy Fed if they eventually bridge. Keys point at Bridgy Fed Users.
+    dormant_follows = ndb.KeyProperty(repeated=True)
+
     # required for migrating from Bluesky; unused for others
     plc_code = ndb.StringProperty()
 
@@ -657,6 +661,7 @@ def review(from_auth, to_auth):
         migration.review = {}
         migration.followed = []
         migration.to_follow = []
+        migration.dormant_follows = []
 
     new_task = force or util.now() - migration.updated >= STALE_TASK_AGE
     if not migration.state:
@@ -827,6 +832,7 @@ def review_follows(migration, from_auth, to_auth):
     to_follow = []      # Users (with only key populated, no properties)
     to_follow_ids = []  # str user ids, in to_proto
     follow_counts = []  # (str protocol class, count)
+
     with ndb.context.Context(bridgy_fed_ndb).use():
         if from_proto.HAS_COPIES:
             ids = list(chain(*ids_by_proto.values()))
@@ -834,12 +840,14 @@ def review_follows(migration, from_auth, to_auth):
                 if proto == from_proto:
                     query = proto.query(proto.key.IN([proto(id=id).key for id in ids]))
                 else:
+                    # fetched as full entities (not keys) so their copies can
+                    # be inspected below for the dormant_follows computation
                     query = proto.query(proto.copies.uri.IN(ids))
                 if proto != to_proto:
                     query = query.filter(proto.enabled_protocols == to_proto.LABEL)
-                keys = query.fetch(keys_only=True)
-                to_follow.extend(proto(key=key) for key in keys)
-                follow_counts.append([f'{proto.__name__}', len(keys)])
+                users = query.fetch()
+                to_follow.extend(users)
+                follow_counts.append([f'{proto.__name__}', len(users)])
 
         else:
             for proto, ids in ids_by_proto.items():
@@ -859,6 +867,19 @@ def review_follows(migration, from_auth, to_auth):
         for user in to_follow:
             if id := user.id_as(to_proto):
                 to_follow_ids.append(id)
+
+        # any original follow that didn't end up bridged gets tracked as
+        # dormant, so we can DM the bouncing user if it bridges later. user ids
+        # are globally unique, so translated to_proto ids in to_follow_ids
+        # can't collide with originals in ids_by_proto.
+        bridged = (set(to_follow_ids)
+                   | {u.key.id() for u in to_follow}
+                   | {c.uri for u in to_follow for c in u.copies})
+        for proto, ids in ids_by_proto.items():
+            for id in ids:
+                key = proto(id=id).key
+                if id not in bridged and key not in migration.dormant_follows:
+                    migration.dormant_follows.append(key)
 
     for id in to_follow_ids:
         if id not in migration.followed and id not in migration.to_follow:
@@ -1432,7 +1453,7 @@ def migrate_task(from_auth, to_auth):
     # Process based on migration state
     if migration.state == State.migrate_follows:
         logger.info('starting migrate_follows')
-        migrate_follows(migration, to_auth)
+        migrate_follows(migration, to_auth, to_user)
         migration.state = State.migrate_in_blobs
         migration.put()
         logger.info('finished, now at migrate_in_blobs')
@@ -1470,12 +1491,18 @@ def migrate_task(from_auth, to_auth):
     return 'OK'
 
 
-def migrate_follows(migration, to_auth):
+def migrate_follows(migration, to_auth, to_user):
     """Creates follows in the destination account.
+
+    Also creates dormant :class:`models.Follower` entities in Bridgy Fed for
+    each unbridged follow recorded in :attr:`Migration.dormant_follows`, so the
+    bouncing user gets notified if those users eventually bridge.
 
     Args:
       migration (Migration)
       to_auth (oauth_dropins.models.BaseAuth)
+      to_user (models.User): the bouncing user's Bridgy Fed identity on the
+        ``to`` side
     """
     logger.info(f'Creating follows for {to_auth.key_id()}')
     to_follow = migration.to_follow
@@ -1483,7 +1510,7 @@ def migrate_follows(migration, to_auth):
     source = granary_source(to_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
 
     for user_id in to_follow:
-        logger.info(f'Folowing {user_id}')
+        logger.info(f'Following {user_id}')
         try:
             # Use the granary source to create the follow
             result = source.create({
@@ -1505,6 +1532,13 @@ def migrate_follows(migration, to_auth):
             if not code:
                 migration.put()
                 raise
+
+    logger.info(f'Creating {len(migration.dormant_follows)} dormant Followers')
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        for followee in migration.dormant_follows:
+            models.Follower.get_or_create(from_=to_user, to=followee,
+                                          status='dormant', reason='bounce')
+    migration.dormant_follows = []
 
 
 def migrate_in(migration, from_auth, from_user, to_user):
