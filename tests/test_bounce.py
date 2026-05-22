@@ -2193,7 +2193,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
                           repos=[repo_key]).put()
 
         with app.test_request_context('/'):
-            bounce.migrate_out_blobs(from_user, to_auth_entity, to_user)
+            bounce.migrate_out_blobs(from_user, to_auth_entity)
 
         # check blob fetches
         mock_get.assert_has_calls([
@@ -2230,7 +2230,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
             to_user = ActivityPub(id='http://in.st/users/alice').put().get()
 
         with app.test_request_context('/'):
-            bounce.migrate_out_blobs(from_user, to_auth.get(), to_user)
+            bounce.migrate_out_blobs(from_user, to_auth.get())
 
         mock_post.assert_not_called()
 

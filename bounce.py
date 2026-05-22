@@ -1483,7 +1483,7 @@ def migrate_task(from_auth, to_auth):
 
     if migration.state == State.migrate_out_blobs:
         logger.info('starting migrate_out_blobs')
-        migrate_out_blobs(from_user, to_auth, to_user)
+        migrate_out_blobs(from_user, to_auth)
         migration.state = State.migrate_done
         migration.put()
         logger.info('finished, now at migrate_done')
@@ -1686,37 +1686,20 @@ def migrate_out(migration, from_user, to_auth, to_user):
         from_proto.bot_maybe_follow_back(to_user)
 
 
-def migrate_out_blobs(from_user, to_auth, to_user):
+def migrate_out_blobs(from_user, to_auth):
     """Uploads blobs for a user bridged to Bluesky to their new PDS.
 
     Currently only runs when migrating to Bluesky to a new PDS. Otherwise, does
     nothing.
 
     Args:
-      from_user (models.User)
       to_auth (oauth_dropins.models.BaseAuth)
       to_user (models.User)
     """
-    if (isinstance(to_user, ATProto) and to_auth.user_json
+    if (isinstance(to_auth, BlueskyAuth) and to_auth.user_json
             and json_loads(to_auth.user_json).get('protocolOnly')):
-        did = to_auth.key.id()
-        assert to_auth.pds_url
-        logger.info(f'Uploading blobs for {did} to {to_auth.pds_url}')
-
-        source = granary_source(to_auth, with_auth=True, **TASK_REQUESTS_KWARGS)
-
         with ndb.context.Context(bridgy_fed_ndb).use():
-            blobs = AtpRemoteBlob.query(AtpRemoteBlob.repos == ndb.Key(AtpRepo, did)
-                                        ).fetch()
-
-        logger.info(f'Found {len(blobs)} blobs')
-
-        for blob in blobs:
-            url = blob.url or blob.key.id()
-            resp = util.requests_get(url, stream=True)
-            resp.raise_for_status()
-            source._client.com.atproto.repo.uploadBlob(
-                input=resp.content, headers={'Content-Type': blob.mime_type})
+            ATProto.migrate_out_blobs(from_user, to_auth)
 
 
 @app.get('/admin/activity')
