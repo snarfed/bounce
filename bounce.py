@@ -37,14 +37,16 @@ import oauth_dropins.pixelfed
 from oauth_dropins.pixelfed import PixelfedAuth
 import oauth_dropins.threads
 from oauth_dropins.threads import ThreadsAuth
-from oauth_dropins.webutil.appengine_info import DEBUG, LOCAL_SERVER
-from oauth_dropins.webutil import (
+import pytz
+from requests import HTTPError, RequestException
+from webutil.appengine_info import DEBUG, LOCAL_SERVER
+from webutil import (
     appengine_info,
     appengine_config,
     flask_util,
     util,
 )
-from oauth_dropins.webutil.flask_util import (
+from webutil.flask_util import (
     canonicalize_domain,
     cloud_tasks_only,
     error,
@@ -53,10 +55,8 @@ from oauth_dropins.webutil.flask_util import (
     Found,
     get_required_param,
 )
-from oauth_dropins.webutil.models import EnumProperty, JsonProperty
-from oauth_dropins.webutil.util import json_dumps, json_loads
-import pytz
-from requests import HTTPError, RequestException
+from webutil.models import EnumProperty, JsonProperty
+from webutil.util import json_dumps, json_loads
 
 # from Bridgy Fed
 from activitypub import ActivityPub, NeedsAlias

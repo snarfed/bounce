@@ -4,7 +4,7 @@ import os
 import re
 import traceback
 
-from oauth_dropins.webutil import appengine_config, appengine_info, util
+from webutil import appengine_config, appengine_info, util
 
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True

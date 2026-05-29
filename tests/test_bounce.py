@@ -33,16 +33,6 @@ from oauth_dropins.bluesky import BlueskyAuth
 from oauth_dropins.mastodon import MastodonApp, MastodonAuth
 from oauth_dropins.pixelfed import PixelfedApp, PixelfedAuth
 from oauth_dropins.views import LOGINS_SESSION_KEY
-from oauth_dropins.webutil import flask_util, testutil, util
-from oauth_dropins.webutil.appengine_config import ndb_client, tasks_client
-from oauth_dropins.webutil import appengine_info
-from oauth_dropins.webutil.testutil import (
-    Asserts,
-    NOW,
-    requests_response,
-    suppress_warnings,
-)
-from oauth_dropins.webutil.util import json_dumps, json_loads
 import requests
 from requests import HTTPError
 from requests_oauth2client import (
@@ -52,6 +42,16 @@ from requests_oauth2client import (
   OAuth2AccessTokenAuth,
   OAuth2Client,
 )
+from webutil import flask_util, testutil, util
+from webutil.appengine_config import ndb_client, tasks_client
+from webutil import appengine_info
+from webutil.testutil import (
+    Asserts,
+    NOW,
+    requests_response,
+    suppress_warnings,
+)
+from webutil.util import json_dumps, json_loads
 
 # from Bridgy Fed
 import activitypub
@@ -59,7 +59,7 @@ from activitypub import ActivityPub
 import atproto
 from atproto import ATProto
 import common
-from common import long_to_base64, TASKS_LOCATION
+from common import TASKS_LOCATION
 import config
 import ids
 import memcache
@@ -182,6 +182,11 @@ KEYBOARD_PNG_BYTES = \
 
 K256_KEY = arroba.util.new_key(seed=1234)
 
+# generating RSA keys is expensive, so we reuse this one
+with ndb_client.context():
+    global_user = Web(id='foo.xyz')
+    global_user._maybe_generate_ap_key()
+
 
 class BounceTest(TestCase, Asserts):
     maxDiff = None
@@ -237,14 +242,10 @@ class BounceTest(TestCase, Asserts):
 
     @staticmethod
     def make_bot_users():
-        key = RSA.generate(1024)
         with ndb.context.Context(bridgy_fed_ndb).use():
             for subdomain in 'ap', 'bsky', 'fed':
                 bot = Web(id=f'{subdomain}{common.SUPERDOMAIN}',
-                          ap_subdomain=subdomain,
-                          mod=long_to_base64(key.n),
-                          public_exponent=long_to_base64(key.e),
-                          private_exponent=long_to_base64(key.d))
+                          ap_subdomain=subdomain, keypairs=global_user.keypairs)
                 if subdomain == 'ap':
                     bot.copies = [Target(protocol='atproto', uri='did:plc:ap')]
                 bot.put()
@@ -1872,8 +1873,6 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(),    # PLC update
         requests_response({}),  # deactivateAccount
     ])
-    @patch.object(arroba.util.session, 'get',
-                  return_value=testutil.requests_response(SNARFED2_DID_DOC))
     @patch.object(util.session, 'get', side_effect=[
         requests_response(SNARFED2_DID_DOC),
         requests_response(ALICE_BSKY_PROFILE),
@@ -1887,6 +1886,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(b'abc00000 contents', content_type='foo/bar'),  # getBlob
         # getRepo
         requests_response(SNARFED2_CAR, content_type='application/vnd.ipld.car'),
+        requests_response(SNARFED2_DID_DOC),
         requests_response({
             **ALICE_AP_ACTOR,
             'alsoKnownAs': [f'https://bsky.brid.gy/ap/{SNARFED2_DID}'],
@@ -1894,7 +1894,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(ALICE_WEBFINGER),
         requests_response(ALICE_WEBFINGER),
     ])
-    def test_migrate_task_bluesky_to_mastodon(self, mock_get, mock_arroba_get, mock_post,
+    def test_migrate_task_bluesky_to_mastodon(self, mock_get, mock_post,
                                               mock_oauth2client, mock_create_task,
                                               mock_storage_client_cls):
         self.make_bot_users()
