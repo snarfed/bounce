@@ -33,9 +33,7 @@ example/
 examples/
 l/
 l3/
-local/
-local3/
-local3.7/
+local*/
 pydoc/
 pydocs/
 python3/
