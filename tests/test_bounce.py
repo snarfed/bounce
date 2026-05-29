@@ -2446,6 +2446,19 @@ When you migrate  @alice@in.st to  Bluesky  ...
             'https://pds.net/xrpc/com.atproto.temp.requestPhoneVerification',
             json={'phoneNumber': '+15551234567'}, data=None, headers=ANY)
 
+    @patch.object(util.session, 'post',
+                  return_value=requests_response({}, status=400))
+    def test_bluesky_phone_verification_post_error(self, mock_post):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        resp = self.post('/bluesky-phone-verification', from_auth,
+                         pds='https://pds.net', handle_domain='.my.pds.net',
+                         show_handle='true', show_invite_code='false',
+                         phone_number='+15551234567')
+        self.assertEqual(200, resp.status_code)
+        self.assertIn('+15551234567', resp.get_data(as_text=True))
+
     @patch.object(util.session, 'get', side_effect=[
         requests_response({
             'did': 'did:web:pds.net',

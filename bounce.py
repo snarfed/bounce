@@ -1065,7 +1065,6 @@ def bluesky_phone_verification_post(from_auth):
             'bluesky_phone_verification.html',
             from_auth=from_auth,
             **request.values,
-            phone_number=phone_number,
             **template_vars(),
         )
 
