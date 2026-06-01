@@ -875,11 +875,15 @@ def review_follows(migration, from_auth, to_auth):
         bridged = (set(to_follow_ids)
                    | {u.key.id() for u in to_follow}
                    | {c.uri for u in to_follow for c in u.copies})
-        for proto, ids in ids_by_proto.items():
-            for id in ids:
-                key = proto(id=id).key
-                if id not in bridged and key not in migration.dormant_follows:
-                    migration.dormant_follows.append(key)
+
+    # build dormant_follows keys outside the bridgy_fed_ndb context so they
+    # can be stored in the bounce datastore
+    # https://console.cloud.google.com/errors/detail/CO-fpZfMq_6ktgE;service=bounce;time=P7D;locations=global?project=bridgy-federated
+    for proto, ids in ids_by_proto.items():
+        for id in ids:
+            key = ndb.Key(proto._get_kind(), id)
+            if id not in bridged and key not in migration.dormant_follows:
+                migration.dormant_follows.append(key)
 
     for id in to_follow_ids:
         if id not in migration.followed and id not in migration.to_follow:
@@ -1535,6 +1539,7 @@ def migrate_follows(migration, to_auth, to_user):
     logger.info(f'Creating {len(migration.dormant_follows)} dormant Followers')
     with ndb.context.Context(bridgy_fed_ndb).use():
         for followee in migration.dormant_follows:
+            followee = ndb.Key(followee.kind(), followee.id())
             models.Follower.get_or_create(from_=to_user, to=followee,
                                           status='dormant', reason='bounce')
     migration.dormant_follows = []
