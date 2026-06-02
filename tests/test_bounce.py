@@ -1155,7 +1155,9 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(
             ('https://some.pds.bsky.network/xrpc/com.atproto.identity.requestPlcOperationSignature',),
             mock_post.call_args_list[1].args)
-        self.assertEqual('towkin', from_auth.get().session['accessJwt'])
+        stored = from_auth.get()
+        self.assertEqual('towkin', stored.session['accessJwt'])
+        self.assertEqual('hunter5', stored.password)
 
     def test_confirm_from_bluesky_without_password(self):
         with self.client.session_transaction() as sess:

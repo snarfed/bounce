@@ -1217,7 +1217,8 @@ def confirm(from_auth, to_auth):
             flash(f'Login failed: {body}')
             return redirect(url('/bluesky-password', from_auth, to_auth))
 
-        # store password-based access token, we'll use it later in /migrate
+        # store password and session, we'll use them later in /migrate
+        from_auth.password = password
         from_auth.session = bsky.client.session
         from_auth.put()
 

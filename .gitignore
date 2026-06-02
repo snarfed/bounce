@@ -4,6 +4,7 @@
 /.well-known/acme-challenge/
 /bridgy_fed
 datastore.dat*
+encrypted_property_key
 flask_secret_key
 /l
 /local*
