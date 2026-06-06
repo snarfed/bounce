@@ -43,7 +43,9 @@
 
 <li id="which-networks" class="question">Which networks are supported?</li>
 <li class="answer">
-<p>Bounce currently supports migrating from <a href="https://bsky.social/">Bluesky</a> to <a href="https://joinmastodon.org/">Mastodon</a> or <a href="https://pixelfed.org/">Pixelfed</a>, and from Mastodon to Bluesky. We hope to add support for <a href="https://www.threads.com/">Threads</a>, <a href="https://micro.blog/">micro.blog</a>, and more in the future.
+<p>Bounce currently supports migrating from the <a href="https://atmosphereaccount.com/">Atmosphere (eg <a href="https://bsky.social/">Bluesky</a>) to <a href="https://joinmastodon.org/">Mastodon</a> and <a href="https://pixelfed.org/">Pixelfed</a>, and from Mastodon and Pixelfed to the Atmosphere.
+<p>For migrating to or from a web site, we recommend <a href="https://micro.blog/">micro.blog</a>. It supports <a href="https://help.micro.blog/t/migrating-from-micro-blog-to-mastodon/4023">migrating to</a> <a href="https://help.micro.blog/t/migrating-from-mastodon-to-micro-blog/1613">and from</a> the fediverse, along with <a href="https://help.micro.blog/t/micro-blog-and-bluesky/3273">cross posting to the Atmosphere</a> <a href="https://help.micro.blog/t/automatic-cross-posting-to-mastodon-and-other-services/860">and elsewhere</a>.
+<p>We hope to add support for more networks in the future!
 </li>
 
 
@@ -92,10 +94,10 @@
 
 <li id="what-break" class="question">What could break if I do this?</li>
 <li class="answer">
-<p>If you're migrating from Bluesky to the fediverse:
+<p>If you're migrating from the Atmosphere (Bluesky) to the fediverse:
 <ul>
-<li>If your Mastodon or Pixelfed account is already bridged, we will need to replace its bridged Bluesky account with the Bluesky account that you're migrating from. Unlike ActivityPub, AT Protocol can't "merge" two different account's followers. We're considering options to notify your old Bluesky followers about the change; stay tuned for more details.
-<li>The images and videos on your Bluesky account will stay visible <em>if</em> your account is on a PDS (server) that Bluesky themselves run. We currently don't migrate blobs (ie images and videos) from federated third party PDSes, so if you migrate an account from one of those, its images and videos will disappear after a few days.
+<li>If your Mastodon or Pixelfed account is already bridged, we will need to replace its bridged Atmosphere account with the Atmosphere account that you're migrating from. Unlike ActivityPub, AT Protocol can't "merge" two different account's followers. We're considering options to notify your old Bluesky followers about the change; stay tuned for more details.
+<li>The images and videos on your Atmosphere account will stay visible <em>if</em> your account is on a PDS (server) that Atmosphere themselves run. We currently don't migrate blobs (ie images and videos) from federated third party PDSes, so if you migrate an account from one of those, its images and videos will disappear after a few days.
 </ul>
 </li>
 
