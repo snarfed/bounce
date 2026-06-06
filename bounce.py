@@ -567,10 +567,9 @@ def choose_from():
         mastodon_button=oauth_dropins.mastodon.Start.button_html(
             '/oauth/mastodon/start/from',
             image_prefix='/oauth_dropins_static/'),
-        # https://github.com/snarfed/bounce/issues/53
-        # pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
-        #     '/oauth/pixelfed/start/from',
-        #     image_prefix='/oauth_dropins_static/'),
+        pixelfed_button=oauth_dropins.pixelfed.Start.button_html(
+            '/oauth/pixelfed/start/from',
+            image_prefix='/oauth_dropins_static/'),
         # https://github.com/snarfed/bounce/issues/57
         # threads_button=oauth_dropins.threads.Start.button_html(
         #     '/oauth/threads/start/from',
