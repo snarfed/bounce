@@ -12,6 +12,10 @@ runtime: python312
 # https://docs.gunicorn.org/en/latest/settings.html#timeout
 entrypoint: gunicorn --pythonpath bridgy_fed --workers 1 --threads 30 --timeout 60 -b :$PORT bounce:app
 
+# https://docs.cloud.google.com/appengine/docs/standard/overview#instance_classes
+# https://github.com/snarfed/bounce/issues/46
+instance_class: F2
+
 # background: https://github.com/snarfed/bridgy/issues/578
 # https://github.com/snarfed/bridgy/issues/1051
 automatic_scaling:
