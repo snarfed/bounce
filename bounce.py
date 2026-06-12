@@ -39,6 +39,7 @@ import oauth_dropins.threads
 from oauth_dropins.threads import ThreadsAuth
 import pytz
 from requests import HTTPError, RequestException
+from werkzeug.middleware.proxy_fix import ProxyFix
 from webutil.appengine_info import DEBUG, LOCAL_SERVER
 from webutil import (
     appengine_info,
@@ -163,6 +164,13 @@ if LOCAL_SERVER:
 
 app.wsgi_app = flask_util.ndb_context_middleware(
     app.wsgi_app, client=appengine_config.ndb_client)
+
+# make Flask's request info (request.url etc) reflect the actual end user's HTTP
+# request (https, host, etc), based on X-Forwarded-* etc headers
+#
+# https://docs.cloud.google.com/functions/docs/reference/headers
+# https://werkzeug.palletsprojects.com/en/stable/middleware/proxy_fix/
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_for=1)
 
 models.reset_protocol_properties()
 
