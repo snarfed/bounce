@@ -41,7 +41,7 @@ google-cloud-ndb==2.5.0
 google-cloud-storage==3.9.0
 google-cloud-tasks==2.22.0
 google-crc32c==1.8.0
-google-resumable-media==2.8.2
+google-resumable-media==2.10.0
 googleapis-common-protos==1.75.0
 grapheme==0.6.0
 grpc-google-iam-v1==0.14.4
