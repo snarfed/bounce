@@ -208,8 +208,8 @@ class BounceTest(TestCase, Asserts):
         did.resolve_plc.cache.clear()
         did.resolve_web.cache.clear()
         ids.web_ap_base_domain.cache.clear()
-        memcache.memcache.close()
-        memcache.pickle_memcache.close()
+        memcache.memcache.clear()
+        memcache.pickle_memcache.clear()
         memcache.global_cache.clear()
         models.get_original_object_key.cache_clear()
         models.get_original_user_key.cache_clear()
@@ -1971,6 +1971,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
             'Authorization': 'Bearer towkin',
             'User-Agent': 'Bounce (https://bounce.anew.social/)',
             'Content-Type': 'application/json',
+            'atproto-proxy': 'did:web:api.bsky.app#bsky_appview',
         }
         mock_post.assert_has_calls([
             call('http://in.st/api/v1/accounts/123/follow',
