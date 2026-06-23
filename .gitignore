@@ -1,16 +1,3 @@
-*_token
 *_jwt
-.coverage
-/.well-known/acme-challenge/
 /bridgy_fed
-datastore.dat*
-encrypted_property_key
-flask_secret_key
-/l
-/local*
-/oauth_dropins_static
-private_notes
-pyrightconfig.json
-service_account_creds.json
 threads_app_*
-TAGS

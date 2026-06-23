@@ -1,5 +1,27 @@
--r ./bridgy_fed/requirements.txt
+# Note that App Engine / Cloud Build's default pip cache is overly aggressive
+# with GitHub dependency URLs like these. If I push a new commit to the branch
+# in one of these URLs, Cloud Build still uses the old cached version.
+# https://cloud.google.com/appengine/docs/standard/python3/specifying-dependencies
+#
+# Use this to bust that cache: gcloud -q beta app deploy --no-cache ...
+git+https://github.com/snarfed/arroba.git#egg=arroba
+git+https://github.com/snarfed/brevity.git@new-tlds#egg=brevity
+git+https://github.com/snarfed/carbox.git#egg=carbox
+git+https://github.com/snarfed/dag-json.git#egg=dag_json
+git+https://github.com/snarfed/flask-gae-static.git#egg=flask_gae_static
+git+https://github.com/snarfed/granary.git#egg=granary
+git+https://github.com/snarfed/httpsig.git@all#egg=httpsig
+git+https://github.com/snarfed/lexrpc.git#egg=lexrpc
+git+https://github.com/snarfed/mf2util.git#egg=mf2util
+git+https://github.com/snarfed/mox3.git#egg=mox3
+git+https://github.com/snarfed/negotiator.git@py3#egg=negotiator
+git+https://github.com/snarfed/oauth-dropins.git#egg=oauth_dropins
+git+https://github.com/snarfed/pymemcache.git@all#egg=pymemcache
+# note that sfw (Socket firewall) breaks when attempting to install this
+# inside it, so we have to install it outside sfw
+git+https://github.com/snarfed/secp256k1-py.git@setup-requires-pycparser#egg=secp256k1
+git+https://github.com/snarfed/webutil.git#egg=pywebutil
 
-google-cloud-storage==3.2.0
-google-crc32c==1.7.1
-google-resumable-media==2.7.2
+# generate with:
+# uv pip compile pyproject.toml --all-extras --no-annotate -o requirements.pinned.txt
+-r requirements.pinned.txt
