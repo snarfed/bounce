@@ -15,7 +15,7 @@ app = [
     # our own packages, used at head via the editable local checkouts in
     # [tool.uv.sources]; the deploy-time git refs are in requirements.txt
     'arroba[datastore,flask]',
-    'brevity',
+    'brevity @ git+https://github.com/snarfed/brevity.git@new-tlds',
     'dag-json',
     'flask-gae-static',
     'granary',
