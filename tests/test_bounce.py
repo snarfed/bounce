@@ -2090,6 +2090,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
             b'protocol': [b'activitypub'],
             b'url': [b'http://in.st/bob/inbox'],
             b'user': [from_user.key.urlsafe()],
+            b'first': [b'True'],
         }, params, ignore=[b'as2'])
         self.assert_equals({
                 'type': 'Move',

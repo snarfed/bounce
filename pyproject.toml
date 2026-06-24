@@ -11,6 +11,10 @@ version = '1.0'
 requires-python = '>=3.12'
 
 [project.optional-dependencies]
+# bounce runs Bridgy Fed's code (vendored via the bridgy_fed/ symlink), so these
+# deps are a mirror of ../bridgy-fed/pyproject.toml plus storage. Keep them in
+# sync with it. (We duplicate rather than `-r bridgy_fed/requirements.txt` so
+# bounce stays a first-class `uv sync` project with editable local checkouts.)
 app = [
     # our own packages, used at head via the editable local checkouts in
     # [tool.uv.sources]; the deploy-time git refs are in requirements.txt

@@ -23,6 +23,8 @@ source local/bin/activate
 pip install -r requirements.txt
 ```
 
+You can also use `uv` instead of `pip`, but if you do, pass it `--no-sources`.
+
 Now, run the tests to check that everything is set up ok:
 
 ```shell
