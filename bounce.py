@@ -1404,7 +1404,7 @@ def activitypub_profile_moved(from_auth, to_auth):
     with ndb.context.Context(bridgy_fed_ndb).use():
         from_user.reload_profile()
 
-    moved_to = from_user.obj.as2.get('movedTo')
+    moved_to = from_user.obj.as2.get('movedTo') if from_user.obj else None
     to_user = get_user(to_auth)
     if moved_to == to_user.id_as(ActivityPub):
         template = 'done.html'
@@ -1412,6 +1412,8 @@ def activitypub_profile_moved(from_auth, to_auth):
         template = 'activitypub_profile_move.html'
         if moved_to:
             flash(f"It looks like you moved to {moved_to}. You'll need to undo that and try again.")
+        elif not from_user.obj:
+            flash(f"Couldn't fetch your profile from {util.domain_from_link(from_auth.instance())}")
         else:
             flash(f"{util.domain_from_link(from_auth.instance())} doesn't show that you've started the profile move yet. Try again?")
 

@@ -2723,6 +2723,28 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertIn("doesn't show that you've started the profile move",
                       get_flashed_messages()[0])
 
+    @patch.object(util.session, 'get', side_effect=[
+        requests_response(status=400),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(ALICE_WEBFINGER),
+        requests_response(DID_DOC),  # did:plc:alice
+        requests_response(ALICE_BSKY_PROFILE),
+    ])
+    def test_activitypub_profile_moved_actor_fetch_fails(self, mock_get):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+            to_auth = self.make_bluesky(sess)
+
+        Migration(id='@alice@in.st atproto', from_=from_auth, to=to_auth,
+                  state=State.migrate_done).put()
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice').put()
+
+        resp = self.post('/activitypub-profile-moved', from_auth, to_auth)
+        self.assertEqual(200, resp.status_code)
+        self.assertIn("Couldn't fetch your profile", get_flashed_messages()[0])
+
     def test_bluesky_oauth_client_metadata(self):
         self._test_bluesky_oauth_client_metadata()
 
