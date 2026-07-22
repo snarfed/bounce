@@ -2564,7 +2564,8 @@ When you migrate  @alice@in.st to  Bluesky  ...
         token = jwt.decode(
             mock_post.call_args[1]['headers']['Authorization'].removeprefix('Bearer '),
             repo.signing_key.public_key(), algorithms=['ES256K'],
-            audience='did:web:pds.net')
+            audience='did:web:pds.net',
+            options={'verify_exp': False})
 
         auth = BlueskyAuth.get_by_id('did:plc:alice')
         self.assertEqual(mock_post.return_value.json(), auth.session)
