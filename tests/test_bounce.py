@@ -433,6 +433,22 @@ class="logo" title="Bluesky" />
 <img src="http://in.st/@alice/pic" class="profile">
 <span style="unicode-bidi: isolate">@alice@in.st</span>""", body)
 
+    def test_from_omits_and_logs_out_bridged_copy(self):
+        with self.client.session_transaction() as sess:
+            self.make_bluesky(sess)
+            self.make_mastodon(sess, name='bob')
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+
+        resp = self.client.get('/from')
+        self.assertEqual(200, resp.status_code)
+        self.assertNotIn('al.ice', resp.get_data(as_text=True))
+        self.assertEqual([('MastodonAuth', '@bob@in.st')],
+                         session[LOGINS_SESSION_KEY])
+
     def test_handle_permission_denied(self):
         appengine_info.READ_ONLY = True
 
@@ -482,6 +498,41 @@ class="logo" title="Bluesky" />
         resp = self.get('/to', **{'from': 'not a urlsafe key'})
         self.assertEqual(400, resp.status_code)
 
+    def test_to_from_is_bridged_copy(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            self.make_mastodon(sess, name='bob')
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+
+        resp = self.get('/to', from_key=from_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual('/from', resp.headers['Location'])
+        self.assertEqual(
+            ["al.ice is a bridged copy of another account, so it can't be migrated."],
+            get_flashed_messages())
+        self.assertEqual([('MastodonAuth', '@bob@in.st')],
+                         session[LOGINS_SESSION_KEY])
+
+    def test_to_omits_and_logs_out_bridged_copy(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+            self.make_bluesky(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/bob',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+
+        resp = self.get('/to', from_key=from_auth)
+        self.assertEqual(200, resp.status_code)
+        self.assertNotIn('al.ice', resp.get_data(as_text=True))
+        self.assertEqual([('MastodonAuth', '@alice@in.st')],
+                         session[LOGINS_SESSION_KEY])
+
     def test_review_not_logged_in(self):
         resp = self.get('/review', BlueskyAuth(id='did:foo').key,
                         MastodonAuth(id='@bar@ba.z').key)
@@ -495,6 +546,87 @@ class="logo" title="Bluesky" />
     def test_review_bad_to_key(self):
         resp = self.get('/to', to='not a urlsafe key')
         self.assertEqual(400, resp.status_code)
+
+    def test_review_from_is_bridged_copy(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess)
+            to_auth = self.make_mastodon(sess, name='bob')
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+
+        resp = self.get('/review', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual('/from', resp.headers['Location'])
+        self.assertEqual(
+            ["al.ice is a bridged copy of another account, so it can't be migrated."],
+            get_flashed_messages())
+        self.assertEqual([('MastodonAuth', '@bob@in.st')],
+                         session[LOGINS_SESSION_KEY])
+        self.assertIsNone(Migration.get_by_id('did:plc:alice activitypub'))
+
+    def test_review_to_is_bridged_copy(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+            to_auth = self.make_bluesky(sess, did='did:plc:bob',
+                                        user_json={'handle': 'ba.wb'})
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/bob',
+                        copies=[Target(protocol='atproto', uri='did:plc:bob')],
+                        ).put()
+
+        resp = self.get('/review', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
+                         resp.headers['Location'])
+        self.assertEqual(
+            ["ba.wb is a bridged copy of another account, so you can't migrate to it."],
+            get_flashed_messages())
+        self.assertEqual([('MastodonAuth', '@alice@in.st')],
+                         session[LOGINS_SESSION_KEY])
+        self.assertIsNone(Migration.get_by_id('@alice@in.st atproto'))
+
+    def test_review_to_is_from_bridged_copy_logged_in(self):
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+            to_auth = self.make_bluesky(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+
+        resp = self.get('/review', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
+                         resp.headers['Location'])
+        self.assertEqual(
+            ["al.ice is a bridged copy of another account, so you can't migrate to it."],
+            get_flashed_messages())
+        self.assertIsNone(Migration.get_by_id('@alice@in.st atproto'))
+
+    def test_review_to_is_from_bridged_copy_not_logged_in(self):
+        """Not logged in is allowed here, but it's still a bridged copy."""
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+            to_auth = self.make_bluesky(sess, login=False)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            ActivityPub(id='http://in.st/users/alice',
+                        copies=[Target(protocol='atproto', uri='did:plc:alice')],
+                        ).put()
+
+        resp = self.get('/review', from_auth, to_auth)
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
+                         resp.headers['Location'])
+        self.assertEqual(
+            ["al.ice is a bridged copy of another account, so you can't migrate to it."],
+            get_flashed_messages())
+        self.assertIsNone(Migration.get_by_id('@alice@in.st atproto'))
 
     @patch.object(tasks_client, 'create_task')
     @patch.object(util.session, 'get', return_value=requests_response(
