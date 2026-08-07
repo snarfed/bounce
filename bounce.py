@@ -300,13 +300,22 @@ def url(path, from_auth, to_auth=None, **params):
     return path + '?' + urlencode(vars)
 
 
-def template_vars():
-    """Returns base template vars common to most views."""
+def template_vars(logout_bridged=False):
+    """Returns base template vars common to most views.
+
+    Args:
+      logout_bridged (bool): if True, logs out and omits any login that's a
+        bridged copy of another account, ie :func:`is_bridged_copy` is True
+    """
     auths = []
     for auth in ndb.get_multi(oauth_dropins.get_logins()):
         if auth:
             user_json = json.loads(auth.user_json)
             if not (source := granary_source(auth)):
+                continue
+            if logout_bridged and is_bridged_copy(auth):
+                logger.info(f"logging out {auth.key.id()}, it's a bridged copy")
+                oauth_dropins.logout(auth)
                 continue
             auth.url = source.to_as1_actor(user_json).get('url')
             auths.append(auth)
@@ -327,7 +336,8 @@ def render_read_only(template):
 disable_if_read_only = flask_util.disable_if_read_only(render_fn=render_read_only)
 
 
-def require_accounts(from_params, to_params=None, logged_in=True, failures_to=None):
+def require_accounts(from_params, to_params=None, logged_in=True, failures_to=None,
+                     check_bridged=False):
     """Decorator that requires and loads both from and (optionally) to auth entities.
 
     Passes both entities as positional args to the function, as oauth-dropins auth
@@ -337,6 +347,9 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
         from account.
     * They must be different protocols
     * If a Bluesky account is involved, it can't be a did:web
+    * Neither can be a bridged copy of another account (if ``check_bridged`` is
+      True), except for the from account's own bridged copy as the to account,
+      which is the "migrate to a new Bluesky PDS" flow.
 
     Args:
       from_params (str or sequence of str): HTTP query param(s) with the url-safe ndb
@@ -346,6 +359,10 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
       logged_in (bool): whether to require the auth entities are actually logged in
       failures_to (str): optional URL path to redirect to if the user declines or
         an error happens.
+      check_bridged (bool): whether to reject accounts that are bridged copies of
+        other accounts. Only for the views where the user picks their accounts;
+        the from account becomes a bridged copy partway through migrating, so
+        the later views have to keep working with it.
     """
     assert from_params
     if isinstance(from_params, str):
@@ -385,6 +402,12 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
                 logger.warning(f'not logged in for {from_params}: {request.values}')
                 raise Found(location='/')
 
+            if check_bridged and is_bridged_copy(from_auth):
+                logger.warning(f'{from_auth.key.id()} is a bridged copy')
+                flash(f"{from_auth.user_display_name()} is a bridged copy of another account, so it can't be migrated.")
+                oauth_dropins.logout(from_auth)
+                return redirect('/from')
+
             args += (from_auth,)
 
             to_auth = None
@@ -399,6 +422,10 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
                 if from_proto == to_proto:
                     error(f"Can't migrate {from_proto.LABEL} to {to_proto.LABEL}")
 
+                # is the to account the from account's own bridged copy, ie are we
+                # migrating that bridged account to a new Bluesky PDS?
+                to_is_from_copy = False
+
                 if (logged_in and to_auth.key not in logins
                         and to_auth.key.id() != PROTOCOL_ONLY_ID):
                     from_user = get_user(from_auth)
@@ -410,6 +437,14 @@ def require_accounts(from_params, to_params=None, logged_in=True, failures_to=No
                     if from_bridged_id != to_auth.key.id():
                         logger.warning(f'not logged in for {to_auth.key}')
                         raise Found(location='/')
+                    to_is_from_copy = True
+
+                if (check_bridged and not to_is_from_copy
+                        and is_bridged_copy(to_auth)):
+                    logger.warning(f'{to_auth.key.id()} is a bridged copy')
+                    flash(f"{to_auth.user_display_name()} is a bridged copy of another account, so you can't migrate to it.")
+                    oauth_dropins.logout(to_auth)
+                    return redirect(url('/to', from_auth))
 
                 args += (to_auth,)
 
@@ -460,6 +495,19 @@ def granary_source(auth, with_auth=False, **requests_kwargs):
                        did=auth.key.id(), **requests_kwargs)
 
 
+def bridgy_fed_user_id(auth):
+    """Returns the Bridgy Fed user id for a given auth entity.
+
+    Args:
+      auth (oauth_dropins.models.BaseAuth)
+
+    Returns:
+      str:
+    """
+    proto = AUTH_TO_PROTOCOL[auth.__class__]
+    return auth.actor_id() if proto == ActivityPub else auth.key.id()
+
+
 def get_user(auth):
     """Loads and returns the Bridgy Fed user for a given auth entity.
 
@@ -474,10 +522,36 @@ def get_user(auth):
     if auth.key.id() == PROTOCOL_ONLY_ID:
         return proto(id=PROTOCOL_ONLY_ID)
 
-    id = auth.actor_id() if proto == ActivityPub else auth.key.id()
+    with ndb.context.Context(bridgy_fed_ndb).use():
+        return proto.get_or_create(bridgy_fed_user_id(auth), allow_opt_out=True)
+
+
+def is_bridged_copy(auth):
+    """Returns True if an account is a bridged copy of another Bridgy Fed account.
+
+    Eg a Bluesky account that Bridgy Fed created for a fediverse account, or one
+    that's been migrated into Bridgy Fed and is now the bridged copy of the
+    fediverse account it was migrated to. Migrating these is never what the user
+    wants; they should use the original account instead.
+
+    Args:
+      auth (oauth_dropins.models.BaseAuth)
+
+    Returns:
+      bool:
+    """
+    if not auth or auth.key.id() == PROTOCOL_ONLY_ID:
+        return False
+
+    if not (id := bridgy_fed_user_id(auth)):
+        return False
 
     with ndb.context.Context(bridgy_fed_ndb).use():
-        return proto.get_or_create(id, allow_opt_out=True)
+        # eg an ActivityPub actor on bsky.brid.gy
+        if util.is_web(id) and Protocol.for_bridgy_subdomain(id):
+            return True
+
+        return bool(models.get_original_user_key(id))
 
 
 def new_to_handle(from_user, to_user, to_auth):
@@ -559,7 +633,7 @@ def logout():
 @disable_if_read_only
 def choose_from():
     """Choose account to migrate from."""
-    vars = template_vars()
+    vars = template_vars(logout_bridged=True)
 
     accounts = vars['auths']
     for acct in accounts:
@@ -588,14 +662,14 @@ def choose_from():
 
 @app.get('/to')
 @disable_if_read_only
-@require_accounts(('from', 'auth_entity'), failures_to='/from')
+@require_accounts(('from', 'auth_entity'), failures_to='/from', check_bridged=True)
 def choose_to(from_auth):
     """Choose account to migrate to."""
     if from_auth.key.id().startswith('did:web:'):
         flash('Sorry, did:webs are not currently supported.')
         return redirect('/')
 
-    vars = template_vars()
+    vars = template_vars(logout_bridged=True)
 
     from_proto = AUTH_TO_PROTOCOL[from_auth.__class__]
     accounts = [auth for auth in vars['auths']
@@ -639,7 +713,8 @@ def choose_to(from_auth):
 
 @app.get('/review')
 @disable_if_read_only
-@require_accounts(('from', 'state'), ('to', 'auth_entity'), failures_to='/from')
+@require_accounts(('from', 'state'), ('to', 'auth_entity'), failures_to='/from',
+                  check_bridged=True)
 def review(from_auth, to_auth):
     """Reviews a "from" account's followers and follows."""
     force = 'force' in request.args
