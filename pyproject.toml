@@ -8,7 +8,7 @@
 [project]
 name = 'bounce'
 version = '1.0'
-requires-python = '>=3.12'
+requires-python = '>=3.14'
 
 [project.optional-dependencies]
 # bounce runs Bridgy Fed's code (vendored via the bridgy_fed/ symlink), so these

@@ -9,7 +9,7 @@ version: 2.1
 jobs:
   build:
     docker:
-      - image: cimg/python:3.12
+      - image: cimg/python:3.14
 
     steps:
       - checkout
@@ -42,7 +42,7 @@ jobs:
             pip install -r ./requirements.txt
 
             pip install coverage coveralls
-            ln -sf `pyenv prefix`/lib/python3.12/site-packages/oauth_dropins/static oauth_dropins_static
+            ln -sf `pyenv prefix`/lib/python3.14/site-packages/oauth_dropins/static oauth_dropins_static
 
       - run:
           name: Build and test

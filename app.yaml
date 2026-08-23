@@ -4,7 +4,7 @@
 
 service: bounce
 env: standard
-runtime: python312
+runtime: python314
 
 # default_expiration: 1h
 
