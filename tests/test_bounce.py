@@ -1053,8 +1053,6 @@ When you migrate  @alice@in.st to  Bluesky  ...
             requests_response(follows, content_type='application/json'),
             # alice AP actor, webfinger
             requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
-            requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
-            requests_response(ALICE_WEBFINGER),
             requests_response(ALICE_WEBFINGER),
             # bob DID doc
             requests_response({
@@ -1466,8 +1464,6 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(DID_DOC),  # did:plc:alice
         requests_response(ALICE_AP_ACTOR, content_type='application/activity+json'),
         requests_response(ALICE_WEBFINGER),
-        requests_response(ALICE_WEBFINGER),
-        requests_response(ALICE_AP_ACTOR, content_type='application/activity+json'),
     ])
     def test_confirm_from_bluesky_to_activitypub_alsoKnownAs_not_set(self, mock_get):
         with self.client.session_transaction() as sess:
@@ -1488,7 +1484,8 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/set-alsoKnownAs?from={from_auth.urlsafe().decode()}&to={to_auth.urlsafe().decode()}', resp.headers['Location'])
 
-        self.assertEqual(('http://in.st/users/alice',), mock_get.call_args[0])
+        self.assertEqual(('http://in.st/users/alice',),
+                         mock_get.call_args_list[1].args)
 
     def test_bluesky_password(self):
         with self.client.session_transaction() as sess:
@@ -2010,7 +2007,6 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(ALICE_BSKY_PROFILE),
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
         requests_response(ALICE_WEBFINGER),
-        requests_response(ALICE_WEBFINGER),
         # http://in.st/api/v2/search for each follow
         requests_response({'accounts': [{'id': '123', 'uri': 'http://other/bob'}]}),
         requests_response({'accounts': [{'id': '456', 'uri': 'http://other/eve'}]}),
@@ -2018,13 +2014,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         requests_response(b'abc00000 contents', content_type='foo/bar'),  # getBlob
         # getRepo
         requests_response(SNARFED2_CAR, content_type='application/vnd.ipld.car'),
-        requests_response(SNARFED2_DID_DOC),
-        requests_response({
-            **ALICE_AP_ACTOR,
-            'alsoKnownAs': [f'https://bsky.brid.gy/ap/{SNARFED2_DID}'],
-        }, content_type=as2.CONTENT_TYPE),
-        requests_response(ALICE_WEBFINGER),
-        requests_response(ALICE_WEBFINGER),
+        requests_response(SNARFED2_DID_DOC),  # importRepo
     ])
     def test_migrate_task_bluesky_to_mastodon(self, mock_get, mock_post,
                                               mock_oauth2client, mock_create_task,
@@ -2384,8 +2374,8 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(200, resp.status_code)
         body = resp.get_data(as_text=True)
 
-        self.assertIn('is <a href="https://fed.brid.gy/ap/@alice@in.st" target="_blank">already bridged to Bluesky</a>', body)
-        self.assertIn('It currently has <a href="https://fed.brid.gy/ap/@alice@in.st/followers" target="_blank">2 followers</a> on Bluesky', body)
+        self.assertIn('is <a href="https://fed.brid.gy/ap/@alice@in.st" target="_blank">already bridged to the Atmosphere (Bluesky)</a>', body)
+        self.assertIn('It currently has <a href="https://fed.brid.gy/ap/@alice@in.st/followers" target="_blank">2 followers</a> on the Atmosphere (Bluesky)', body)
 
     @patch.object(tasks_client, 'create_task')
     @patch('bounce.confirm', return_value='okay')
