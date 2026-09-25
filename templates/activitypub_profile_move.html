@@ -8,7 +8,7 @@
 <p>You're almost done! Now, <a href="{{ settings_url }}" target="_blank">start a profile move on {{ util.domain_from_link(from_auth.instance()) }}</a> (<a href="{{ docs_url }}" target="_blank">docs</a>). The handle of the new account to move to is:
 <code>{{ to_ap_id }}</code>
 <button class="btn btn-default btn-copy glyphicon glyphicon-duplicate"
-        onclick="navigator.clipboard.writeText('{{ to_ap_id }}')"
+        data-copy="{{ to_ap_id }}"
         title="Copy {{ to_ap_id }} to clipboard"> </button>
 </div>
 {% endwith %}

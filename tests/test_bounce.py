@@ -345,6 +345,16 @@ class BounceTest(TestCase, Asserts):
                                content_type='application/reports+json')
         self.assert_equals(204, got.status_code)
 
+    def test_templates_have_no_inline_js(self):
+        # inline event handlers, inline <script>s, and javascript: URLs would all
+        # need 'unsafe-inline' in our Content-Security-Policy
+        env = bounce.app.jinja_env
+        for name in env.list_templates(extensions=['html']):
+            source, _, _ = env.loader.get_source(env, name)
+            with self.subTest(name):
+                self.assertNotRegex(
+                    source, r'(?i)\son[a-z]+=|<script(?![^>]*\ssrc=)[^>]*>|javascript:')
+
     def test_front_page_login_missing_app_gets_logged_out(self):
         with self.client.session_transaction() as sess:
             bsky = self.make_bluesky(sess)
@@ -744,12 +754,8 @@ class="logo" title="Bluesky" />
 
         body = resp.get_data(as_text=True)
         self.assertNotIn('<meta http-equiv="refresh" content="5">', body)
-        self.assert_multiline_in("""
-document.getElementById('followers-chart'));
-chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1]])""", body)
-        self.assert_multiline_in("""
-document.getElementById('follows-chart'));
-chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 0], ["Web", 1], ["not bridged", 1]])""", body)
+        self.assertIn("""<div id="followers-chart" data-counts='[["type", "count"], ["ATProto", 1], ["ActivityPub", 1]]'></div>""", body)
+        self.assertIn("""<div id="follows-chart" data-counts='[["type", "count"], ["ATProto", 1], ["ActivityPub", 0], ["Web", 1], ["not bridged", 1]]'></div>""", body)
 
         text = html_to_text(body)
         self.assert_multiline_in("""
@@ -780,12 +786,8 @@ When you migrate  @alice@in.st to  al.ice ...
 
         body = resp.get_data(as_text=True)
         self.assertNotIn('<meta http-equiv="refresh" content="5">', body)
-        self.assert_multiline_in("""
-document.getElementById('followers-chart'));
-chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Nostr", 0], ["Web", 0]])""", body)
-        self.assert_multiline_in("""
-document.getElementById('follows-chart'));
-chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Nostr", 0], ["Web", 0], ["not bridged", 1]])""", body)
+        self.assertIn("""<div id="followers-chart" data-counts='[["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Nostr", 0], ["Web", 0]]'></div>""", body)
+        self.assertIn("""<div id="follows-chart" data-counts='[["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Nostr", 0], ["Web", 0], ["not bridged", 1]]'></div>""", body)
 
         text = html_to_text(body)
         self.assert_multiline_in("""
@@ -863,12 +865,8 @@ When you migrate  al.ice to  @alice@in.st ...
         self.assertEqual(200, resp.status_code)
 
         body = resp.get_data(as_text=True)
-        self.assert_multiline_in("""
-document.getElementById('followers-chart'));
-chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 1]])""", body)
-        self.assert_multiline_in("""
-document.getElementById('follows-chart'));
-chart.draw(google.visualization.arrayToDataTable([["type", "count"], ["ATProto", 1], ["ActivityPub", 0], ["Web", 1], ["not bridged", 1]])""", body)
+        self.assertIn("""<div id="followers-chart" data-counts='[["type", "count"], ["ATProto", 1], ["ActivityPub", 1]]'></div>""", body)
+        self.assertIn("""<div id="follows-chart" data-counts='[["type", "count"], ["ATProto", 1], ["ActivityPub", 0], ["Web", 1], ["not bridged", 1]]'></div>""", body)
 
         text = html_to_text(body)
         self.assert_multiline_in("""
