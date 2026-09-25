@@ -340,6 +340,11 @@ class BounceTest(TestCase, Asserts):
         got = self.client.get('/')
         self.assert_equals(200, got.status_code)
 
+    def test_csp_report(self):
+        got = self.client.post('/csp-report', data='{}',
+                               content_type='application/reports+json')
+        self.assert_equals(204, got.status_code)
+
     def test_front_page_login_missing_app_gets_logged_out(self):
         with self.client.session_transaction() as sess:
             bsky = self.make_bluesky(sess)

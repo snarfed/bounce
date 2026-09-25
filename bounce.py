@@ -156,6 +156,7 @@ app.config.from_pyfile(Path(__file__).parent / 'config.py')
 app.url_map.converters['regex'] = flask_util.RegexConverter
 app.before_request(canonicalize_domain([APPSPOT_DOMAIN], DOMAIN))
 app.after_request(flask_util.default_modern_headers)
+app.post(flask_util.CSP_REPORT_PATH)(flask_util.csp_report)
 app.register_error_handler(Exception, flask_util.handle_exception)
 app.register_error_handler(PermissionDenied, flask_util.handle_read_only_permission_denied)
 
