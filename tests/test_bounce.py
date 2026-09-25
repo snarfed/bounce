@@ -490,7 +490,7 @@ class="logo" title="Bluesky" />
         body = resp.get_data(as_text=True)
 
         self.assert_multiline_in("""\
-<a class="actor" href="/review?from=agNhcHByHgsSDE1hc3RvZG9uQXV0aCIMQGFsaWNlQGluLnN0DA&to=agNhcHByHgsSC0JsdWVza3lBdXRoIg1kaWQ6cGxjOmFsaWNlDA">
+<a class="actor" href="/review?from=agNhcHByHgsSDE1hc3RvZG9uQXV0aCIMQGFsaWNlQGluLnN0DA&amp;to=agNhcHByHgsSC0JsdWVza3lBdXRoIg1kaWQ6cGxjOmFsaWNlDA">
 <img src="/oauth_dropins_static/bluesky_icon.png"
 class="logo" title="Bluesky" />
 <img src="http://alice/pic" class="profile">
@@ -1519,7 +1519,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(200, resp.status_code)
         body = resp.get_data(as_text=True)
         self.assert_multiline_in(
-            'is already bridged into the fediverse, so you\'ll need to <a target="_blank" href="http://in.st/settings/aliases"</a>add it', body)
+            'is already bridged into the fediverse, so you\'ll need to <a target="_blank" href="http://in.st/settings/aliases">add it', body)
 
     def test_migrate_post_done(self):
         with self.client.session_transaction() as sess:

@@ -11,9 +11,13 @@
   {% with auth = to_auth %}{% include 'account_label.html' %}{% endwith %}
 {% endset %}
 
-{% set bridged_to_label =
-     from_label if from_user.HAS_COPIES
-     else ('<code>' + to_user_bridged_handle + '</code>')|safe %}
+{% set bridged_to_label %}
+  {%- if from_user.HAS_COPIES %}
+    {{ from_label }}
+  {%- else -%}
+    <code>{{ to_user_bridged_handle }}</code>
+  {% endif -%}
+{% endset %}
 
 <div class="row big">
 <p>Migrate {{ from_label }} to {{ to_label }}
