@@ -789,6 +789,10 @@ When you migrate  @alice@in.st to  al.ice ...
         self.assertIn("""<div id="followers-chart" data-counts='[["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Nostr", 0], ["Web", 0]]'></div>""", body)
         self.assertIn("""<div id="follows-chart" data-counts='[["type", "count"], ["ATProto", 1], ["ActivityPub", 1], ["Nostr", 0], ["Web", 0], ["not bridged", 1]]'></div>""", body)
 
+        # review.html loads Google Charts from gstatic
+        self.assertIn("script-src 'self' https://www.gstatic.com;",
+                      resp.headers['Content-Security-Policy'])
+
         text = html_to_text(body)
         self.assert_multiline_in("""
 When you migrate  al.ice to  @alice@in.st ...

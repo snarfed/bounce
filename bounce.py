@@ -88,6 +88,12 @@ bounce_ndb = appengine_config.ndb_client = \
 
 # Cache-Control header for static files
 CACHE_CONTROL = {'Cache-Control': 'public, max-age=3600'}  # 1 hour
+# review.html loads Google Charts from gstatic
+REVIEW_CSP = {
+    'Content-Security-Policy':
+        flask_util.MODERN_HEADERS['Content-Security-Policy'].replace(
+            "script-src 'self'", "script-src 'self' https://www.gstatic.com"),
+}
 
 TASK_REQUESTS_KWARGS = {
     'timeout': 60,  # seconds
@@ -706,6 +712,7 @@ def choose_to(from_auth):
 
 
 @app.get('/review')
+@flask_util.headers(REVIEW_CSP)
 @disable_if_read_only
 @require_accounts(('from', 'state'), ('to', 'auth_entity'), failures_to='/from',
                   check_bridged=True)
