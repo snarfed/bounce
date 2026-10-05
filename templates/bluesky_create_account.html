@@ -41,6 +41,7 @@
     <input type="hidden" name="show_phone_verification_code"
            value="{{ show_phone_verification_code }}" />
     {% if show_phone_verification_code.lower() == 'true' %}
+      <input type="hidden" name="phone_number" value="{{ phone_number }}" />
       <input type="text" name="phone_verification_code" required
              placeholder="phone verification code"
              value="{{ phone_verification_code }}" />

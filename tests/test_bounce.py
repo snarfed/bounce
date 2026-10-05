@@ -2570,7 +2570,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
                          phone_number='+15551234567')
         self.assertEqual(302, resp.status_code)
         self.assertEqual(
-            f'/bluesky-create-account?from={from_auth.urlsafe().decode()}&pds=https%3A%2F%2Fpds.net&handle_domain=.my.pds.net&show_handle=true&show_invite_code=false&show_phone_verification_code=true',
+            f'/bluesky-create-account?from={from_auth.urlsafe().decode()}&pds=https%3A%2F%2Fpds.net&handle_domain=.my.pds.net&show_handle=true&show_invite_code=false&phone_number=%2B15551234567&show_phone_verification_code=true',
             resp.headers['Location'])
 
         mock_post.assert_called_once_with(

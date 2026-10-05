@@ -1157,7 +1157,6 @@ def bluesky_phone_verification_post(from_auth):
 
     vals = request.values.to_dict(flat=True)
     vals.pop('from')
-    vals.pop('phone_number')
     vals['show_phone_verification_code'] = 'true'
     return redirect(url('/bluesky-create-account', from_auth, **vals))
 
@@ -1206,6 +1205,7 @@ def bluesky_create_account(from_auth):
                 email=get_required_param('email'),
                 password=get_required_param('password'),
                 invite_code=request.values.get('invite_code'),
+                phone_number=request.values.get('phone_number'),
                 phone_verification_code=request.values.get('phone_verification_code'))
     except HTTPError as e:
         msg = str(e)
