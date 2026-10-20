@@ -402,7 +402,7 @@ class BounceTest(TestCase, Asserts):
         )
         with app.test_request_context('/'):
             source = bounce.granary_source(auth, with_auth=True)
-        self.assertEqual('https://some.pds/', source._client.address)
+        self.assertEqual('https://some.pds/', source.client.address)
         self.assertEqual(
             'towkin', source._client.requests_kwargs['auth'].token.access_token)
         self.assertIsNotNone(source._client.session_callback)
@@ -419,10 +419,10 @@ class BounceTest(TestCase, Asserts):
         )
         with app.test_request_context('/'):
             source = bounce.granary_source(auth, with_auth=True)
-        self.assertEqual('https://some.pds/', source._client.address)
-        self.assertEqual('towkin', source._client.session['accessJwt'])
-        self.assertEqual('reefresh', source._client.session['refreshJwt'])
-        self.assertIsNotNone(source._client.session_callback)
+        self.assertEqual('https://some.pds/', source.client.address)
+        self.assertEqual('towkin', source.client.session['accessJwt'])
+        self.assertEqual('reefresh', source.client.session['refreshJwt'])
+        self.assertIsNotNone(source.client.session_callback)
 
     def test_from(self):
         with self.client.session_transaction() as sess:
