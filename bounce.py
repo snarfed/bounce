@@ -1195,8 +1195,15 @@ def bluesky_create_account(from_auth):
         handle = handle + get_required_param('handle_domain')
 
     if not from_user.is_enabled(ATProto, explicit=True):
-        with ndb.context.Context(bridgy_fed_ndb).use():
-            from_user.enable_protocol(ATProto)
+        try:
+            with ndb.context.Context(bridgy_fed_ndb).use():
+                from_user.enable_protocol(ATProto)
+        except common.ErrorButDoNotRetryTask as e:
+            msg = str(e)
+            if (resp := e.get_response()) and resp.is_json:
+                msg = resp.json['error']
+            flash(f"Couldn't create a new Bluesky account: {msg}")
+            return redirect(url('/to', from_auth))
 
     try:
         with ndb.context.Context(bridgy_fed_ndb).use():

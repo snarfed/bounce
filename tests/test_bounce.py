@@ -2229,6 +2229,47 @@ When you migrate  @alice@in.st to  Bluesky  ...
                 'target': 'http://in.st/users/alice',
                 'to': ['https://www.w3.org/ns/activitystreams#Public'],
         }, util.json_loads(params[b'as2'][0]))
+    @patch.object(tasks_client, 'create_task')
+    @patch.object(ATProto, 'create_for')
+    def test_migrate_out_bluesky_to_mastodon_to_user_has_external_copy(
+            self, mock_create_for, mock_create_task):
+        self.make_bot_users()
+
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_bluesky(sess, login=False).get()
+            to_auth = self.make_mastodon(sess, login=False).get()
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            from_user = ATProto(id='did:plc:alice')
+            from_user.put()
+
+            actor = Object(id='http://in.st/users/alice', as2={
+                **ALICE_AP_ACTOR,
+                'url': {
+                    'type': 'Link',
+                    'href': 'at://did:plc:other',
+                    'rel': 'alternate',
+                },
+            }, source_protocol='activitypub').put()
+            # migrate_in has already added atproto to enabled_protocols
+            to_user = ActivityPub(id='http://in.st/users/alice', obj_key=actor,
+                                  enabled_protocols=['atproto'])
+            to_user.put()
+
+        migration = Migration.get_or_insert(from_auth, to_auth,
+                                            state=State.migrate_out).put()
+
+        with app.test_request_context('/'):
+            bounce.migrate_out(migration, from_user, to_auth, to_user)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            to_user = to_user.key.get()
+            self.assertEqual(['atproto'], to_user.enabled_protocols)
+            self.assertEqual([Target(protocol='atproto', uri='did:plc:alice')],
+                             to_user.copies)
+
+        mock_create_for.assert_called_with(to_user)
+
     @patch.object(util.session, 'get', side_effect=[
         # listBlobs
         requests_response({'cids': ['abc00000', 'def00000', 'ghi00000']}),
@@ -2829,6 +2870,42 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(
             f'/bluesky-create-account?from={from_auth.urlsafe().decode()}&pds=https%3A%2F%2Fpds.net&handle=myhandle&handle_domain=.pds.net&email=alice%40example.com&password=hunter2&show_handle=true&show_invite_code=true&show_phone_verification_code=true',
             resp.headers['Location'])
+
+    @patch.object(tasks_client, 'create_task')  # external-copy DM
+    @patch.object(util.session, 'post')
+    def test_bluesky_create_account_external_copy(self, mock_post, _):
+        self.make_bot_users()
+
+        with self.client.session_transaction() as sess:
+            from_auth = self.make_mastodon(sess)
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            actor = Object(id='http://in.st/users/alice', as2={
+                **ALICE_AP_ACTOR,
+                'url': {
+                    'type': 'Link',
+                    'href': 'at://did:plc:other',
+                    'rel': 'alternate',
+                },
+            }, source_protocol='activitypub').put()
+            alice_key = ActivityPub(id='http://in.st/users/alice',
+                                    obj_key=actor).put()
+
+        resp = self.post('/bluesky-create-account', from_auth, pds='https://pds.net',
+                         handle='myhandle', handle_domain='.pds.net',
+                         email='alice@example.com', password='hunter2',
+                         show_handle='true', show_invite_code='false',
+                         show_phone_verification_code='false')
+
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
+                         resp.headers['Location'])
+        self.assertEqual(["Couldn't create a new Bluesky account: Nope, user http://in.st/users/alice is already on atproto as at://did:plc:other"],
+                         get_flashed_messages())
+        mock_post.assert_not_called()
+
+        with ndb.context.Context(bridgy_fed_ndb).use():
+            self.assertEqual([], alice_key.get().enabled_protocols)
 
     @patch.object(util.session, 'get', side_effect=[
         requests_response(ALICE_AP_ACTOR, content_type=as2.CONTENT_TYPE),
