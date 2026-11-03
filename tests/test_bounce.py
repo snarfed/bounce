@@ -216,14 +216,17 @@ class BounceTest(TestCase, Asserts):
         protocol.Protocol.for_id.cache.clear()
         protocol.Protocol.for_handle.cache.clear()
 
+        # use .invalid, not .local, so that unmocked fetches fail fast. (.local
+        # goes to mDNS on macOS.)
+        # https://www.rfc-editor.org/rfc/rfc6761#section-6.4
         os.environ.update({
-            'APPVIEW_HOST': 'appview.local',
-            'BGS_HOST': 'bgs.local',
-            'PDS_HOST': 'pds.local',
-            'PLC_HOST': 'plc.local',
-            'MOD_SERVICE_HOST': 'mod.service.local',
+            'APPVIEW_HOST': 'appview.invalid',
+            'BGS_HOST': 'bgs.invalid',
+            'PDS_HOST': 'pds.invalid',
+            'PLC_HOST': 'plc.invalid',
+            'MOD_SERVICE_HOST': 'mod.service.invalid',
             'MOD_SERVICE_DID': 'did:mod-service',
-            'CHAT_HOST': 'chat.local',
+            'CHAT_HOST': 'chat.invalid',
             'CHAT_DID': 'did:chat',
             'REPO_TOKEN': 'reepow-towkin',
         })
@@ -232,7 +235,7 @@ class BounceTest(TestCase, Asserts):
         appengine_info.APP_ID = 'my-app'
         appengine_info.READ_ONLY = False
 
-        atproto.appview.address = 'https://appview.local'
+        atproto.appview.address = 'https://appview.invalid'
         atproto.init(MemcacheSequences)
 
     def tearDown(self):
@@ -1823,7 +1826,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
 
         # PLC update should use the new PDS handle
         del mock_post.call_args_list[3][1]['json']['sig']
-        self.assert_equals(call('https://plc.local/did:plc:alice', json={
+        self.assert_equals(call('https://plc.invalid/did:plc:alice', json={
                 'type': 'plc_operation',
                 'did': 'did:plc:alice',
                 'rotationKeys': [did.encode_did_key(K256_KEY.public_key())],
@@ -1965,7 +1968,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         ], any_order=True)
 
         del mock_post.call_args_list[3][1]['json']['sig']
-        self.assert_equals(call('https://plc.local/did:plc:alice', json={
+        self.assert_equals(call('https://plc.invalid/did:plc:alice', json={
                 'type': 'plc_operation',
                 'did': 'did:plc:alice',
                 'rotationKeys': [did.encode_did_key(K256_KEY.public_key())],
@@ -2124,7 +2127,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
                     },
                 },
             }, data=None, headers=bsky_headers),
-            call(f'https://plc.local/{SNARFED2_DID}', json={'foo': 'bar'},
+            call(f'https://plc.invalid/{SNARFED2_DID}', json={'foo': 'bar'},
                  timeout=15, stream=True, headers=ANY),
             call('https://some.pds.bsky.network/xrpc/com.atproto.server.deactivateAccount',
                  json=None, data=None, headers=bsky_headers),
