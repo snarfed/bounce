@@ -2234,7 +2234,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         }, util.json_loads(params[b'as2'][0]))
     @patch.object(tasks_client, 'create_task')
     @patch.object(ATProto, 'create_for')
-    def test_migrate_out_bluesky_to_mastodon_to_user_has_external_copy(
+    def test_migrate_out_bluesky_to_mastodon_to_user_has_external_id(
             self, mock_create_for, mock_create_task):
         self.make_bot_users()
 
@@ -2874,9 +2874,9 @@ When you migrate  @alice@in.st to  Bluesky  ...
             f'/bluesky-create-account?from={from_auth.urlsafe().decode()}&pds=https%3A%2F%2Fpds.net&handle=myhandle&handle_domain=.pds.net&email=alice%40example.com&password=hunter2&show_handle=true&show_invite_code=true&show_phone_verification_code=true',
             resp.headers['Location'])
 
-    @patch.object(tasks_client, 'create_task')  # external-copy DM
+    @patch.object(tasks_client, 'create_task')  # external-id DM
     @patch.object(util.session, 'post')
-    def test_bluesky_create_account_external_copy(self, mock_post, _):
+    def test_bluesky_create_account_external_id(self, mock_post, _):
         self.make_bot_users()
 
         with self.client.session_transaction() as sess:
@@ -2903,7 +2903,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
                          resp.headers['Location'])
-        self.assertEqual(["Couldn't create a new Bluesky account: Nope, user http://in.st/users/alice is already on atproto as at://did:plc:other"],
+        self.assertEqual(["Couldn't create a new Bluesky account: Nope, user http://in.st/users/alice is already on atproto as did:plc:other"],
                          get_flashed_messages())
         mock_post.assert_not_called()
 
