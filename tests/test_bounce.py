@@ -2903,7 +2903,7 @@ When you migrate  @alice@in.st to  Bluesky  ...
         self.assertEqual(302, resp.status_code)
         self.assertEqual(f'/to?from={from_auth.urlsafe().decode()}',
                          resp.headers['Location'])
-        self.assertEqual(["Couldn't create a new Bluesky account: Nope, user http://in.st/users/alice is already on atproto as did:plc:other"],
+        self.assertEqual(["Couldn't create a new Bluesky account: Nope, user http://in.st/users/alice is already on atproto as external id did:plc:other"],
                          get_flashed_messages())
         mock_post.assert_not_called()
 
