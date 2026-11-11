@@ -22,40 +22,44 @@ app = [
     'brevity @ git+https://github.com/snarfed/brevity.git@new-tlds',
     'dag-json',
     'flask-gae-static',
-    'granary',
+    'granary[bluesky,farcaster,nostr,rss]',
     'httpsig',
     'lexrpc[flask]',
     'mf2util',
     'negotiator',
-    'oauth-dropins',
+    'oauth-dropins[bluesky,indieauth]',
     'pymemcache',
     'pywebutil[google-cloud,html]',
     'secp256k1',
 
     # third-party
-    'cachetools>=5.0.0',
-    'cryptography>=41.0.0',
-    'domain2idna>=1.12',
-    'flask>=3.0.0',
-    'google-api-python-client>=2.0',
-    'google-cloud-dns>=0.34',
-    'google-cloud-error-reporting>=1.9',
-    'google-cloud-ndb>=2.0',
     'google-cloud-storage>=2.0',
-    'google-cloud-tasks>=2.0',
-    'grpcio>=1.59.0',
-    'gunicorn>=20.1.0',
-    'humanize>=4.0',
+
+    # bridgy-fed's
+    'cachetools>=5.0.0',
+    'cryptography>=49.0.0',
+    'domain2idna>=1.12.4',
+    'flask>=3.0.0',
+    'google-api-python-client>=2.197.0',
+    'google-cloud-dns>=0.37.0',
+    'google-cloud-error-reporting>=1.15.0',
+    'google-cloud-ndb>=2.5.0',
+    'google-cloud-tasks>=2.22.0',
+    'grpcio>=1.81.1',
+    'gunicorn>=25.3.0',
+    'humanize>=4.16.0',
+    'joserfc>=1.7.3',
     'libipld>=3.0.0',
+    'lxml>=6.0',
     'multiformats>=0.3.1',
     'pycryptodome>=3.0',
-    'pyjwt>=2.0.0',
+    'pyjwt>=2.14.0',
     'python-dateutil>=2.8.1',
-    'pytz>=2022.1',
+    'pytz>=2026.2',
     'requests>=2.22',
-    'tldextract>=3.0',
-    'ujson>=5.7.0',
-    'websockets>=11.0',
+    'tldextract>=5.3.1',
+    'ujson>=6.0.0',
+    'websockets>=16.0',
     'werkzeug>=3.0.0',
 ]
 tests = [
@@ -91,8 +95,9 @@ extend_exclude = ['docs', 'bridgy_fed/docs', 'bridgy_fed/tests']
 
 [tool.deptry.per_rule_ignores]
 # these deps aren't imported directly but we still need them: gunicorn (WSGI
-# server), ujson
+# server), lxml (webutil.appengine_config's BeautifulSoup parser), ujson
 DEP002 = [
     'gunicorn',
+    'lxml',
     'ujson',
 ]
