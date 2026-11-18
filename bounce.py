@@ -101,6 +101,9 @@ TASK_REQUESTS_KWARGS = {
 
 FOLLOWERS_PREVIEW_LEN = 20
 
+# https://atproto.com/specs/permission
+BLUESKY_OAUTH_SCOPE = 'atproto repo:app.bsky.graph.follow?action=create'
+
 AUTH_TO_PROTOCOL = {
     BlueskyAuth: ATProto,
     IndieAuth: Web,
@@ -160,7 +163,7 @@ app.jinja_options.update({
 app.json.compact = False
 app.config.from_pyfile(Path(__file__).parent / 'config.py')
 app.url_map.converters['regex'] = flask_util.RegexConverter
-app.before_request(canonicalize_domain([APPSPOT_DOMAIN], DOMAIN))
+app.before_request(canonicalize_domain(DOMAIN, from_domains=[APPSPOT_DOMAIN]))
 app.after_request(flask_util.default_modern_headers)
 app.post(flask_util.CSP_REPORT_PATH)(flask_util.csp_report)
 app.register_error_handler(Exception, flask_util.handle_exception)
@@ -1931,6 +1934,7 @@ def bluesky_oauth_client_metadata():
 
     return {
         **oauth_dropins.bluesky.CLIENT_METADATA_TEMPLATE,
+        'scope': BLUESKY_OAUTH_SCOPE,
         'client_id': urljoin(base, '/oauth/bluesky/client-metadata.json'),
         'client_name': 'Bounce',
         'client_uri': base,
@@ -1941,6 +1945,8 @@ def bluesky_oauth_client_metadata():
     }
 
 class BlueskyOAuthStart(FlashErrors, oauth_dropins.bluesky.OAuthStart):
+    SCOPE = BLUESKY_OAUTH_SCOPE
+
     @property
     def CLIENT_METADATA(self):
         return bluesky_oauth_client_metadata()

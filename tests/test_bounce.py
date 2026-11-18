@@ -2977,6 +2977,6 @@ When you migrate  @alice@in.st to  Bluesky  ...
                 'https://bounce.anew.social/oauth/bluesky/finish/from',
             ],
             'response_types': ['code'],
-            'scope': 'atproto transition:generic',
+            'scope': 'atproto repo:app.bsky.graph.follow?action=create',
             'token_endpoint_auth_method': 'none',
         }, resp.json)
