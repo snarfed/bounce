@@ -80,7 +80,7 @@ pyparsing==3.3.2
 python-dateutil==2.9.0.post0
 pytz==2026.3.post1
 pyyaml==6.0.3
-redis==7.4.1
+redis==8.1.0
 requests==2.34.2
 requests-file==3.0.1
 requests-hardened==1.2.2
